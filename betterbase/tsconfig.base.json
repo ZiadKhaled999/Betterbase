@@ -8,11 +8,6 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "forceConsistentCasingInFileNames": true,
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    }
+    "forceConsistentCasingInFileNames": true
   }
 }
