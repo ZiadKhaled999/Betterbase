@@ -60,17 +60,19 @@ async function initializeGitRepository(projectPath: string): Promise<void> {
   }
 }
 
-function buildPackageJson(databaseMode: DatabaseMode, useAuth: boolean): string {
+function buildPackageJson(projectName: string, databaseMode: DatabaseMode, useAuth: boolean): string {
   const dependencies: Record<string, string> = {
     hono: '^4.11.9',
     'drizzle-orm': '^0.36.4',
     zod: '^3.25.76',
   };
 
+  if (databaseMode === 'local') {
+    dependencies['better-sqlite3'] = '^11.7.0';
+  }
+
   if (databaseMode === 'turso') {
     dependencies['@libsql/client'] = '^0.14.0';
-  } else {
-    dependencies['better-sqlite3'] = '^11.7.0';
   }
 
   if (databaseMode === 'neon') {
@@ -82,11 +84,11 @@ function buildPackageJson(databaseMode: DatabaseMode, useAuth: boolean): string 
   }
 
   const json = {
-    name: 'betterbase-app',
+    name: projectName,
     private: true,
     type: 'module',
     scripts: {
-      dev: 'bun run src/routes/index.ts',
+      dev: 'bun run src/index.ts',
       'db:generate': 'drizzle-kit generate',
       'db:push': 'drizzle-kit push',
     },
@@ -102,17 +104,45 @@ function buildPackageJson(databaseMode: DatabaseMode, useAuth: boolean): string 
 }
 
 function buildDrizzleConfig(databaseMode: DatabaseMode): string {
-  const driver = databaseMode === 'neon' ? 'pg' : 'better-sqlite3';
+  const dialect: Record<DatabaseMode, 'sqlite' | 'postgresql' | 'turso'> = {
+    local: 'sqlite',
+    neon: 'postgresql',
+    turso: 'turso',
+  };
 
   return `import { defineConfig } from 'drizzle-kit';
 
 export default defineConfig({
   schema: './src/db/schema.ts',
   out: './drizzle',
-  driver: '${driver}',
+  dialect: '${dialect[databaseMode]}',
   dbCredentials: {
     url: process.env.DATABASE_URL || 'file:local.db',
   },
+});
+`;
+}
+
+function buildSchema(databaseMode: DatabaseMode): string {
+  if (databaseMode === 'neon') {
+    return `import { integer, pgTable, timestamp, varchar } from 'drizzle-orm/pg-core';
+
+export const users = pgTable('users', {
+  id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  name: varchar('name', { length: 255 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+`;
+  }
+
+  return `import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+
+export const users = sqliteTable('users', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  email: text('email').notNull().unique(),
+  name: text('name'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 `;
 }
@@ -157,7 +187,7 @@ export const db = drizzle(client, { schema });
 function buildAuthMiddleware(): string {
   return `import { createMiddleware } from 'hono/factory';
 
-export const authMiddleware = createMiddleware(async (c, next) => {
+export const authMiddleware = createMiddleware(async (_c, next) => {
   // TODO: wire BetterAuth session validation.
   await next();
 });
@@ -177,7 +207,12 @@ Generated with BetterBase CLI.
 `;
 }
 
-async function writeProjectFiles(projectPath: string, databaseMode: DatabaseMode, useAuth: boolean): Promise<void> {
+async function writeProjectFiles(
+  projectPath: string,
+  projectName: string,
+  databaseMode: DatabaseMode,
+  useAuth: boolean,
+): Promise<void> {
   await mkdir(path.join(projectPath, 'src/db'), { recursive: true });
   await mkdir(path.join(projectPath, 'src/routes'), { recursive: true });
   await mkdir(path.join(projectPath, 'src/middleware'), { recursive: true });
@@ -200,10 +235,7 @@ async function writeProjectFiles(projectPath: string, databaseMode: DatabaseMode
 
   await writeFile(path.join(projectPath, 'drizzle.config.ts'), buildDrizzleConfig(databaseMode));
 
-  await writeFile(
-    path.join(projectPath, 'package.json'),
-    buildPackageJson(databaseMode, useAuth),
-  );
+  await writeFile(path.join(projectPath, 'package.json'), buildPackageJson(projectName, databaseMode, useAuth));
 
   await writeFile(
     path.join(projectPath, 'tsconfig.json'),
@@ -241,23 +273,9 @@ local.db
 `,
   );
 
-  await writeFile(
-    path.join(projectPath, 'README.md'),
-    buildReadme(path.basename(projectPath)),
-  );
+  await writeFile(path.join(projectPath, 'README.md'), buildReadme(projectName));
 
-  await writeFile(
-    path.join(projectPath, 'src/db/schema.ts'),
-    `import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
-
-export const users = sqliteTable('users', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  email: text('email').notNull().unique(),
-  name: text('name'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-});
-`,
-  );
+  await writeFile(path.join(projectPath, 'src/db/schema.ts'), buildSchema(databaseMode));
 
   await writeFile(path.join(projectPath, 'src/db/index.ts'), buildDbIndex(databaseMode));
 
@@ -288,6 +306,14 @@ export default {
   port: Number(process.env.PORT || 3000),
   fetch: app.fetch,
 };
+`,
+  );
+
+  await writeFile(
+    path.join(projectPath, 'src/index.ts'),
+    `import server from './routes/index';
+
+export default server;
 `,
   );
 
@@ -344,13 +370,19 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
 
   try {
     await mkdir(projectPath);
-  } catch {
-    throw new Error(`Directory \`${projectName}\` already exists. Choose another project name.`);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    if (code === 'EEXIST') {
+      throw new Error(`Directory \`${projectName}\` already exists. Choose another project name.`);
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown directory creation error';
+    throw new Error(`Failed to create project directory: ${message}`);
   }
 
   try {
     logger.info('Creating project files...');
-    await writeProjectFiles(projectPath, databaseMode, useAuth);
+    await writeProjectFiles(projectPath, projectName, databaseMode, useAuth);
 
     logger.info('Installing dependencies with bun...');
     await installDependencies(projectPath);
@@ -360,7 +392,7 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
       await initializeGitRepository(projectPath);
     }
 
-    logger.success('✅ BetterBase project created successfully!');
+    logger.success('BetterBase project created successfully!');
     console.log('');
     console.log(`📁 Project: ${projectName}`);
     console.log(`🗄️  Database: ${getDatabaseLabel(databaseMode)}`);

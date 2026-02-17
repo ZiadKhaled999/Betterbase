@@ -18,15 +18,12 @@ app.get('/', (c) => {
 
 app.onError((error, c) => {
   if (error instanceof HTTPException) {
-    return new Response(
-      JSON.stringify({
+    return c.json(
+      {
         error: error.message,
         details: (error as { cause?: unknown }).cause ?? null,
-      }),
-      {
-        status: error.status,
-        headers: { 'content-type': 'application/json; charset=UTF-8' },
       },
+      error.status,
     );
   }
 

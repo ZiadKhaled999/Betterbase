@@ -46,7 +46,8 @@ BASE APP STRUCTURE:
 
 ## Repository Structure Guidance
 When scaffolding implementation, use:
-- `betterbase/apps/cli` → `bb` CLI project
+- `betterbase/packages/cli` → canonical `bb` CLI implementation
+- `betterbase/apps/cli` → legacy wrapper/stub (delegates to package CLI)
 - `betterbase/apps/dashboard` → dashboard app
 - `betterbase/packages/core` → backend/core engine
 - `betterbase/packages/client` → `@betterbase/client`
