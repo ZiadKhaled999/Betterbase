@@ -46,7 +46,8 @@ BASE APP STRUCTURE:
 
 ## Repository Structure Guidance
 When scaffolding implementation, use:
-- `betterbase/apps/cli` → `bb` CLI project
+- `betterbase/packages/cli` → canonical `bb` CLI implementation
+- `betterbase/apps/cli` → legacy wrapper/stub (delegates to package CLI)
 - `betterbase/apps/dashboard` → dashboard app
 - `betterbase/packages/core` → backend/core engine
 - `betterbase/packages/client` → `@betterbase/client`
@@ -60,6 +61,7 @@ When scaffolding implementation, use:
 3. Prefer small, composable files and clear package boundaries.
 4. Avoid introducing lock-in assumptions that conflict with BetterBase goals.
 5. When uncertain, bias toward the blueprint and reuse strategy docs.
+6. Ensure new templates follow the persistent project prompt above.
 
 ## Quality & Validation
 - Run lightweight checks whenever possible (format/lint/typecheck when available).

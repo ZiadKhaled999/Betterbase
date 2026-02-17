@@ -4,8 +4,9 @@ Initial BetterBase monorepo scaffold with a concrete base template.
 
 ## Structure
 
-- `apps/cli` — `bb` CLI
+- `apps/cli` — legacy CLI wrapper/stub
 - `apps/dashboard` — dashboard/studio app
+- `packages/cli` — canonical `@betterbase/cli` implementation
 - `packages/core` — core backend engine
 - `packages/client` — SDK (`@betterbase/client`)
 - `packages/shared` — shared utilities/types
@@ -20,7 +21,7 @@ Initial BetterBase monorepo scaffold with a concrete base template.
 
 ## Base Template Commands
 
-From `betterbase/templates/base`:
+From `templates/base`:
 
 - `bun run dev`
 - `bun run db:generate`

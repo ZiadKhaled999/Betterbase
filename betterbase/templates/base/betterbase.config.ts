@@ -1,19 +1,25 @@
-export interface BetterBaseConfig {
-  aiContext: {
-    enabled: boolean;
-    outputFile: string;
-  };
-  database: {
-    provider: 'sqlite' | 'postgres';
-  };
-}
+import { z } from 'zod';
 
-export const betterbaseConfig: BetterBaseConfig = {
-  aiContext: {
-    enabled: true,
-    outputFile: '.betterbase-context.json',
-  },
+export const BetterBaseConfigSchema = z.object({
+  mode: z.enum(['local', 'neon', 'turso']),
+  database: z.object({
+    local: z.string(),
+    production: z.string().nullable().optional(),
+  }),
+  auth: z.object({
+    enabled: z.boolean(),
+  }),
+});
+
+export type BetterBaseConfig = z.infer<typeof BetterBaseConfigSchema>;
+
+export const betterbaseConfig: BetterBaseConfig = BetterBaseConfigSchema.parse({
+  mode: 'local',
   database: {
-    provider: 'sqlite',
+    local: 'sqlite://local.db',
+    production: null,
   },
-};
+  auth: {
+    enabled: true,
+  },
+});
