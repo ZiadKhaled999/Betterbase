@@ -1,6 +1,6 @@
-# BetterBase Monorepo (Scaffold)
+# BetterBase Monorepo
 
-Initial scaffold for BetterBase implementation.
+Initial BetterBase monorepo scaffold with a concrete base template.
 
 ## Structure
 
@@ -9,8 +9,8 @@ Initial scaffold for BetterBase implementation.
 - `packages/core` — core backend engine
 - `packages/client` — SDK (`@betterbase/client`)
 - `packages/shared` — shared utilities/types
-- `templates/base` — base project template
-- `templates/auth` — auth template
+- `templates/base` — Bun + TypeScript + Hono + Drizzle starter template
+- `templates/auth` — auth template placeholder
 
 ## Tooling Direction
 
@@ -18,3 +18,11 @@ Initial scaffold for BetterBase implementation.
 - Workspace orchestration: **Turborepo**
 - Language: **TypeScript**
 
+## Base Template Commands
+
+From `betterbase/templates/base`:
+
+- `bun run dev`
+- `bun run db:generate`
+- `bun run db:push`
+- `bun run typecheck`

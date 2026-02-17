@@ -14,6 +14,26 @@ Primary planning docs to align with before implementation:
 - `betterbase_blueprint.md`
 - `betterbase_reuse_strategy.md`
 
+## Persistent Project Prompt (Apply to Every New Task)
+Use and preserve the following project prompt context for future BetterBase implementation tasks:
+
+PROJECT: BetterBase - AI-Native Backend Framework  
+STACK: Bun + TypeScript + Hono + Drizzle ORM + SQLite (local) / Postgres (production)
+
+PHILOSOPHY:
+- AI-first: Generate `.betterbase-context.json` for AI agents to read
+- Docker-less: Use `bun:sqlite` for <100ms startup
+- Zero lock-in: Users own their schemas
+- Type-safe: Strict TypeScript, Zod validation everywhere
+
+BASE APP STRUCTURE:
+- `/src/db` (`schema.ts`, `index.ts`)
+- `/src/routes` (API endpoints)
+- `/src/middleware` (auth, validation)
+- `/src/lib` (utilities)
+- `betterbase.config.ts`
+- `drizzle.config.ts`
+
 ## Engineering Defaults
 1. **Runtime:** Bun (prefer Bun commands and Bun workspaces).
 2. **Language:** TypeScript in strict mode.
@@ -48,4 +68,3 @@ When scaffolding implementation, use:
 ## Documentation Expectations
 - Update docs when structure or commands change.
 - Keep command examples Bun-first.
-
