@@ -16,11 +16,19 @@ const selectOptionSchema = z.object({
   value: z.string().min(1),
 });
 
-const selectOptionsSchema = z.object({
-  message: z.string().min(1),
-  choices: z.array(selectOptionSchema).min(1),
-  initial: z.string().optional(),
-});
+const selectOptionsSchema = z
+  .object({
+    message: z.string().min(1),
+    choices: z.array(selectOptionSchema).min(1),
+    initial: z.string().optional(),
+  })
+  .refine(
+    ({ choices, initial }) => initial === undefined || choices.some((choice) => choice.value === initial),
+    {
+      message: 'Select initial value must match one of the choice values.',
+      path: ['initial'],
+    },
+  );
 
 /**
  * Prompt for text input.

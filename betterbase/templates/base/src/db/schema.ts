@@ -21,8 +21,8 @@ export const timestamps = {
 /**
  * UUID primary-key helper.
  */
-export const uuid = () =>
-  text('id')
+export const uuid = (name = 'id') =>
+  text(name)
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID());
 

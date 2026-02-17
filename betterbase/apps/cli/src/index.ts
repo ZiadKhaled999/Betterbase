@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Legacy bb wrapper entrypoint.
@@ -6,10 +6,16 @@
  * Forwards execution to the canonical CLI implementation in packages/cli.
  */
 export async function runLegacyCli(): Promise<void> {
-  const cliModule = await import('../../../packages/cli/src/index');
-  await cliModule.runCli(process.argv);
+  const { runCli } = await import('@betterbase/cli');
+  await runCli(process.argv);
 }
 
 if (import.meta.main) {
-  await runLegacyCli();
+  (async () => {
+    await runLegacyCli();
+  })().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exitCode = 1;
+  });
 }

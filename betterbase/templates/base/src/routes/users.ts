@@ -1,8 +1,21 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { createUserSchema, parseBody } from '../middleware/validation';
+import { z } from 'zod';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { parseBody } from '../middleware/validation';
 
-const usersRoute = new Hono();
+export const createUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+});
+
+export const usersRoute = new Hono();
+
+usersRoute.get('/', async (c) => {
+  const allUsers = await db.select().from(users);
+  return c.json({ users: allUsers });
+});
 
 usersRoute.post('/', async (c) => {
   try {
@@ -25,8 +38,6 @@ usersRoute.post('/', async (c) => {
       throw new HTTPException(400, { message: 'Malformed JSON body' });
     }
 
-    throw new HTTPException(400, { message: 'Invalid request body' });
+    throw error;
   }
 });
-
-export { usersRoute };

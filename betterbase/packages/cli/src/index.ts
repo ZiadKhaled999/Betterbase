@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import { Command, CommanderError } from 'commander';
 import { runInitCommand } from './commands/init';
 import { runMigrateCommand } from './commands/migrate';
 import * as logger from './utils/logger';
@@ -13,7 +13,8 @@ export function createProgram(): Command {
   program
     .name('bb')
     .description('BetterBase CLI')
-    .version(packageJson.version, '-v, --version', 'display the CLI version');
+    .version(packageJson.version, '-v, --version', 'display the CLI version')
+    .exitOverride();
 
   program
     .command('init')
@@ -39,7 +40,16 @@ export function createProgram(): Command {
  */
 export async function runCli(argv: string[] = process.argv): Promise<void> {
   const program = createProgram();
-  await program.parseAsync(argv);
+
+  try {
+    await program.parseAsync(argv);
+  } catch (err) {
+    if (err instanceof CommanderError && (err.code === 'commander.helpDisplayed' || err.code === 'commander.version')) {
+      return;
+    }
+
+    throw err;
+  }
 }
 
 if (import.meta.main) {

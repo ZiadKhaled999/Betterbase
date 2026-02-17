@@ -1,6 +1,5 @@
 import { HTTPException } from 'hono/http-exception';
 import type { ZodType } from 'zod';
-import { z } from 'zod';
 
 export function parseBody<T>(schema: ZodType<T>, body: unknown): T {
   const result = schema.safeParse(body);
@@ -20,9 +19,3 @@ export function parseBody<T>(schema: ZodType<T>, body: unknown): T {
 
   return result.data;
 }
-
-// TODO: Placeholder schema for scaffolded user-creation routes.
-export const createUserSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1),
-});

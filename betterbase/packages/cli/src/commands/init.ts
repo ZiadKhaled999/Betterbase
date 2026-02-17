@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import * as logger from '../utils/logger';
@@ -67,10 +67,6 @@ function buildPackageJson(projectName: string, databaseMode: DatabaseMode, useAu
     zod: '^3.25.76',
   };
 
-  if (databaseMode === 'local') {
-    dependencies['better-sqlite3'] = '^11.7.0';
-  }
-
   if (databaseMode === 'turso') {
     dependencies['@libsql/client'] = '^0.14.0';
   }
@@ -90,7 +86,7 @@ function buildPackageJson(projectName: string, databaseMode: DatabaseMode, useAu
     scripts: {
       dev: 'bun run src/index.ts',
       'db:generate': 'drizzle-kit generate',
-      'db:push': 'drizzle-kit push',
+      'db:push': 'bun run src/db/migrate.ts',
     },
     dependencies,
     devDependencies: {
@@ -110,6 +106,14 @@ function buildDrizzleConfig(databaseMode: DatabaseMode): string {
     turso: 'turso',
   };
 
+  const databaseUrl: Record<DatabaseMode, string> = {
+    local: "process.env.DATABASE_URL || 'file:local.db'",
+    neon: "process.env.DATABASE_URL || 'postgres://localhost'",
+    turso: "process.env.DATABASE_URL || 'libsql://localhost'",
+  };
+
+  const tursoAuthTokenLine = databaseMode === 'turso' ? "\n    authToken: process.env.TURSO_AUTH_TOKEN || ''," : '';
+
   return `import { defineConfig } from 'drizzle-kit';
 
 export default defineConfig({
@@ -117,13 +121,13 @@ export default defineConfig({
   out: './drizzle',
   dialect: '${dialect[databaseMode]}',
   dbCredentials: {
-    url: process.env.DATABASE_URL || 'file:local.db',
+    url: ${databaseUrl[databaseMode]},${tursoAuthTokenLine}
   },
 });
 `;
 }
 
-function buildSchema(databaseMode: DatabaseMode): string {
+async function buildSchema(databaseMode: DatabaseMode): Promise<string> {
   if (databaseMode === 'neon') {
     return `import { integer, pgTable, timestamp, varchar } from 'drizzle-orm/pg-core';
 
@@ -136,66 +140,8 @@ export const users = pgTable('users', {
 `;
   }
 
-  return `import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-
-/**
- * Adds created_at and updated_at timestamp columns.
- */
-export const timestamps = {
-  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
-    .$defaultFn(() => new Date())
-    .$onUpdate(() => new Date()),
-};
-
-/**
- * UUID primary-key helper.
- */
-export const uuid = () =>
-  text('id')
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID());
-
-/**
- * Soft-delete helper.
- */
-export const softDelete = {
-  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
-};
-
-/**
- * Shared status enum helper.
- */
-export const statusEnum = (name = 'status') =>
-  text(name, { enum: ['active', 'inactive', 'pending'] }).default('active');
-
-/**
- * Currency helper stored as integer cents.
- */
-export const moneyColumn = (name: string) => integer(name).notNull().default(0);
-
-/**
- * JSON text helper with type support.
- */
-export const jsonColumn = <T>(name: string) => text(name, { mode: 'json' }).$type<T>();
-
-export const users = sqliteTable('users', {
-  id: uuid(),
-  email: text('email').notNull().unique(),
-  name: text('name'),
-  status: statusEnum(),
-  ...timestamps,
-  ...softDelete,
-});
-
-export const posts = sqliteTable('posts', {
-  id: uuid(),
-  title: text('title').notNull(),
-  content: text('content'),
-  userId: text('user_id').references(() => users.id),
-  ...timestamps,
-});
-`;
+  const schemaTemplatePath = new URL('../../../../templates/base/src/db/schema.ts', import.meta.url);
+  return await readFile(schemaTemplatePath, 'utf8');
 }
 
 function buildDbIndex(databaseMode: DatabaseMode): string {
@@ -219,6 +165,7 @@ import * as schema from './schema';
 
 const client = createClient({
   url: process.env.DATABASE_URL || 'file:local.db',
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
 export const db = drizzle(client, { schema });
@@ -229,7 +176,7 @@ export const db = drizzle(client, { schema });
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as schema from './schema';
 
-const client = new Database('local.db', { create: true });
+const client = new Database(process.env.DB_PATH ?? 'local.db', { create: true });
 
 export const db = drizzle(client, { schema });
 `;
@@ -258,6 +205,38 @@ Generated with BetterBase CLI.
 `;
 }
 
+function buildRoutesIndex(): string {
+  return `import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
+import { HTTPException } from 'hono/http-exception';
+import { healthRoute } from './health';
+import { usersRoute } from './users';
+
+export default function registerRoutes(app: Hono): void {
+  app.use('*', cors());
+  app.use('*', logger());
+
+  app.onError((err, c) => {
+    const isHttpError = err instanceof HTTPException;
+    const showDetailedError = process.env.NODE_ENV === 'development' || isHttpError;
+
+    return c.json(
+      {
+        error: showDetailedError ? err.message : 'Internal Server Error',
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+        details: isHttpError ? (err as { cause?: unknown }).cause ?? null : null,
+      },
+      isHttpError ? err.status : 500,
+    );
+  });
+
+  app.route('/health', healthRoute);
+  app.route('/api/users', usersRoute);
+}
+`;
+}
+
 async function writeProjectFiles(
   projectPath: string,
   projectName: string,
@@ -274,7 +253,7 @@ async function writeProjectFiles(
     `export default {
   mode: '${databaseMode}',
   database: {
-    local: 'sqlite://local.db',
+    local: 'file:local.db',
     production: process.env.DATABASE_URL,
   },
   auth: {
@@ -285,7 +264,6 @@ async function writeProjectFiles(
   );
 
   await writeFile(path.join(projectPath, 'drizzle.config.ts'), buildDrizzleConfig(databaseMode));
-
   await writeFile(path.join(projectPath, 'package.json'), buildPackageJson(projectName, databaseMode, useAuth));
 
   await writeFile(
@@ -296,7 +274,6 @@ async function writeProjectFiles(
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
-    "noImplicitAny": true,
     "esModuleInterop": true,
     "types": ["bun"],
     "skipLibCheck": true
@@ -309,6 +286,8 @@ async function writeProjectFiles(
   await writeFile(
     path.join(projectPath, '.env.example'),
     `DATABASE_URL=
+DB_PATH=local.db
+TURSO_AUTH_TOKEN=
 NODE_ENV=development
 PORT=3000
 `,
@@ -319,72 +298,139 @@ PORT=3000
     `node_modules
 bun.lockb
 .env
+.env.*
+!.env.example
 local.db
 .drizzle
 `,
   );
 
   await writeFile(path.join(projectPath, 'README.md'), buildReadme(projectName));
-
-  await writeFile(path.join(projectPath, 'src/db/schema.ts'), buildSchema(databaseMode));
-
+  await writeFile(path.join(projectPath, 'src/db/schema.ts'), await buildSchema(databaseMode));
   await writeFile(path.join(projectPath, 'src/db/index.ts'), buildDbIndex(databaseMode));
 
   await writeFile(
+    path.join(projectPath, 'src/db/migrate.ts'),
+    `import { Database } from 'bun:sqlite';
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+
+const sqlite = new Database(process.env.DB_PATH ?? 'local.db', { create: true });
+const db = drizzle(sqlite);
+
+migrate(db, { migrationsFolder: './drizzle' });
+console.log('Migrations applied successfully.');
+`,
+  );
+
+  await writeFile(
     path.join(projectPath, 'src/routes/health.ts'),
-    `import { Hono } from 'hono';
+    `import { sql } from 'drizzle-orm';
+import { Hono } from 'hono';
+import { db } from '../db';
 
 export const healthRoute = new Hono();
 
-healthRoute.get('/', (c) => {
-  return c.json({
-    status: 'healthy',
-    database: 'connected',
-    timestamp: new Date().toISOString(),
-  });
+healthRoute.get('/', async (c) => {
+  try {
+    await db.run(sql\`select 1\`);
+
+    return c.json({
+      status: 'healthy',
+      database: 'connected',
+      timestamp: new Date().toISOString(),
+    });
+  } catch {
+    return c.json(
+      {
+        status: 'unhealthy',
+        database: 'disconnected',
+        timestamp: new Date().toISOString(),
+      },
+      503,
+    );
+  }
 });
 `,
   );
 
   await writeFile(
-    path.join(projectPath, 'src/routes/index.ts'),
+    path.join(projectPath, 'src/middleware/validation.ts'),
+    `import { HTTPException } from 'hono/http-exception';
+import type { ZodType } from 'zod';
+
+export function parseBody<T>(schema: ZodType<T>, body: unknown): T {
+  const result = schema.safeParse(body);
+
+  if (!result.success) {
+    throw new HTTPException(400, {
+      message: 'Validation failed',
+      cause: {
+        errors: result.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+          code: issue.code,
+        })),
+      },
+    });
+  }
+
+  return result.data;
+}
+`,
+  );
+
+  await writeFile(
+    path.join(projectPath, 'src/routes/users.ts'),
     `import { Hono } from 'hono';
-import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
 import { HTTPException } from 'hono/http-exception';
+import { z } from 'zod';
 import { db } from '../db';
 import { users } from '../db/schema';
-import { healthRoute } from './health';
+import { parseBody } from '../middleware/validation';
 
-const app = new Hono();
-
-app.use('*', cors());
-app.use('*', logger());
-app.use('*', async (c, next) => {
-  const start = performance.now();
-  await next();
-  const duration = (performance.now() - start).toFixed(2);
-  console.log(\`⏱ \${c.req.method} \${c.req.path} - \${duration}ms\`);
+const createUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
 });
 
-app.onError((err, c) => {
-  console.error('Error:', err);
-  return c.json(
-    {
-      error: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-      details: err instanceof HTTPException ? (err as { cause?: unknown }).cause ?? null : null,
-    },
-    err instanceof HTTPException ? err.status : 500,
-  );
-});
+export const usersRoute = new Hono();
 
-app.route('/health', healthRoute);
-
-app.get('/api/users', async (c) => {
+usersRoute.get('/', async (c) => {
   const allUsers = await db.select().from(users);
   return c.json({ users: allUsers });
 });
+
+usersRoute.post('/', async (c) => {
+  try {
+    const body = await c.req.json();
+    const parsed = parseBody(createUserSchema, body);
+
+    return c.json({ message: 'User payload validated', user: parsed }, 201);
+  } catch (error) {
+    if (error instanceof HTTPException) {
+      throw error;
+    }
+
+    if (error instanceof SyntaxError) {
+      throw new HTTPException(400, { message: 'Malformed JSON body' });
+    }
+
+    throw error;
+  }
+});
+`,
+  );
+
+  await writeFile(path.join(projectPath, 'src/routes/index.ts'), buildRoutesIndex());
+
+  await writeFile(
+    path.join(projectPath, 'src/index.ts'),
+    `import { Hono } from 'hono';
+import registerRoutes from './routes';
+
+const app = new Hono();
+registerRoutes(app);
 
 const server = Bun.serve({
   fetch: app.fetch,
@@ -392,27 +438,18 @@ const server = Bun.serve({
   development: process.env.NODE_ENV === 'development',
 });
 
-console.log('\x1b[32m🚀 BetterBase dev server started\x1b[0m');
-console.log(\`\x1b[36m→ URL:\x1b[0m http://localhost:\${server.port}\`);
-console.log('\x1b[35m→ Routes:\x1b[0m');
-console.log('  GET /health');
-console.log('  GET /api/users');
+console.log(\`🚀 Server running at http://localhost:\${server.port}\`);
+for (const route of app.routes) {
+  console.log(\`  \${route.method} \${route.path}\`);
+}
 
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, closing server...');
   server.stop();
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received, closing server...');
   server.stop();
 });
-`,
-  );
-
-  await writeFile(
-    path.join(projectPath, 'src/index.ts'),
-    `import server from './routes/index';
 
 export default server;
 `,
@@ -469,8 +506,11 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
     initial: true,
   });
 
+  let createdProjectDir = false;
+
   try {
     await mkdir(projectPath);
+    createdProjectDir = true;
   } catch (error) {
     const code = (error as NodeJS.ErrnoException | undefined)?.code;
     if (code === 'EEXIST') {
@@ -505,7 +545,15 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
     console.log('');
     console.log('Your backend is running at http://localhost:3000');
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown init error';
-    throw new Error(`Failed to initialize project: ${message}`);
+    if (createdProjectDir) {
+      try {
+        await rm(projectPath, { recursive: true, force: true });
+      } catch (cleanupError) {
+        const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+        logger.warn(`Failed to cleanup \`${projectName}\`: ${cleanupMessage}`);
+      }
+    }
+
+    throw error;
   }
 }

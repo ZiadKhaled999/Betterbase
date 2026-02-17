@@ -14,20 +14,19 @@ export type MigrateCommandOptions = z.infer<typeof migrateOptionsSchema>;
 export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Promise<void> {
   const options = migrateOptionsSchema.parse(rawOptions);
 
-  logger.info('Analyzing schema changes...');
-
   const shouldContinue =
     options.destructive === true
-      ? await prompts.confirm({
-          message: 'Destructive changes detected. Continue?',
+      ? true
+      : await prompts.confirm({
+          message: 'This migration may include destructive changes. Continue?',
           initial: false,
-        })
-      : true;
+        });
 
   if (!shouldContinue) {
     logger.warn('Migration cancelled by user.');
     return;
   }
 
-  logger.success('Migration flow completed (placeholder).');
+  logger.info('Analyzing migration plan...');
+  logger.success('Migration scaffold complete. (Placeholder implementation)');
 }

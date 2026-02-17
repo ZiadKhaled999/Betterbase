@@ -13,4 +13,10 @@ describe('cli', () => {
     expect(init).toBeDefined();
     expect(init?.registeredArguments[0]?.name()).toBe('project-name');
   });
+
+  test('registers migrate command', () => {
+    const program = createProgram();
+    const migrate = program.commands.find((command) => command.name() === 'migrate');
+    expect(migrate).toBeDefined();
+  });
 });
