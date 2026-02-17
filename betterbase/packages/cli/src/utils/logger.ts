@@ -1,17 +1,17 @@
 import chalk from 'chalk';
 
 /**
- * Print an informational message to stdout.
+ * Print an informational message to stderr.
  */
 export function info(message: string): void {
-  console.log(chalk.blue(`ℹ ${message}`));
+  console.error(chalk.blue(`ℹ ${message}`));
 }
 
 /**
- * Print a warning message to stdout.
+ * Print a warning message to stderr.
  */
 export function warn(message: string): void {
-  console.log(chalk.yellow(`⚠ ${message}`));
+  console.warn(chalk.yellow(`⚠ ${message}`));
 }
 
 /**
@@ -22,8 +22,8 @@ export function error(message: string): void {
 }
 
 /**
- * Print a success message to stdout.
+ * Print a success message to stderr.
  */
 export function success(message: string): void {
-  console.log(chalk.green(`✔ ${message}`));
+  console.error(chalk.green(`✔ ${message}`));
 }

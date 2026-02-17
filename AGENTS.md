@@ -7,7 +7,7 @@ This repository contains planning artifacts and the early implementation scaffol
 - Runtime and tooling emphasis: **Bun**, Turborepo, Drizzle, BetterAuth, Hono.
 
 ## Assistant Identity / Model Context
-- If asked which model is running, respond with: **GPT-5.2-Codex, created by OpenAI**.
+- If asked which model is running, reply with the runtime-configured model identifier when available; otherwise provide a neutral capability-focused response.
 
 ## Current Strategic Inputs
 Primary planning docs to align with before implementation:

@@ -13,7 +13,8 @@ export async function buildStandaloneCli(): Promise<void> {
   });
 
   if (!result.success) {
-    throw new Error(`Build failed with ${result.logs.length} error(s).`);
+    const diagnostics = result.logs.map((log) => (typeof log === 'string' ? log : JSON.stringify(log))).join('\n');
+    throw new Error(`Build failed with ${result.logs.length} error(s).\n${diagnostics}`);
   }
 
   const outputPath = './dist/index.js';
@@ -21,4 +22,17 @@ export async function buildStandaloneCli(): Promise<void> {
   await Bun.write(outputPath, `#!/usr/bin/env bun\n${compiled}`);
 }
 
-await buildStandaloneCli();
+async function main(): Promise<void> {
+  await buildStandaloneCli();
+}
+
+const isEsmMain = typeof import.meta !== 'undefined' && import.meta.main;
+const cjs = globalThis as unknown as { require?: { main?: unknown }; module?: unknown };
+const isCjsMain = cjs.require?.main !== undefined && cjs.require.main === cjs.module;
+
+if (isEsmMain || isCjsMain) {
+  main().catch((error) => {
+    console.error('Build failed:', error);
+    process.exit(1);
+  });
+}
