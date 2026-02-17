@@ -15,7 +15,9 @@ src/
     index.ts
     schema.ts
   routes/
+    index.ts
     health.ts
+    users.ts
   middleware/
     validation.ts
   lib/

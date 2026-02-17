@@ -1,12 +1,11 @@
 import { Hono } from 'hono';
 
-const healthRoute = new Hono();
+export const healthRoute = new Hono();
 
 healthRoute.get('/', (c) => {
   return c.json({
-    status: 'ok',
-    service: 'betterbase-template',
+    status: 'healthy',
+    database: 'connected',
+    timestamp: new Date().toISOString(),
   });
 });
-
-export { healthRoute };
