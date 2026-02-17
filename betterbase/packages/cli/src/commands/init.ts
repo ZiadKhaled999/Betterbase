@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import * as logger from '../utils/logger';
@@ -140,8 +140,134 @@ export const users = pgTable('users', {
 `;
   }
 
-  const schemaTemplatePath = new URL('../../../../templates/base/src/db/schema.ts', import.meta.url);
-  return await readFile(schemaTemplatePath, 'utf8');
+  return `import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+
+/**
+ * Adds created_at and updated_at timestamp columns.
+ * Note: .$onUpdate(() => new Date()) runs when updates go through Drizzle.
+ * For raw SQL writes, add a DB trigger if you need automatic updated_at changes.
+ */
+export const timestamps = {
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .$defaultFn(() => new Date())
+    .$onUpdate(() => new Date()),
+};
+
+/**
+ * UUID primary-key helper.
+ */
+export const uuid = (name = 'id') =>
+  text(name)
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID());
+
+/**
+ * Soft-delete helper.
+ */
+export const softDelete = {
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+};
+
+/**
+ * Shared status enum helper.
+ */
+export const statusEnum = (name = 'status') =>
+  text(name, { enum: ['active', 'inactive', 'pending'] }).default('active');
+
+/**
+ * Currency helper stored as integer cents.
+ */
+export const moneyColumn = (name: string) => integer(name).notNull().default(0);
+
+/**
+ * JSON text helper with type support.
+ */
+export const jsonColumn = <T>(name: string) => text(name, { mode: 'json' }).$type<T>();
+
+export const users = sqliteTable('users', {
+  id: uuid(),
+  email: text('email').notNull().unique(),
+  name: text('name'),
+  status: statusEnum(),
+  ...timestamps,
+  ...softDelete,
+});
+
+export const posts = sqliteTable('posts', {
+  id: uuid(),
+  title: text('title').notNull(),
+  content: text('content'),
+  userId: text('user_id').references(() => users.id),
+  ...timestamps,
+});
+`;
+}
+
+function buildMigrateScript(databaseMode: DatabaseMode): string {
+  if (databaseMode === 'neon') {
+    return `import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const db = drizzle(pool);
+
+try {
+  await migrate(db, { migrationsFolder: './drizzle' });
+  console.log('Migrations applied successfully.');
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('Failed to apply migrations:', message);
+  process.exit(1);
+} finally {
+  await pool.end();
+}
+`;
+  }
+
+  if (databaseMode === 'turso') {
+    return `import { createClient } from '@libsql/client';
+import { drizzle } from 'drizzle-orm/libsql';
+import { migrate } from 'drizzle-orm/libsql/migrator';
+
+const client = createClient({
+  url: process.env.DATABASE_URL || 'file:local.db',
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+const db = drizzle(client);
+
+try {
+  await migrate(db, { migrationsFolder: './drizzle' });
+  console.log('Migrations applied successfully.');
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('Failed to apply migrations:', message);
+  process.exit(1);
+}
+`;
+  }
+
+  return `import { Database } from 'bun:sqlite';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
+
+try {
+  const sqlite = new Database(process.env.DB_PATH ?? 'local.db', { create: true });
+  const db = drizzle(sqlite);
+
+  migrate(db, { migrationsFolder: './drizzle' });
+  console.log('Migrations applied successfully.');
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('Failed to apply migrations:', message);
+  process.exit(1);
+}
+`;
 }
 
 function buildDbIndex(databaseMode: DatabaseMode): string {
@@ -253,7 +379,7 @@ async function writeProjectFiles(
     `export default {
   mode: '${databaseMode}',
   database: {
-    local: 'file:local.db',
+    local: 'local.db',
     production: process.env.DATABASE_URL,
   },
   auth: {
@@ -309,19 +435,7 @@ local.db
   await writeFile(path.join(projectPath, 'src/db/schema.ts'), await buildSchema(databaseMode));
   await writeFile(path.join(projectPath, 'src/db/index.ts'), buildDbIndex(databaseMode));
 
-  await writeFile(
-    path.join(projectPath, 'src/db/migrate.ts'),
-    `import { Database } from 'bun:sqlite';
-import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { drizzle } from 'drizzle-orm/bun-sqlite';
-
-const sqlite = new Database(process.env.DB_PATH ?? 'local.db', { create: true });
-const db = drizzle(sqlite);
-
-migrate(db, { migrationsFolder: './drizzle' });
-console.log('Migrations applied successfully.');
-`,
-  );
+  await writeFile(path.join(projectPath, 'src/db/migrate.ts'), buildMigrateScript(databaseMode));
 
   await writeFile(
     path.join(projectPath, 'src/routes/health.ts'),
@@ -406,7 +520,11 @@ usersRoute.post('/', async (c) => {
     const body = await c.req.json();
     const parsed = parseBody(createUserSchema, body);
 
-    return c.json({ message: 'User payload validated', user: parsed }, 201);
+    // TODO: persist parsed user via db.insert(users) or a dedicated UsersService.
+    return c.json({
+      message: 'User payload validated (not persisted)',
+      user: parsed,
+    });
   } catch (error) {
     if (error instanceof HTTPException) {
       throw error;

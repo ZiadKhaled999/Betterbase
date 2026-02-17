@@ -16,7 +16,7 @@ export type BetterBaseConfig = z.infer<typeof BetterBaseConfigSchema>;
 export const betterbaseConfig: BetterBaseConfig = BetterBaseConfigSchema.parse({
   mode: 'local',
   database: {
-    local: 'file:local.db',
+    local: 'local.db',
     production: null,
   },
   auth: {

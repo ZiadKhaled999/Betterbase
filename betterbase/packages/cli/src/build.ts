@@ -31,5 +31,8 @@ const cjs = globalThis as unknown as { require?: { main?: unknown }; module?: un
 const isCjsMain = cjs.require?.main !== undefined && cjs.require.main === cjs.module;
 
 if (isEsmMain || isCjsMain) {
-  void main();
+  main().catch((error) => {
+    console.error('Build failed:', error);
+    process.exit(1);
+  });
 }

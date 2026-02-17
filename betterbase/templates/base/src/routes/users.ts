@@ -22,13 +22,11 @@ usersRoute.post('/', async (c) => {
     const body = await c.req.json();
     const parsed = parseBody(createUserSchema, body);
 
-    return c.json(
-      {
-        message: 'User payload validated',
-        user: parsed,
-      },
-      201,
-    );
+    // TODO: persist parsed user via db.insert(users) or a dedicated UsersService.
+    return c.json({
+      message: 'User payload validated (not persisted)',
+      user: parsed,
+    });
   } catch (error) {
     if (error instanceof HTTPException) {
       throw error;

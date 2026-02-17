@@ -3,6 +3,8 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 /**
  * Adds created_at and updated_at timestamp columns.
  * created_at is set on insert and updated_at is refreshed on updates.
+ * Note: .$onUpdate(() => new Date()) applies when updates go through Drizzle.
+ * Raw SQL writes will not auto-update this value without a DB trigger.
  *
  * @example
  * export const users = sqliteTable('users', {
