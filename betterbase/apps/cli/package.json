@@ -1,0 +1,14 @@
+{
+  "name": "@betterbase/cli-legacy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "bb-legacy": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
