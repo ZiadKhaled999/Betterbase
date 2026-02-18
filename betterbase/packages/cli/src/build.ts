@@ -1,10 +1,17 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 /**
  * Build the CLI as a standalone bundled executable output.
  */
 export async function buildStandaloneCli(): Promise<void> {
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const entrypoint = path.resolve(moduleDir, 'index.ts');
+  const outdir = path.resolve(moduleDir, '../dist');
+
   const result = await Bun.build({
-    entrypoints: ['./src/index.ts'],
-    outdir: './dist',
+    entrypoints: [entrypoint],
+    outdir,
     target: 'bun',
     format: 'esm',
     minify: false,
@@ -17,7 +24,7 @@ export async function buildStandaloneCli(): Promise<void> {
     throw new Error(`Build failed with ${result.logs.length} error(s).\n${diagnostics}`);
   }
 
-  const outputPath = './dist/index.js';
+  const outputPath = path.join(outdir, 'index.js');
   const compiled = await Bun.file(outputPath).text();
   await Bun.write(outputPath, `#!/usr/bin/env bun\n${compiled}`);
 }
@@ -27,10 +34,8 @@ async function main(): Promise<void> {
 }
 
 const isEsmMain = typeof import.meta !== 'undefined' && import.meta.main;
-const cjs = globalThis as unknown as { require?: { main?: unknown }; module?: unknown };
-const isCjsMain = cjs.require?.main !== undefined && cjs.require.main === cjs.module;
 
-if (isEsmMain || isCjsMain) {
+if (isEsmMain) {
   main().catch((error) => {
     console.error('Build failed:', error);
     process.exit(1);

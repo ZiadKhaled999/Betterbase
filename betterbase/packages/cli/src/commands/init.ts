@@ -63,8 +63,8 @@ async function initializeGitRepository(projectPath: string): Promise<void> {
 function buildPackageJson(projectName: string, databaseMode: DatabaseMode, useAuth: boolean): string {
   const dependencies: Record<string, string> = {
     hono: '^4.11.9',
-    'drizzle-orm': '^0.44.5',
-    zod: '^3.25.76',
+    'drizzle-orm': '^0.45.1',
+    zod: '^4.3.6',
   };
 
   if (databaseMode === 'turso') {
@@ -447,7 +447,7 @@ export const healthRoute = new Hono();
 
 healthRoute.get('/', async (c) => {
   try {
-    await db.run(sql\`select 1\`);
+    await db.execute(sql\`select 1\`);
 
     return c.json({
       status: 'healthy',
