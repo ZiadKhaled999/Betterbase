@@ -19,6 +19,18 @@ Initial BetterBase monorepo scaffold with a concrete base template.
 - Workspace orchestration: **Turborepo**
 - Language: **TypeScript**
 
+
+## Monorepo Commands
+
+From the monorepo root:
+
+- `bun install`
+- `bun run dev`
+- `bun run build`
+- `bun run typecheck` (runs `turbo run typecheck --filter '*'`)
+
+> Note: `templates/base` is not in the root workspace graph (`apps/*`, `packages/*`), so run template checks separately (e.g. `cd templates/base && bun run typecheck`).
+
 ## Base Template Commands
 
 From `templates/base`:

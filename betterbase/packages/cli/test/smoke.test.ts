@@ -14,9 +14,32 @@ describe('cli', () => {
     expect(init?.registeredArguments[0]?.name()).toBe('project-name');
   });
 
-  test('registers migrate command', () => {
+
+
+  test('registers auth setup command', () => {
     const program = createProgram();
+    const auth = program.commands.find((command) => command.name() === 'auth');
+    expect(auth).toBeDefined();
+
+    const setup = auth?.commands.find((command) => command.name() === 'setup');
+    expect(setup).toBeDefined();
+  });
+
+  test('registers dev command', () => {
+    const program = createProgram();
+    const dev = program.commands.find((command) => command.name() === 'dev');
+    expect(dev).toBeDefined();
+  });
+
+  test('registers migrate commands', () => {
+    const program = createProgram();
+
     const migrate = program.commands.find((command) => command.name() === 'migrate');
+    const preview = program.commands.find((command) => command.name() === 'migrate:preview');
+    const production = program.commands.find((command) => command.name() === 'migrate:production');
+
     expect(migrate).toBeDefined();
+    expect(preview).toBeDefined();
+    expect(production).toBeDefined();
   });
 });
