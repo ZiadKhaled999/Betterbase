@@ -32,7 +32,7 @@ describe('RouteScanner', () => {
       );
 
       const scanner = new RouteScanner();
-      const routes = await scanner.scan(routesDir);
+      const routes = scanner.scan(routesDir);
 
       expect(routes['/users']).toBeDefined();
       expect(routes['/users'].length).toBe(2);

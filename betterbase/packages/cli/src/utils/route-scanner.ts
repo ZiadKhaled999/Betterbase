@@ -18,6 +18,10 @@ function getStringLiteral(node: ts.Node | undefined): string {
   return node.getText();
 }
 
+function isAuthLikeName(value: string): boolean {
+  return /\bauth\b/i.test(value) || /^auth/i.test(value) || /^(authMiddleware|requireAuth)$/i.test(value);
+}
+
 function collectTsFiles(dir: string): string[] {
   const files: string[] = [];
 
@@ -36,7 +40,7 @@ function collectTsFiles(dir: string): string[] {
         continue;
       }
 
-      if (entry.isFile() && entry.name.endsWith('.ts')) {
+      if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
         files.push(fullPath);
       }
     }
@@ -47,7 +51,7 @@ function collectTsFiles(dir: string): string[] {
 }
 
 export class RouteScanner {
-  async scan(routesDir: string): Promise<Record<string, RouteInfo[]>> {
+  scan(routesDir: string): Record<string, RouteInfo[]> {
     const files = collectTsFiles(routesDir);
     const routes: Record<string, RouteInfo[]> = {};
 
@@ -70,12 +74,12 @@ export class RouteScanner {
 
     const isAuthMiddlewareExpression = (expr: ts.Expression): boolean => {
       if (ts.isIdentifier(expr)) {
-        return authIdentifiers.has(expr.text) || /auth/i.test(expr.text);
+        return authIdentifiers.has(expr.text) || isAuthLikeName(expr.text);
       }
 
       if (ts.isPropertyAccessExpression(expr)) {
         const text = expr.getText(sourceFile);
-        return /auth/i.test(text);
+        return isAuthLikeName(text);
       }
 
       return false;
@@ -93,7 +97,7 @@ export class RouteScanner {
           }
         }
 
-        if (/auth/i.test(declaration.name.text)) {
+        if (isAuthLikeName(declaration.name.text)) {
           authIdentifiers.add(declaration.name.text);
         }
       }

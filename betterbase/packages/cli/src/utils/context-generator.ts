@@ -1,23 +1,38 @@
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { RouteScanner } from './route-scanner';
-import { SchemaScanner } from './schema-scanner';
+import { RouteScanner, type RouteInfo } from './route-scanner';
+import { SchemaScanner, type TableInfo } from './schema-scanner';
+import * as logger from './logger';
 
 export interface BetterBaseContext {
   version: string;
   generated_at: string;
-  tables: Record<string, unknown>;
-  routes: Record<string, unknown>;
+  tables: Record<string, TableInfo>;
+  routes: Record<string, RouteInfo[]>;
   ai_prompt: string;
 }
 
 export class ContextGenerator {
   async generate(projectRoot: string): Promise<BetterBaseContext> {
-    const schemaScanner = new SchemaScanner(path.join(projectRoot, 'src/db/schema.ts'));
-    const tables = schemaScanner.scan();
+    const schemaPath = path.join(projectRoot, 'src/db/schema.ts');
+    const routesPath = path.join(projectRoot, 'src/routes');
 
-    const routeScanner = new RouteScanner();
-    const routes = await routeScanner.scan(path.join(projectRoot, 'src/routes'));
+    let tables: Record<string, TableInfo> = {};
+    let routes: Record<string, RouteInfo[]> = {};
+
+    if (existsSync(schemaPath)) {
+      const schemaScanner = new SchemaScanner(schemaPath);
+      tables = schemaScanner.scan();
+    } else {
+      logger.warn(`Schema file not found; continuing with empty tables: ${schemaPath}`);
+    }
+
+    if (existsSync(routesPath)) {
+      const routeScanner = new RouteScanner();
+      routes = routeScanner.scan(routesPath);
+    } else {
+      logger.warn(`Routes directory not found; continuing with empty routes: ${routesPath}`);
+    }
 
     const context: BetterBaseContext = {
       version: '1.0.0',
@@ -34,9 +49,9 @@ export class ContextGenerator {
     return context;
   }
 
-  private generateAIPrompt(tables: Record<string, any>, routes: Record<string, any>): string {
+  private generateAIPrompt(tables: Record<string, TableInfo>, routes: Record<string, RouteInfo[]>): string {
     const tableNames = Object.keys(tables);
-    const routeCount = Object.values(routes).reduce((count, methods) => count + (Array.isArray(methods) ? methods.length : 0), 0);
+    const routeCount = Object.values(routes).reduce((count, methods) => count + methods.length, 0);
 
     let prompt = `This is a BetterBase backend project with ${tableNames.length} tables and ${routeCount} API endpoints.\n\n`;
 
@@ -45,14 +60,14 @@ export class ContextGenerator {
       const table = tables[tableName];
       const columns = Object.keys(table.columns ?? {}).join(', ');
       prompt += `- ${tableName}: ${columns}\n`;
-      if (Array.isArray(table.relations) && table.relations.length > 0) {
+      if (table.relations.length > 0) {
         prompt += `  Relations: ${table.relations.join(', ')}\n`;
       }
     }
 
     prompt += '\nAPI ENDPOINTS:\n';
     for (const [routePath, methods] of Object.entries(routes)) {
-      for (const route of methods as Array<{ method: string; requiresAuth: boolean }>) {
+      for (const route of methods) {
         const auth = route.requiresAuth ? ' [AUTH REQUIRED]' : '';
         prompt += `- ${route.method} ${routePath}${auth}\n`;
       }
