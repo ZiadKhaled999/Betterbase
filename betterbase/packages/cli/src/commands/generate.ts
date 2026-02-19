@@ -1,109 +1,51 @@
-import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { SchemaScanner, type TableInfo } from '../utils/schema-scanner';
 import * as logger from '../utils/logger';
 
-
-const REALTIME_FILE = `import type { ServerWebSocket } from 'bun';
-
-interface Client {
-  ws: ServerWebSocket<unknown>;
-  subscriptions: Set<string>;
-}
-
-class RealtimeServer {
-  private clients = new Map<ServerWebSocket<unknown>, Client>();
-  private tableSubscribers = new Map<string, Set<ServerWebSocket<unknown>>>();
-
-  handleConnection(ws: ServerWebSocket<unknown>): void {
-    this.clients.set(ws, { ws, subscriptions: new Set() });
-  }
-
-  handleMessage(ws: ServerWebSocket<unknown>, rawMessage: string): void {
-    try {
-      const data = JSON.parse(rawMessage) as { type?: string; table?: string };
-      if (!data.type || !data.table) return;
-
-      if (data.type === 'subscribe') {
-        if (!this.tableSubscribers.has(data.table)) this.tableSubscribers.set(data.table, new Set());
-        this.tableSubscribers.get(data.table)?.add(ws);
-      }
-
-      if (data.type === 'unsubscribe') {
-        this.tableSubscribers.get(data.table)?.delete(ws);
-      }
-    } catch {
-      // ignore malformed payloads
-    }
-  }
-
-  handleClose(ws: ServerWebSocket<unknown>): void {
-    this.clients.delete(ws);
-    for (const subscribers of this.tableSubscribers.values()) {
-      subscribers.delete(ws);
-    }
-  }
-
-  broadcast(table: string, event: 'INSERT' | 'UPDATE' | 'DELETE', data: unknown): void {
-    const subscribers = this.tableSubscribers.get(table);
-    if (!subscribers) return;
-
-    const payload = JSON.stringify({ type: 'update', table, event, data, timestamp: new Date().toISOString() });
-    for (const ws of subscribers) {
-      ws.send(payload);
-    }
-  }
-}
-
-export const realtime = new RealtimeServer();
-`;
-
-function ensureRealtimeUtility(projectRoot: string): void {
-  const realtimePath = path.join(projectRoot, 'src/lib/realtime.ts');
-  if (existsSync(realtimePath)) {
-    return;
-  }
-
-  mkdirSync(path.dirname(realtimePath), { recursive: true });
-  writeFileSync(realtimePath, REALTIME_FILE);
-}
-
-
 function toSingular(name: string): string {
-  return name.endsWith('s') ? name.slice(0, -1) : `${name}Item`;
+  const lower = name.toLowerCase();
+  const invariants = new Set(['status', 'news', 'series']);
+  if (invariants.has(lower)) {
+    return name;
+  }
+
+  if (/men$/i.test(name)) {
+    return name.replace(/men$/i, 'man');
+  }
+
+  if (/ies$/i.test(name)) {
+    return name.replace(/ies$/i, 'y');
+  }
+
+  if (/(ses|xes|zes|ches|shes)$/i.test(name)) {
+    return name.replace(/es$/i, '');
+  }
+
+  if (name.endsWith('s') && !name.endsWith('ss')) {
+    return name.slice(0, -1);
+  }
+
+  return `${name}Item`;
 }
 
 function schemaTypeToZod(type: string): string {
-  if (type === 'integer' || type === 'number') {
-    return 'z.coerce.number()';
-  }
-
-  if (type === 'boolean') {
-    return 'z.coerce.boolean()';
-  }
-
-  if (type === 'json') {
-    return 'z.unknown()';
-  }
-
-  if (type === 'datetime') {
-    return 'z.coerce.date()';
-  }
-
+  if (type === 'integer' || type === 'number') return 'z.coerce.number()';
+  if (type === 'boolean') return 'z.coerce.boolean()';
+  if (type === 'json') return 'z.unknown()';
+  if (type === 'datetime') return 'z.coerce.date()';
   return 'z.string()';
 }
 
 function buildSchemaShape(table: TableInfo, mode: 'create' | 'update'): string {
-  const entries = Object.entries(table.columns)
+  return Object.entries(table.columns)
     .filter(([columnName, column]) => !(column.primaryKey || columnName === 'id'))
     .map(([columnName, column]) => {
       const base = schemaTypeToZod(column.type);
       const optional = mode === 'update' || column.nullable || Boolean(column.defaultValue);
       return `  ${columnName}: ${optional ? `${base}.optional()` : base}`;
-    });
-
-  return entries.join(',\n');
+    })
+    .join(',\n');
 }
 
 function generateRouteFile(tableName: string, table: TableInfo): string {
@@ -138,9 +80,7 @@ ${tableName}Route.get('/', async (c) => {
   const queryParams = c.req.query();
   const sort = queryParams.sort;
 
-  const filters = Object.entries(queryParams).filter(([key, value]) => {
-    return key !== 'limit' && key !== 'offset' && key !== 'sort' && value !== undefined;
-  });
+  const filters = Object.entries(queryParams).filter(([key, value]) => key !== 'limit' && key !== 'offset' && key !== 'sort' && value !== undefined);
 
   let query = db.select().from(${tableName}).$dynamic();
 
@@ -224,11 +164,7 @@ function updateMainRouter(projectRoot: string, tableName: string): void {
 
   if (!router.includes(importLine)) {
     const firstRouteImport = /import\s+\{\s*healthRoute\s*\}\s+from\s+'\.\/health';/;
-    if (firstRouteImport.test(router)) {
-      router = router.replace(firstRouteImport, (m) => `${m}\n${importLine}`);
-    } else {
-      router = `${importLine}\n${router}`;
-    }
+    router = firstRouteImport.test(router) ? router.replace(firstRouteImport, (m) => `${m}\n${importLine}`) : `${importLine}\n${router}`;
   }
 
   if (!router.includes(routeLine)) {
@@ -245,6 +181,40 @@ function updateMainRouter(projectRoot: string, tableName: string): void {
   writeFileSync(routerPath, router);
 }
 
+function ensureRealtimeUtility(projectRoot: string): void {
+  const realtimePath = path.join(projectRoot, 'src/lib/realtime.ts');
+  if (existsSync(realtimePath)) return;
+
+  const canonicalRealtimePath = path.resolve(import.meta.dir, '../../../templates/base/src/lib/realtime.ts');
+  if (!existsSync(canonicalRealtimePath)) {
+    throw new Error(`Canonical realtime template not found at ${canonicalRealtimePath}`);
+  }
+
+  mkdirSync(path.dirname(realtimePath), { recursive: true });
+  writeFileSync(realtimePath, readFileSync(canonicalRealtimePath, 'utf-8'));
+}
+
+async function ensureZodValidatorInstalled(projectRoot: string): Promise<void> {
+  logger.info('Installing @hono/zod-validator...');
+  const process = Bun.spawn(['bun', 'add', '@hono/zod-validator'], {
+    cwd: projectRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+
+  const [exitCode, stdout, stderr] = await Promise.all([
+    process.exited,
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+  ]);
+
+  if (exitCode !== 0) {
+    if (stdout.trim()) logger.warn(stdout.trim());
+    if (stderr.trim()) logger.error(stderr.trim());
+    throw new Error('Failed to install @hono/zod-validator.');
+  }
+}
+
 export async function runGenerateCrudCommand(projectRoot: string, tableName: string): Promise<void> {
   const resolvedRoot = path.resolve(projectRoot);
   const schemaPath = path.join(resolvedRoot, 'src/db/schema.ts');
@@ -253,19 +223,16 @@ export async function runGenerateCrudCommand(projectRoot: string, tableName: str
     throw new Error(`Schema file not found at ${schemaPath}`);
   }
 
-  logger.info(`🔨 Generating CRUD for ${tableName}...`);
+  logger.info(`Generating CRUD for ${tableName}...`);
 
   const scanner = new SchemaScanner(schemaPath);
   const tables = scanner.scan();
-
   const table = tables[tableName];
   if (!table) {
     throw new Error(`Table "${tableName}" not found in schema.`);
   }
 
-  logger.info('📦 Installing @hono/zod-validator...');
-  execSync('bun add @hono/zod-validator', { cwd: resolvedRoot, stdio: 'inherit' });
-
+  await ensureZodValidatorInstalled(resolvedRoot);
   ensureRealtimeUtility(resolvedRoot);
 
   const routesDir = path.join(resolvedRoot, 'src/routes');
@@ -277,10 +244,9 @@ export async function runGenerateCrudCommand(projectRoot: string, tableName: str
   updateMainRouter(resolvedRoot, tableName);
 
   logger.success(`Generated ${routePath}`);
-  console.log('\nEndpoints created:');
-  console.log(`  GET    /api/${tableName}`);
-  console.log(`  GET    /api/${tableName}/:id`);
-  console.log(`  POST   /api/${tableName}`);
-  console.log(`  PATCH  /api/${tableName}/:id`);
-  console.log(`  DELETE /api/${tableName}/:id`);
+  logger.info(`GET    /api/${tableName}`);
+  logger.info(`GET    /api/${tableName}/:id`);
+  logger.info(`POST   /api/${tableName}`);
+  logger.info(`PATCH  /api/${tableName}/:id`);
+  logger.info(`DELETE /api/${tableName}/:id`);
 }

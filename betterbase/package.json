@@ -1,7 +1,7 @@
 {
   "name": "betterbase",
   "private": true,
-  "packageManager": "bun@1.2.14",
+  "packageManager": "bun@1.3.9",
   "workspaces": [
     "apps/*",
     "packages/*"

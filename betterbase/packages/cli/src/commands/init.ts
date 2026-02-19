@@ -380,8 +380,12 @@ async function writeProjectFiles(
     path.join(projectPath, 'src/lib/env.ts'),
     `import { z } from 'zod';
 
+export const DEFAULT_DB_PATH = 'local.db';
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().positive().default(3000),
+  DB_PATH: z.string().min(1).default(DEFAULT_DB_PATH),
 });
 
 export const env = envSchema.parse(process.env);
@@ -609,6 +613,7 @@ usersRoute.post('/', async (c) => {
   await writeFile(
     path.join(projectPath, 'src/index.ts'),
     `import { Hono } from 'hono';
+import { env } from './lib/env';
 import { registerRoutes } from './routes';
 
 const app = new Hono();
@@ -616,8 +621,8 @@ registerRoutes(app);
 
 const server = Bun.serve({
   fetch: app.fetch,
-  port: Number(process.env.PORT ?? 3000),
-  development: process.env.NODE_ENV === 'development',
+  port: env.PORT,
+  development: env.NODE_ENV === 'development',
 });
 
 console.log(\`🚀 Server running at http://localhost:\${server.port}\`);

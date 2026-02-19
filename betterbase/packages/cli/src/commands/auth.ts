@@ -32,16 +32,49 @@ import { users, sessions } from '../db/schema';
 
 const authRoute = new Hono();
 
+const signupSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  name: z.string().min(1).optional(),
+});
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+});
+
+authRoute.post('/signup', async (c) => {
+  const body = signupSchema.parse(await c.req.json());
+  const passwordHash = await Bun.password.hash(body.password);
+
+  const created = await db
+    .insert(users)
+    .values({
+      email: body.email,
+      name: body.name ?? null,
+      passwordHash,
+    })
+    .returning();
+
+  return c.json({
+    user: {
+      id: created[0].id,
+      email: created[0].email,
+      name: created[0].name,
+    },
+  }, 201);
 });
 
 authRoute.post('/login', async (c) => {
   const body = loginSchema.parse(await c.req.json());
 
   const user = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
-  if (user.length === 0) {
+  if (user.length === 0 || !user[0].passwordHash) {
+    return c.json({ error: 'Invalid credentials' }, 401);
+  }
+
+  const validPassword = await Bun.password.verify(body.password, user[0].passwordHash);
+  if (!validPassword) {
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
@@ -157,6 +190,22 @@ function appendIfMissing(filePath: string, marker: string, content: string): voi
   writeFileSync(filePath, next);
 }
 
+function ensurePasswordHashColumn(schemaPath: string): void {
+  const current = readFileSync(schemaPath, 'utf-8');
+  if (/passwordHash\s*:\s*text\('password_hash'\)/.test(current)) {
+    return;
+  }
+
+  const usersBlock = current.match(/export\s+const\s+users\s*=\s*sqliteTable\([^]+?\}\);/m);
+  if (!usersBlock) {
+    logger.warn('Could not find sqlite users table block; skipping passwordHash injection.');
+    return;
+  }
+
+  const replacement = usersBlock[0].replace(/\n\}\);$/, "\n  passwordHash: text('password_hash').notNull(),\n});");
+  writeFileSync(schemaPath, current.replace(usersBlock[0], replacement));
+}
+
 function ensureAuthInConfig(projectRoot: string): void {
   const configPath = path.join(projectRoot, 'betterbase.config.ts');
   if (!existsSync(configPath)) return;
@@ -164,12 +213,30 @@ function ensureAuthInConfig(projectRoot: string): void {
   const current = readFileSync(configPath, 'utf-8');
   if (current.includes('auth: {')) return;
 
-  const updated = current.replace(
-    'export default {',
-    `export default {\n  auth: {\n    enabled: true,\n    secret: process.env.AUTH_SECRET,\n    sessionDuration: 30 * 24 * 60 * 60,\n  },`,
-  );
+  const patterns = [
+    {
+      regex: /export\s+default\s+\{/,
+      replace: `export default {\n  auth: {\n    enabled: true,\n    secret: process.env.AUTH_SECRET,\n    sessionDuration: 30 * 24 * 60 * 60,\n  },`,
+    },
+    {
+      regex: /export\s+default\s+defineConfig\s*\(\s*\{/,
+      replace: `export default defineConfig({\n  auth: {\n    enabled: true,\n    secret: process.env.AUTH_SECRET,\n    sessionDuration: 30 * 24 * 60 * 60,\n  },`,
+    },
+  ];
 
-  writeFileSync(configPath, updated);
+  let updated = current;
+  for (const pattern of patterns) {
+    if (pattern.regex.test(updated)) {
+      updated = updated.replace(pattern.regex, pattern.replace);
+      break;
+    }
+  }
+
+  if (updated !== current) {
+    writeFileSync(configPath, updated);
+  } else {
+    logger.warn(`Could not automatically patch auth config in ${configPath}. Please add auth config manually.`);
+  }
 }
 
 function ensureEnvVar(projectRoot: string): void {
@@ -215,15 +282,24 @@ export async function runAuthSetupCommand(projectRoot: string = process.cwd()): 
   execSync('bun add better-auth', { cwd: resolvedRoot, stdio: 'inherit' });
 
   logger.info('📝 Adding auth tables to schema...');
+  ensurePasswordHashColumn(schemaPath);
   appendIfMissing(schemaPath, "export const sessions = sqliteTable('sessions'", AUTH_SCHEMA_BLOCK);
 
   logger.info('🛡️  Creating auth middleware...');
   mkdirSync(path.dirname(middlewarePath), { recursive: true });
-  writeFileSync(middlewarePath, AUTH_MIDDLEWARE_FILE);
+  if (!existsSync(middlewarePath)) {
+    writeFileSync(middlewarePath, AUTH_MIDDLEWARE_FILE);
+  } else {
+    logger.warn(`Skipping existing middleware file: ${middlewarePath}`);
+  }
 
   logger.info('🧭 Creating auth routes...');
   mkdirSync(path.dirname(routePath), { recursive: true });
-  writeFileSync(routePath, AUTH_ROUTE_FILE);
+  if (!existsSync(routePath)) {
+    writeFileSync(routePath, AUTH_ROUTE_FILE);
+  } else {
+    logger.warn(`Skipping existing route file: ${routePath}`);
+  }
   ensureRoutesIndexHook(resolvedRoot);
 
   logger.info('⚙️  Updating config...');
@@ -231,8 +307,8 @@ export async function runAuthSetupCommand(projectRoot: string = process.cwd()): 
   ensureEnvVar(resolvedRoot);
 
   logger.success('Authentication setup complete!');
-  console.log('\nNext steps:');
-  console.log('  1. Set AUTH_SECRET in .env');
-  console.log('  2. Run: bun run db:push');
-  console.log('  3. Use requireAuth middleware on protected routes');
+  logger.info('Next steps:');
+  logger.info('1. Set AUTH_SECRET in .env');
+  logger.info('2. Run: bun run db:push');
+  logger.info('3. Use requireAuth middleware on protected routes');
 }

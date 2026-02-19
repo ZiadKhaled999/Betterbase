@@ -7,7 +7,7 @@ export interface Subscription {
 
 interface Client {
   ws: ServerWebSocket<unknown>;
-  subscriptions: Set<string>;
+  subscriptions: Map<string, Subscription>;
 }
 
 interface RealtimeUpdatePayload {
@@ -18,15 +18,21 @@ interface RealtimeUpdatePayload {
   timestamp: string;
 }
 
+const realtimeLogger = {
+  debug: (message: string): void => console.debug(`[realtime] ${message}`),
+  info: (message: string): void => console.info(`[realtime] ${message}`),
+  warn: (message: string): void => console.warn(`[realtime] ${message}`),
+};
+
 export class RealtimeServer {
   private clients = new Map<ServerWebSocket<unknown>, Client>();
   private tableSubscribers = new Map<string, Set<ServerWebSocket<unknown>>>();
 
   handleConnection(ws: ServerWebSocket<unknown>): void {
-    console.log('Client connected');
+    realtimeLogger.info('Client connected');
     this.clients.set(ws, {
       ws,
-      subscriptions: new Set(),
+      subscriptions: new Map(),
     });
   }
 
@@ -35,7 +41,7 @@ export class RealtimeServer {
       const data = JSON.parse(rawMessage) as { type?: string; table?: string; filter?: Record<string, unknown> };
 
       if (!data.type || !data.table) {
-        ws.send(JSON.stringify({ error: 'Message must include type and table' }));
+        this.safeSend(ws, { error: 'Message must include type and table' });
         return;
       }
 
@@ -47,20 +53,20 @@ export class RealtimeServer {
           this.unsubscribe(ws, data.table);
           break;
         default:
-          ws.send(JSON.stringify({ error: 'Unknown message type' }));
+          this.safeSend(ws, { error: 'Unknown message type' });
           break;
       }
     } catch {
-      ws.send(JSON.stringify({ error: 'Invalid message format' }));
+      this.safeSend(ws, { error: 'Invalid message format' });
     }
   }
 
   handleClose(ws: ServerWebSocket<unknown>): void {
-    console.log('Client disconnected');
+    realtimeLogger.info('Client disconnected');
 
     const client = this.clients.get(ws);
     if (client) {
-      for (const table of client.subscriptions) {
+      for (const table of client.subscriptions.keys()) {
         const subscribers = this.tableSubscribers.get(table);
         subscribers?.delete(ws);
 
@@ -79,6 +85,8 @@ export class RealtimeServer {
       return;
     }
 
+    const initialCount = subscribers.size;
+
     const payload: RealtimeUpdatePayload = {
       type: 'update',
       table,
@@ -89,15 +97,20 @@ export class RealtimeServer {
 
     const message = JSON.stringify(payload);
 
-    for (const ws of subscribers) {
-      try {
-        ws.send(message);
-      } catch {
+    for (const ws of [...subscribers]) {
+      const client = this.clients.get(ws);
+      const subscription = client?.subscriptions.get(table);
+      if (!this.matchesFilter(subscription?.filter, data)) {
+        continue;
+      }
+
+      if (!this.safeSend(ws, message)) {
+        subscribers.delete(ws);
         this.handleClose(ws);
       }
     }
 
-    console.log(`Broadcasted ${event} on ${table} to ${subscribers.size} clients`);
+    realtimeLogger.debug(`Broadcasted ${event} on ${table} to ${initialCount} clients`);
   }
 
   private subscribe(ws: ServerWebSocket<unknown>, table: string, filter?: Record<string, unknown>): void {
@@ -106,7 +119,7 @@ export class RealtimeServer {
       return;
     }
 
-    client.subscriptions.add(table);
+    client.subscriptions.set(table, { table, filter });
 
     if (!this.tableSubscribers.has(table)) {
       this.tableSubscribers.set(table, new Set());
@@ -114,15 +127,13 @@ export class RealtimeServer {
 
     this.tableSubscribers.get(table)?.add(ws);
 
-    ws.send(
-      JSON.stringify({
-        type: 'subscribed',
-        table,
-        filter,
-      }),
-    );
+    this.safeSend(ws, {
+      type: 'subscribed',
+      table,
+      filter,
+    });
 
-    console.log(`Client subscribed to ${table}`);
+    realtimeLogger.debug(`Client subscribed to ${table}`);
   }
 
   private unsubscribe(ws: ServerWebSocket<unknown>, table: string): void {
@@ -139,12 +150,38 @@ export class RealtimeServer {
       this.tableSubscribers.delete(table);
     }
 
-    ws.send(
-      JSON.stringify({
-        type: 'unsubscribed',
-        table,
-      }),
-    );
+    this.safeSend(ws, {
+      type: 'unsubscribed',
+      table,
+    });
+  }
+
+  private matchesFilter(filter: Record<string, unknown> | undefined, payload: unknown): boolean {
+    if (!filter || Object.keys(filter).length === 0) {
+      return true;
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      return false;
+    }
+
+    const data = payload as Record<string, unknown>;
+    return Object.entries(filter).every(([key, value]) => data[key] === value);
+  }
+
+  private safeSend(ws: ServerWebSocket<unknown>, payload: object | string): boolean {
+    if (ws.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    try {
+      ws.send(typeof payload === 'string' ? payload : JSON.stringify(payload));
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      realtimeLogger.warn(`WebSocket send failed: ${message}`);
+      return false;
+    }
   }
 }
 
