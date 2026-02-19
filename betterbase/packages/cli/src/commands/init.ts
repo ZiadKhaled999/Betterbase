@@ -427,7 +427,6 @@ bun.lockb
 .env.*
 !.env.example
 local.db
-drizzle/
 `,
   );
 
@@ -471,9 +470,9 @@ healthRoute.get('/', async (c) => {
   await writeFile(
     path.join(projectPath, 'src/middleware/validation.ts'),
     `import { HTTPException } from 'hono/http-exception';
-import type { ZodType } from 'zod';
+import { z } from 'zod';
 
-export function parseBody<T>(schema: ZodType<T>, body: unknown): T {
+export function parseBody<S extends z.ZodTypeAny>(schema: S, body: unknown): z.output<S> {
   const result = schema.safeParse(body);
 
   if (!result.success) {
@@ -530,13 +529,23 @@ function parseNonNegativeInt(value: string | undefined, fallback: number): numbe
 usersRoute.get('/', async (c) => {
   const requestedLimit = parseNonNegativeInt(c.req.query('limit'), DEFAULT_LIMIT);
   const limit = Math.min(requestedLimit, MAX_LIMIT);
-  const effectiveLimit = Math.max(limit, 1);
   const offset = parseNonNegativeInt(c.req.query('offset'), DEFAULT_OFFSET);
 
+  if (limit === 0) {
+    return c.json({
+      users: [],
+      pagination: {
+        limit,
+        offset,
+        hasMore: false,
+      },
+    });
+  }
+
   try {
-    const rows = await db.select().from(users).limit(effectiveLimit + 1).offset(offset);
-    const hasMore = limit === 0 ? false : rows.length > limit;
-    const paginatedUsers = limit === 0 ? [] : rows.slice(0, limit);
+    const rows = await db.select().from(users).limit(limit + 1).offset(offset);
+    const hasMore = rows.length > limit;
+    const paginatedUsers = rows.slice(0, limit);
 
     return c.json({
       users: paginatedUsers,

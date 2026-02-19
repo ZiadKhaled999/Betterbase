@@ -1,7 +1,9 @@
+import { Database } from 'bun:sqlite';
 import chalk from 'chalk';
-import { mkdir, readdir } from 'node:fs/promises';
+import { access, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { DEFAULT_DB_PATH } from '../constants';
 import * as logger from '../utils/logger';
 import * as prompts from '../utils/prompts';
 
@@ -31,7 +33,6 @@ interface DrizzleResult {
   success: boolean;
   stdout: string;
   stderr: string;
-  exitCode: number;
 }
 
 interface MigrationBackup {
@@ -40,7 +41,6 @@ interface MigrationBackup {
 }
 
 const DRIZZLE_DIR = 'drizzle';
-const DEFAULT_DB_PATH = 'local.db';
 
 async function runDrizzleKit(args: string[]): Promise<DrizzleResult> {
   const proc = Bun.spawn(['bunx', 'drizzle-kit', ...args], {
@@ -59,7 +59,6 @@ async function runDrizzleKit(args: string[]): Promise<DrizzleResult> {
     success: exitCode === 0,
     stdout,
     stderr,
-    exitCode,
   };
 }
 
@@ -68,7 +67,9 @@ async function listSqlFiles(baseDir: string): Promise<Map<string, string>> {
   const root = path.join(process.cwd(), baseDir);
 
   const walk = async (dir: string): Promise<void> => {
-    if (!(await Bun.file(dir).exists())) {
+    try {
+      await access(dir);
+    } catch {
       return;
     }
 
@@ -76,12 +77,6 @@ async function listSqlFiles(baseDir: string): Promise<Map<string, string>> {
       const fullPath = path.join(dir, entry.name);
 
       if (entry.isDirectory()) {
-        await walk(fullPath);
-        continue;
-      }
-
-      const stat = await Bun.file(fullPath).stat();
-      if (stat.isDirectory()) {
         await walk(fullPath);
         continue;
       }
@@ -151,7 +146,7 @@ function analyzeMigration(sqlStatements: string[]): MigrationChange[] {
         type: 'modify_column',
         table: alterColumn[1],
         column: alterColumn[3] ?? alterColumn[4],
-        isDestructive: /drop\s+not\s+null|set\s+not\s+null|set\s+data\s+type/i.test(sql),
+        isDestructive: /drop\s+not\s+null|set\s+not\s+null|set\s+data\s+type|rename\s+column/i.test(sql),
         detail: sql,
       });
       continue;
@@ -210,7 +205,6 @@ function displayDiff(changes: MigrationChange[]): void {
 
 async function confirmDestructive(changes: MigrationChange[]): Promise<boolean> {
   const destructive = changes.filter((c) => c.isDestructive);
-
   if (destructive.length === 0) {
     return true;
   }
@@ -231,9 +225,10 @@ async function confirmDestructive(changes: MigrationChange[]): Promise<boolean> 
 
 async function backupDatabase(): Promise<MigrationBackup | null> {
   const sourcePath = process.env.DB_PATH ?? DEFAULT_DB_PATH;
-  const source = Bun.file(sourcePath);
 
-  if (!(await source.exists())) {
+  try {
+    await access(sourcePath);
+  } catch {
     logger.warn(`No local database found at ${sourcePath}; skipping backup.`);
     return null;
   }
@@ -243,9 +238,16 @@ async function backupDatabase(): Promise<MigrationBackup | null> {
   await mkdir(backupDir, { recursive: true });
 
   const backupPath = path.join(backupDir, `db-${timestamp}.sqlite`);
-  await Bun.write(backupPath, source);
-  logger.success(`Backup saved: ${backupPath}`);
 
+  const db = new Database(sourcePath, { readonly: true });
+  try {
+    const snapshot = db.serialize();
+    await Bun.write(backupPath, snapshot);
+  } finally {
+    db.close();
+  }
+
+  logger.success(`Backup saved: ${backupPath}`);
   return { sourcePath, backupPath };
 }
 
@@ -254,7 +256,15 @@ async function restoreBackup(backup: MigrationBackup | null): Promise<void> {
     return;
   }
 
-  await Bun.write(backup.sourcePath, Bun.file(backup.backupPath));
+  const bytes = await Bun.file(backup.backupPath).bytes();
+  const restoredDb = Database.deserialize(bytes);
+
+  try {
+    await Bun.write(backup.sourcePath, restoredDb.serialize());
+  } finally {
+    restoredDb.close();
+  }
+
   logger.warn(`Rollback complete. Restored database from ${backup.backupPath}`);
 }
 
@@ -292,9 +302,6 @@ async function collectChangesFromGenerate(): Promise<MigrationChange[]> {
   return analyzeMigration(changedSql);
 }
 
-/**
- * Run the `bb migrate` command.
- */
 export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Promise<void> {
   const options = migrateOptionsSchema.parse(rawOptions);
 
