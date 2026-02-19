@@ -27,7 +27,9 @@ From the monorepo root:
 - `bun install`
 - `bun run dev`
 - `bun run build`
-- `bun run typecheck`
+- `bun run typecheck` (runs `turbo run typecheck --filter '*'`)
+
+> Note: `templates/base` is not in the root workspace graph (`apps/*`, `packages/*`), so run template checks separately (e.g. `cd templates/base && bun run typecheck`).
 
 ## Base Template Commands
 

@@ -338,19 +338,20 @@ import { logger } from 'hono/logger';
 import { HTTPException } from 'hono/http-exception';
 import { healthRoute } from './health';
 import { usersRoute } from './users';
+import { env } from '../lib/env';
 
-export default function registerRoutes(app: Hono): void {
+export function registerRoutes(app: Hono): void {
   app.use('*', cors());
   app.use('*', logger());
 
   app.onError((err, c) => {
     const isHttpError = err instanceof HTTPException;
-    const showDetailedError = process.env.NODE_ENV === 'development' || isHttpError;
+    const showDetailedError = env.NODE_ENV === 'development' || isHttpError;
 
     return c.json(
       {
         error: showDetailedError ? err.message : 'Internal Server Error',
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+        stack: env.NODE_ENV === 'development' ? err.stack : undefined,
         details: isHttpError ? (err as { cause?: unknown }).cause ?? null : null,
       },
       isHttpError ? err.status : 500,
@@ -373,6 +374,19 @@ async function writeProjectFiles(
   await mkdir(path.join(projectPath, 'src/routes'), { recursive: true });
   await mkdir(path.join(projectPath, 'src/middleware'), { recursive: true });
   await mkdir(path.join(projectPath, 'src/lib'), { recursive: true });
+
+
+  await writeFile(
+    path.join(projectPath, 'src/lib/env.ts'),
+    `import { z } from 'zod';
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+});
+
+export const env = envSchema.parse(process.env);
+`,
+  );
 
   await writeFile(
     path.join(projectPath, 'betterbase.config.ts'),
@@ -472,7 +486,7 @@ healthRoute.get('/', async (c) => {
     `import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 
-export function parseBody<S extends z.ZodTypeAny>(schema: S, body: unknown): z.output<S> {
+export function parseBody<S extends z.ZodType>(schema: S, body: unknown): z.output<S> {
   const result = schema.safeParse(body);
 
   if (!result.success) {
@@ -595,7 +609,7 @@ usersRoute.post('/', async (c) => {
   await writeFile(
     path.join(projectPath, 'src/index.ts'),
     `import { Hono } from 'hono';
-import registerRoutes from './routes';
+import { registerRoutes } from './routes';
 
 const app = new Hono();
 registerRoutes(app);

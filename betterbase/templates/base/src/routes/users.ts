@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { parseBody } from '../middleware/validation';
@@ -22,26 +22,27 @@ const paginationSchema = z.object({
 export const usersRoute = new Hono();
 
 usersRoute.get('/', async (c) => {
-  const pagination = paginationSchema.parse({
-    limit: c.req.query('limit') ?? undefined,
-    offset: c.req.query('offset') ?? undefined,
-  });
-
-  const limit = Math.min(pagination.limit, MAX_LIMIT);
-  const offset = pagination.offset;
-
-  if (limit === 0) {
-    return c.json({
-      users: [],
-      pagination: {
-        limit,
-        offset,
-        hasMore: false,
-      },
-    });
-  }
-
   try {
+    const pagination = paginationSchema.parse({
+      limit: c.req.query('limit'),
+      offset: c.req.query('offset'),
+    });
+
+    const limit = Math.min(pagination.limit, MAX_LIMIT);
+    const offset = pagination.offset;
+
+    if (limit === 0) {
+      return c.json({
+        users: [],
+        pagination: {
+          limit,
+          offset,
+          // No DB query is run for limit=0, so hasMore cannot be determined.
+          hasMore: null,
+        },
+      });
+    }
+
     const rows = await db.select().from(users).limit(limit + 1).offset(offset);
     const hasMore = rows.length > limit;
     const paginatedUsers = rows.slice(0, limit);
@@ -57,6 +58,16 @@ usersRoute.get('/', async (c) => {
   } catch (error) {
     if (error instanceof HTTPException) {
       throw error;
+    }
+
+    if (error instanceof ZodError) {
+      return c.json(
+        {
+          error: 'Invalid pagination query parameters',
+          details: error.issues,
+        },
+        400,
+      );
     }
 
     console.error('Failed to fetch users:', error);

@@ -27,15 +27,8 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
     ts.isTypeAssertionExpression(current) ||
     ts.isSatisfiesExpression(current)
   ) {
-    if (ts.isParenthesizedExpression(current)) {
-      current = current.expression;
-      continue;
-    }
-
-    if (ts.isAsExpression(current) || ts.isTypeAssertionExpression(current) || ts.isSatisfiesExpression(current)) {
-      current = current.expression;
-      continue;
-    }
+    current = (current as ts.ParenthesizedExpression | ts.AsExpression | ts.TypeAssertion | ts.SatisfiesExpression)
+      .expression;
   }
 
   return current;
@@ -65,8 +58,16 @@ export class SchemaScanner {
   private readonly sourceFile: ts.SourceFile;
 
   constructor(schemaPath: string) {
-    const sourceCode = readFileSync(schemaPath, 'utf-8');
-    this.sourceFile = ts.createSourceFile('schema.ts', sourceCode, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    let sourceCode: string;
+
+    try {
+      sourceCode = readFileSync(schemaPath, 'utf-8');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to read schema file at ${schemaPath}: ${message}`);
+    }
+
+    this.sourceFile = ts.createSourceFile(schemaPath, sourceCode, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   }
 
   scan(): Record<string, TableInfo> {

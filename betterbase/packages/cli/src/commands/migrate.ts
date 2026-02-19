@@ -257,20 +257,14 @@ async function restoreBackup(backup: MigrationBackup | null): Promise<void> {
   }
 
   const bytes = await Bun.file(backup.backupPath).bytes();
-  const restoredDb = Database.deserialize(bytes);
-
-  try {
-    await Bun.write(backup.sourcePath, restoredDb.serialize());
-  } finally {
-    restoredDb.close();
-  }
+  await Bun.write(backup.sourcePath, bytes);
 
   logger.warn(`Rollback complete. Restored database from ${backup.backupPath}`);
 }
 
 function splitStatements(sql: string): string[] {
   return sql
-    .split(/;\s*(?:\n|$)/g)
+    .split(/;\s*/g)
     .map((statement) => statement.trim())
     .filter((statement) => statement.length > 0);
 }
@@ -343,7 +337,7 @@ export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Prom
   if (!push.success) {
     await restoreBackup(backup);
 
-    if (/connect|econn|database/i.test(push.stderr)) {
+    if (/\b(?:connect(?:ion)?|econnrefused|econnreset|enotfound|etimedout)\b/i.test(push.stderr)) {
       throw new Error(`Database connection failed while applying migration.\n${push.stderr}`);
     }
 
