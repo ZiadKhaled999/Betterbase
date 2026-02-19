@@ -1,6 +1,9 @@
 import { Command, CommanderError } from 'commander';
 import { runInitCommand } from './commands/init';
+import { runDevCommand } from './commands/dev';
 import { runMigrateCommand } from './commands/migrate';
+import { runAuthSetupCommand } from './commands/auth';
+import { runGenerateCrudCommand } from './commands/generate';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
@@ -24,12 +27,57 @@ export function createProgram(): Command {
       await runInitCommand({ projectName });
     });
 
+
+  program
+    .command('dev')
+    .description('Watch schema/routes and regenerate .betterbase-context.json')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runDevCommand(projectRoot);
+    });
+
+
+  const auth = program.command('auth').description('Authentication helpers');
+
+  auth
+    .command('setup')
+    .description('Install and scaffold BetterAuth integration')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runAuthSetupCommand(projectRoot);
+    });
+
+
+  const generate = program.command('generate').description('Code generation helpers');
+
+  generate
+    .command('crud')
+    .description('Generate full CRUD routes for a table')
+    .argument('<table-name>', 'table name from src/db/schema.ts')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (tableName: string, projectRoot: string) => {
+      await runGenerateCrudCommand(projectRoot, tableName);
+    });
+
   program
     .command('migrate')
-    .description('Run BetterBase database migrations')
-    .option('--destructive', 'allow destructive migration flow')
-    .action(async (options: { destructive?: boolean }) => {
-      await runMigrateCommand({ destructive: options.destructive });
+    .description('Generate and apply migrations for local development')
+    .action(async () => {
+      await runMigrateCommand({});
+    });
+
+  program
+    .command('migrate:preview')
+    .description('Preview migration diff without applying changes')
+    .action(async () => {
+      await runMigrateCommand({ preview: true });
+    });
+
+  program
+    .command('migrate:production')
+    .description('Apply migrations to production (requires confirmation)')
+    .action(async () => {
+      await runMigrateCommand({ production: true });
     });
 
   return program;
