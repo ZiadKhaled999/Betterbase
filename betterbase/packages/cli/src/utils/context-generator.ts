@@ -74,7 +74,7 @@ export class ContextGenerator {
     }
 
     prompt += '\nWhen writing code for this project:\n';
-    prompt += "1. Always import tables from './src/db/schema'\n";
+    prompt += "1. Always import tables from '../db/schema'\n";
     prompt += '2. Use Drizzle ORM for database queries\n';
     prompt += '3. Validate inputs with Zod\n';
     prompt += '4. Return JSON responses with proper status codes\n';

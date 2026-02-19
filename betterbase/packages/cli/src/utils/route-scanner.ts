@@ -145,7 +145,7 @@ export class RouteScanner {
     return routes;
   }
 
-  private findSchemaUsage(sourceFile: ts.SourceFile, args: ts.NodeArray<ts.Expression>, mode: 'input' | 'output'): string | undefined {
+  private findSchemaUsage(sourceFile: ts.SourceFile, args: readonly ts.Expression[], mode: 'input' | 'output'): string | undefined {
     const text = args.map((arg) => arg.getText(sourceFile)).join('\n');
 
     if (mode === 'input') {

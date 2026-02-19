@@ -14,12 +14,7 @@ const migrateOptionsSchema = z.object({
 
 export type MigrateCommandOptions = z.infer<typeof migrateOptionsSchema>;
 
-export type MigrationChangeType =
-  | 'create_table'
-  | 'add_column'
-  | 'modify_column'
-  | 'drop_column'
-  | 'drop_table';
+export type MigrationChangeType = 'create_table' | 'add_column' | 'modify_column' | 'drop_column' | 'drop_table';
 
 export interface MigrationChange {
   type: MigrationChangeType;
@@ -41,25 +36,40 @@ interface MigrationBackup {
 }
 
 const DRIZZLE_DIR = 'drizzle';
+const DRIZZLE_TIMEOUT_MS = 30_000;
+
+function captureIdentifier(match: RegExpMatchArray, startIndex: number): string {
+  return match[startIndex] ?? match[startIndex + 1] ?? match[startIndex + 2] ?? '';
+}
 
 async function runDrizzleKit(args: string[]): Promise<DrizzleResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DRIZZLE_TIMEOUT_MS);
+
   const proc = Bun.spawn(['bunx', 'drizzle-kit', ...args], {
     cwd: process.cwd(),
     stdout: 'pipe',
     stderr: 'pipe',
+    signal: controller.signal,
   });
 
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  try {
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
 
-  return {
-    success: exitCode === 0,
-    stdout,
-    stderr,
-  };
+    return { success: exitCode === 0, stdout, stderr };
+  } catch {
+    return {
+      success: false,
+      stdout: '',
+      stderr: `drizzle-kit ${args.join(' ')} timed out after ${DRIZZLE_TIMEOUT_MS / 1000}s`,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function listSqlFiles(baseDir: string): Promise<Map<string, string>> {
@@ -95,43 +105,46 @@ async function listSqlFiles(baseDir: string): Promise<Map<string, string>> {
 
 function analyzeMigration(sqlStatements: string[]): MigrationChange[] {
   const changes: MigrationChange[] = [];
+  const ident = '(?:"([^"]+)"|`([^`]+)`|([\\w.-]+))';
 
   for (const statement of sqlStatements) {
     const sql = statement.trim();
-    if (!sql) {
-      continue;
-    }
+    if (!sql) continue;
 
-    const createTable = sql.match(/create\s+table\s+"?([\w.-]+)"?/i);
+    const createTable = sql.match(new RegExp(`create\\s+table(?:\\s+if\\s+not\\s+exists)?\\s+${ident}`, 'i'));
     if (createTable) {
-      changes.push({ type: 'create_table', table: createTable[1], isDestructive: false, detail: sql });
+      changes.push({ type: 'create_table', table: captureIdentifier(createTable, 1), isDestructive: false, detail: sql });
       continue;
     }
 
-    const dropTable = sql.match(/drop\s+table\s+"?([\w.-]+)"?/i);
+    const dropTable = sql.match(new RegExp(`drop\\s+table(?:\\s+if\\s+exists)?\\s+${ident}`, 'i'));
     if (dropTable) {
-      changes.push({ type: 'drop_table', table: dropTable[1], isDestructive: true, detail: sql });
+      changes.push({ type: 'drop_table', table: captureIdentifier(dropTable, 1), isDestructive: true, detail: sql });
       continue;
     }
 
-    const addColumn = sql.match(/alter\s+table\s+"?([\w.-]+)"?\s+add\s+column\s+"?([\w.-]+)"?/i);
+    const addColumn = sql.match(
+      new RegExp(`alter\\s+table(?:\\s+if\\s+exists)?\\s+${ident}\\s+add\\s+column(?:\\s+if\\s+not\\s+exists)?\\s+${ident}`, 'i'),
+    );
     if (addColumn) {
       changes.push({
         type: 'add_column',
-        table: addColumn[1],
-        column: addColumn[2],
+        table: captureIdentifier(addColumn, 1),
+        column: captureIdentifier(addColumn, 4),
         isDestructive: false,
         detail: sql,
       });
       continue;
     }
 
-    const dropColumn = sql.match(/alter\s+table\s+"?([\w.-]+)"?\s+drop\s+column\s+"?([\w.-]+)"?/i);
+    const dropColumn = sql.match(
+      new RegExp(`alter\\s+table(?:\\s+if\\s+exists)?\\s+${ident}\\s+drop\\s+column(?:\\s+if\\s+exists)?\\s+${ident}`, 'i'),
+    );
     if (dropColumn) {
       changes.push({
         type: 'drop_column',
-        table: dropColumn[1],
-        column: dropColumn[2],
+        table: captureIdentifier(dropColumn, 1),
+        column: captureIdentifier(dropColumn, 4),
         isDestructive: true,
         detail: sql,
       });
@@ -139,17 +152,19 @@ function analyzeMigration(sqlStatements: string[]): MigrationChange[] {
     }
 
     const alterColumn = sql.match(
-      /alter\s+table\s+"?([\w.-]+)"?\s+(alter\s+column\s+"?([\w.-]+)"?|rename\s+column\s+"?([\w.-]+)"?)/i,
+      new RegExp(
+        `alter\\s+table(?:\\s+if\\s+exists)?\\s+${ident}\\s+(?:alter\\s+column\\s+${ident}|rename\\s+column\\s+${ident})`,
+        'i',
+      ),
     );
     if (alterColumn) {
       changes.push({
         type: 'modify_column',
-        table: alterColumn[1],
-        column: alterColumn[3] ?? alterColumn[4],
+        table: captureIdentifier(alterColumn, 1),
+        column: captureIdentifier(alterColumn, 4) || captureIdentifier(alterColumn, 7),
         isDestructive: /drop\s+not\s+null|set\s+not\s+null|set\s+data\s+type|rename\s+column/i.test(sql),
         detail: sql,
       });
-      continue;
     }
   }
 
@@ -169,50 +184,40 @@ function displayDiff(changes: MigrationChange[]): void {
   const modified = changes.filter((c) => c.type === 'modify_column');
   const destructive = changes.filter((c) => c.isDestructive);
 
-  if (newTables.length > 0) {
+  if (newTables.length) {
     console.log(chalk.green('✅ New Tables:'));
-    for (const change of newTables) {
-      console.log(chalk.green(`  + ${change.table}`));
-    }
+    newTables.forEach((change) => console.log(chalk.green(`  + ${change.table}`)));
     console.log('');
   }
 
-  if (newColumns.length > 0) {
+  if (newColumns.length) {
     console.log(chalk.green('✅ New Columns:'));
-    for (const change of newColumns) {
-      console.log(chalk.green(`  + ${change.table}.${change.column ?? ''}`));
-    }
+    newColumns.forEach((change) => console.log(chalk.green(`  + ${change.table}.${change.column ?? ''}`)));
     console.log('');
   }
 
-  if (modified.length > 0) {
+  if (modified.length) {
     console.log(chalk.yellow('⚠️  Modified Columns:'));
-    for (const change of modified) {
-      console.log(chalk.yellow(`  ! ${change.table}.${change.column ?? ''}`));
-    }
+    modified.forEach((change) => console.log(chalk.yellow(`  ! ${change.table}.${change.column ?? ''}`)));
     console.log('');
   }
 
-  if (destructive.length > 0) {
+  if (destructive.length) {
     console.log(chalk.red('❌ Destructive Changes:'));
-    for (const change of destructive) {
+    destructive.forEach((change) => {
       console.log(chalk.red(`  - ${change.type}: ${change.table}${change.column ? `.${change.column}` : ''}`));
       console.log(chalk.red('    ⚠️  This will DELETE DATA'));
-    }
+    });
     console.log('');
   }
 }
 
 async function confirmDestructive(changes: MigrationChange[]): Promise<boolean> {
   const destructive = changes.filter((c) => c.isDestructive);
-  if (destructive.length === 0) {
-    return true;
-  }
+  if (destructive.length === 0) return true;
 
   logger.warn('DESTRUCTIVE CHANGES DETECTED:');
-  for (const change of destructive) {
-    console.log(`  - ${change.type}: ${change.table}${change.column ? `.${change.column}` : ''}`);
-  }
+  destructive.forEach((change) => console.log(`  - ${change.type}: ${change.table}${change.column ? `.${change.column}` : ''}`));
 
   const confirmation = await prompts.text({ message: 'Type "delete data" to confirm:' });
   if (confirmation !== 'delete data') {
@@ -241,8 +246,7 @@ async function backupDatabase(): Promise<MigrationBackup | null> {
 
   const db = new Database(sourcePath, { readonly: true });
   try {
-    const snapshot = db.serialize();
-    await Bun.write(backupPath, snapshot);
+    await Bun.write(backupPath, db.serialize());
   } finally {
     db.close();
   }
@@ -252,13 +256,9 @@ async function backupDatabase(): Promise<MigrationBackup | null> {
 }
 
 async function restoreBackup(backup: MigrationBackup | null): Promise<void> {
-  if (backup === null) {
-    return;
-  }
-
+  if (backup === null) return;
   const bytes = await Bun.file(backup.backupPath).bytes();
   await Bun.write(backup.sourcePath, bytes);
-
   logger.warn(`Rollback complete. Restored database from ${backup.backupPath}`);
 }
 
@@ -286,10 +286,10 @@ async function collectChangesFromGenerate(): Promise<MigrationChange[]> {
 
   for (const [relativePath, content] of after.entries()) {
     const previous = before.get(relativePath);
-    if (previous === content) {
-      continue;
-    }
+    if (previous === content) continue;
 
+    // Intentionally analyze full changed file content: drizzle-kit typically creates new migration files,
+    // so whole-file analysis is simpler and reliable. If in-place edits become common, switch to a true diff.
     changedSql.push(...splitStatements(content));
   }
 
@@ -309,11 +309,7 @@ export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Prom
   }
 
   if (options.production) {
-    const proceed = await prompts.confirm({
-      message: 'Apply migrations to production now?',
-      initial: false,
-    });
-
+    const proceed = await prompts.confirm({ message: 'Apply migrations to production now?', initial: false });
     if (!proceed) {
       logger.warn('Migration cancelled by user.');
       return;
@@ -321,14 +317,10 @@ export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Prom
   }
 
   let backup: MigrationBackup | null = null;
-
   if (changes.some((change) => change.isDestructive)) {
     backup = await backupDatabase();
-
     const confirmed = await confirmDestructive(changes);
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
   }
 
   logger.info('Applying migrations with drizzle-kit push...');

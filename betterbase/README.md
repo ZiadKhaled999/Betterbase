@@ -38,4 +38,6 @@ From `templates/base`:
 - `bun run dev`
 - `bun run db:generate`
 - `bun run db:push`
+- `bun run build`
+- `bun run start`
 - `bun run typecheck`

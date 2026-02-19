@@ -1,3 +1,4 @@
+import { asc } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { z, ZodError } from 'zod';
@@ -43,7 +44,7 @@ usersRoute.get('/', async (c) => {
       });
     }
 
-    const rows = await db.select().from(users).limit(limit + 1).offset(offset);
+    const rows = await db.select().from(users).orderBy(asc(users.id)).limit(limit + 1).offset(offset);
     const hasMore = rows.length > limit;
     const paginatedUsers = rows.slice(0, limit);
 
