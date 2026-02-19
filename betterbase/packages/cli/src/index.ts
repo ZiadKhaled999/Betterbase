@@ -2,6 +2,7 @@ import { Command, CommanderError } from 'commander';
 import { runInitCommand } from './commands/init';
 import { runDevCommand } from './commands/dev';
 import { runMigrateCommand } from './commands/migrate';
+import { runAuthSetupCommand } from './commands/auth';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
@@ -32,6 +33,17 @@ export function createProgram(): Command {
     .argument('[project-root]', 'project root directory', process.cwd())
     .action(async (projectRoot: string) => {
       await runDevCommand(projectRoot);
+    });
+
+
+  const auth = program.command('auth').description('Authentication helpers');
+
+  auth
+    .command('setup')
+    .description('Install and scaffold BetterAuth integration')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runAuthSetupCommand(projectRoot);
     });
 
   program
