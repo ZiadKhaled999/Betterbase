@@ -63,8 +63,8 @@ async function initializeGitRepository(projectPath: string): Promise<void> {
 function buildPackageJson(projectName: string, databaseMode: DatabaseMode, useAuth: boolean): string {
   const dependencies: Record<string, string> = {
     hono: '^4.11.9',
-    'drizzle-orm': '^0.44.5',
-    zod: '^3.25.76',
+    'drizzle-orm': '^0.45.1',
+    zod: '^4.3.6',
   };
 
   if (databaseMode === 'turso') {
@@ -338,19 +338,20 @@ import { logger } from 'hono/logger';
 import { HTTPException } from 'hono/http-exception';
 import { healthRoute } from './health';
 import { usersRoute } from './users';
+import { env } from '../lib/env';
 
-export default function registerRoutes(app: Hono): void {
+export function registerRoutes(app: Hono): void {
   app.use('*', cors());
   app.use('*', logger());
 
   app.onError((err, c) => {
     const isHttpError = err instanceof HTTPException;
-    const showDetailedError = process.env.NODE_ENV === 'development' || isHttpError;
+    const showDetailedError = env.NODE_ENV === 'development' || isHttpError;
 
     return c.json(
       {
         error: showDetailedError ? err.message : 'Internal Server Error',
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+        stack: env.NODE_ENV === 'development' ? err.stack : undefined,
         details: isHttpError ? (err as { cause?: unknown }).cause ?? null : null,
       },
       isHttpError ? err.status : 500,
@@ -373,6 +374,19 @@ async function writeProjectFiles(
   await mkdir(path.join(projectPath, 'src/routes'), { recursive: true });
   await mkdir(path.join(projectPath, 'src/middleware'), { recursive: true });
   await mkdir(path.join(projectPath, 'src/lib'), { recursive: true });
+
+
+  await writeFile(
+    path.join(projectPath, 'src/lib/env.ts'),
+    `import { z } from 'zod';
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+});
+
+export const env = envSchema.parse(process.env);
+`,
+  );
 
   await writeFile(
     path.join(projectPath, 'betterbase.config.ts'),
@@ -427,7 +441,6 @@ bun.lockb
 .env.*
 !.env.example
 local.db
-.drizzle
 `,
   );
 
@@ -447,7 +460,7 @@ export const healthRoute = new Hono();
 
 healthRoute.get('/', async (c) => {
   try {
-    await db.run(sql\`select 1\`);
+    await db.${databaseMode === 'local' ? 'run' : 'execute'}(sql\`select 1\`);
 
     return c.json({
       status: 'healthy',
@@ -471,9 +484,9 @@ healthRoute.get('/', async (c) => {
   await writeFile(
     path.join(projectPath, 'src/middleware/validation.ts'),
     `import { HTTPException } from 'hono/http-exception';
-import type { ZodType } from 'zod';
+import { z } from 'zod';
 
-export function parseBody<T>(schema: ZodType<T>, body: unknown): T {
+export function parseBody<S extends z.ZodType>(schema: S, body: unknown): z.output<S> {
   const result = schema.safeParse(body);
 
   if (!result.success) {
@@ -510,9 +523,60 @@ const createUserSchema = z.object({
 
 export const usersRoute = new Hono();
 
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 100;
+const DEFAULT_OFFSET = 0;
+
+function parseNonNegativeInt(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
 usersRoute.get('/', async (c) => {
-  const allUsers = await db.select().from(users);
-  return c.json({ users: allUsers });
+  const requestedLimit = parseNonNegativeInt(c.req.query('limit'), DEFAULT_LIMIT);
+  const limit = Math.min(requestedLimit, MAX_LIMIT);
+  const offset = parseNonNegativeInt(c.req.query('offset'), DEFAULT_OFFSET);
+
+  if (limit === 0) {
+    return c.json({
+      users: [],
+      pagination: {
+        limit,
+        offset,
+        hasMore: false,
+      },
+    });
+  }
+
+  try {
+    const rows = await db.select().from(users).limit(limit + 1).offset(offset);
+    const hasMore = rows.length > limit;
+    const paginatedUsers = rows.slice(0, limit);
+
+    return c.json({
+      users: paginatedUsers,
+      pagination: {
+        limit,
+        offset,
+        hasMore,
+      },
+    });
+  } catch (error) {
+    if (error instanceof HTTPException) {
+      throw error;
+    }
+
+    console.error('Failed to fetch users:', error);
+    throw error;
+  }
 });
 
 usersRoute.post('/', async (c) => {
@@ -545,7 +609,7 @@ usersRoute.post('/', async (c) => {
   await writeFile(
     path.join(projectPath, 'src/index.ts'),
     `import { Hono } from 'hono';
-import registerRoutes from './routes';
+import { registerRoutes } from './routes';
 
 const app = new Hono();
 registerRoutes(app);
