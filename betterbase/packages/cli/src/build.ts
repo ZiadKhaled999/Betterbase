@@ -1,11 +1,10 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 /**
  * Build the CLI as a standalone bundled executable output.
  */
 export async function buildStandaloneCli(): Promise<void> {
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const moduleDir = import.meta.dir;
   const entrypoint = path.resolve(moduleDir, 'index.ts');
   const outdir = path.resolve(moduleDir, '../dist');
 
@@ -33,9 +32,7 @@ async function main(): Promise<void> {
   await buildStandaloneCli();
 }
 
-const isEsmMain = typeof import.meta !== 'undefined' && import.meta.main;
-
-if (isEsmMain) {
+if (import.meta.main) {
   main().catch((error) => {
     console.error('Build failed:', error);
     process.exit(1);

@@ -5,6 +5,7 @@ import * as schema from './schema';
 
 export { DEFAULT_DB_PATH };
 
-const sqlite = new Database(env.DB_PATH || DEFAULT_DB_PATH, { create: true });
+// env.DB_PATH is always present because env schema provides a default.
+const sqlite = new Database(env.DB_PATH, { create: true });
 
 export const db = drizzle(sqlite, { schema });

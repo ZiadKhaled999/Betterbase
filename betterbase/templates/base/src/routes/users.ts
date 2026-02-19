@@ -19,8 +19,8 @@ function parseNonNegativeInt(value: string | undefined, fallback: number): numbe
     return fallback;
   }
 
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed) || parsed < 0) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
     return fallback;
   }
 
@@ -32,20 +32,26 @@ export const usersRoute = new Hono();
 usersRoute.get('/', async (c) => {
   const requestedLimit = parseNonNegativeInt(c.req.query('limit'), DEFAULT_LIMIT);
   const limit = Math.min(requestedLimit, MAX_LIMIT);
+  const effectiveLimit = Math.max(limit, 1);
   const offset = parseNonNegativeInt(c.req.query('offset'), DEFAULT_OFFSET);
 
-  const rows = await db.select().from(users).limit(limit + 1).offset(offset);
-  const hasMore = rows.length > limit;
-  const paginatedUsers = hasMore ? rows.slice(0, limit) : rows;
+  try {
+    const rows = await db.select().from(users).limit(effectiveLimit + 1).offset(offset);
+    const hasMore = limit === 0 ? false : rows.length > limit;
+    const paginatedUsers = limit === 0 ? [] : rows.slice(0, limit);
 
-  return c.json({
-    users: paginatedUsers,
-    pagination: {
-      limit,
-      offset,
-      hasMore,
-    },
-  });
+    return c.json({
+      users: paginatedUsers,
+      pagination: {
+        limit,
+        offset,
+        hasMore,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to fetch users:', error);
+    return c.json({ error: 'Failed to fetch users' }, 500);
+  }
 });
 
 usersRoute.post('/', async (c) => {

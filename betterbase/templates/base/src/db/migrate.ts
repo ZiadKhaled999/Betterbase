@@ -1,11 +1,10 @@
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { env } from '../lib/env';
-import { DEFAULT_DB_PATH } from './index';
+import { DEFAULT_DB_PATH } from '../lib/env';
 
 try {
-  const sqlite = new Database(env.DB_PATH || DEFAULT_DB_PATH, { create: true });
+  const sqlite = new Database(DEFAULT_DB_PATH, { create: true });
   const db = drizzle(sqlite);
 
   migrate(db, { migrationsFolder: './drizzle' });

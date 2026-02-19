@@ -510,9 +510,39 @@ const createUserSchema = z.object({
 
 export const usersRoute = new Hono();
 
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 100;
+const DEFAULT_OFFSET = 0;
+
+function parseNonNegativeInt(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
 usersRoute.get('/', async (c) => {
-  const allUsers = await db.select().from(users);
-  return c.json({ users: allUsers });
+  const requestedLimit = parseNonNegativeInt(c.req.query('limit'), DEFAULT_LIMIT);
+  const limit = Math.min(requestedLimit, MAX_LIMIT);
+  const effectiveLimit = Math.max(limit, 1);
+  const offset = parseNonNegativeInt(c.req.query('offset'), DEFAULT_OFFSET);
+
+  const rows = await db.select().from(users).limit(effectiveLimit + 1).offset(offset);
+  const hasMore = limit === 0 ? false : rows.length > limit;
+  const paginatedUsers = limit === 0 ? [] : rows.slice(0, limit);
+
+  return c.json({
+    users: paginatedUsers,
+    limit,
+    offset,
+    hasMore,
+  });
 });
 
 usersRoute.post('/', async (c) => {
