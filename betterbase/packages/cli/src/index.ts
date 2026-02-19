@@ -26,10 +26,23 @@ export function createProgram(): Command {
 
   program
     .command('migrate')
-    .description('Run BetterBase database migrations')
-    .option('--destructive', 'allow destructive migration flow')
-    .action(async (options: { destructive?: boolean }) => {
-      await runMigrateCommand({ destructive: options.destructive });
+    .description('Generate and apply migrations for local development')
+    .action(async () => {
+      await runMigrateCommand({});
+    });
+
+  program
+    .command('migrate:preview')
+    .description('Preview migration diff without applying changes')
+    .action(async () => {
+      await runMigrateCommand({ preview: true });
+    });
+
+  program
+    .command('migrate:production')
+    .description('Apply migrations to production (requires confirmation)')
+    .action(async () => {
+      await runMigrateCommand({ production: true });
     });
 
   return program;
