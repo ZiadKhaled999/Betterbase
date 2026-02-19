@@ -16,6 +16,16 @@ describe('cli', () => {
 
 
 
+
+  test('registers generate crud command', () => {
+    const program = createProgram();
+    const generate = program.commands.find((command) => command.name() === 'generate');
+    expect(generate).toBeDefined();
+
+    const crud = generate?.commands.find((command) => command.name() === 'crud');
+    expect(crud).toBeDefined();
+  });
+
   test('registers auth setup command', () => {
     const program = createProgram();
     const auth = program.commands.find((command) => command.name() === 'auth');

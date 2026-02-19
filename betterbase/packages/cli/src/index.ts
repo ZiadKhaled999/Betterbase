@@ -3,6 +3,7 @@ import { runInitCommand } from './commands/init';
 import { runDevCommand } from './commands/dev';
 import { runMigrateCommand } from './commands/migrate';
 import { runAuthSetupCommand } from './commands/auth';
+import { runGenerateCrudCommand } from './commands/generate';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
@@ -44,6 +45,18 @@ export function createProgram(): Command {
     .argument('[project-root]', 'project root directory', process.cwd())
     .action(async (projectRoot: string) => {
       await runAuthSetupCommand(projectRoot);
+    });
+
+
+  const generate = program.command('generate').description('Code generation helpers');
+
+  generate
+    .command('crud')
+    .description('Generate full CRUD routes for a table')
+    .argument('<table-name>', 'table name from src/db/schema.ts')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (tableName: string, projectRoot: string) => {
+      await runGenerateCrudCommand(projectRoot, tableName);
     });
 
   program
