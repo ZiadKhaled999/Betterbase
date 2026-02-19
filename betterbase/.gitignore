@@ -3,14 +3,16 @@ node_modules
 .turbo
 dist
 .next
+*.sqlite3
+*.sqlite
+*.db
+*.tsbuildinfo
 
 .vscode/
 .idea/
 
 .env
 .env.*
-.env.local
-.env.test
 !.env.example
 
 *.log
