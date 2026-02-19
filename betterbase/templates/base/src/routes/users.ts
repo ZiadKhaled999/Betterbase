@@ -49,8 +49,12 @@ usersRoute.get('/', async (c) => {
       },
     });
   } catch (error) {
+    if (error instanceof HTTPException) {
+      throw error;
+    }
+
     console.error('Failed to fetch users:', error);
-    return c.json({ error: 'Failed to fetch users' }, 500);
+    throw error;
   }
 });
 

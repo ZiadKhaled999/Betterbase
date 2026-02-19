@@ -427,7 +427,7 @@ bun.lockb
 .env.*
 !.env.example
 local.db
-.drizzle
+drizzle/
 `,
   );
 
@@ -447,7 +447,7 @@ export const healthRoute = new Hono();
 
 healthRoute.get('/', async (c) => {
   try {
-    await db.execute(sql\`select 1\`);
+    await db.${databaseMode === 'local' ? 'run' : 'execute'}(sql\`select 1\`);
 
     return c.json({
       status: 'healthy',
@@ -533,16 +533,27 @@ usersRoute.get('/', async (c) => {
   const effectiveLimit = Math.max(limit, 1);
   const offset = parseNonNegativeInt(c.req.query('offset'), DEFAULT_OFFSET);
 
-  const rows = await db.select().from(users).limit(effectiveLimit + 1).offset(offset);
-  const hasMore = limit === 0 ? false : rows.length > limit;
-  const paginatedUsers = limit === 0 ? [] : rows.slice(0, limit);
+  try {
+    const rows = await db.select().from(users).limit(effectiveLimit + 1).offset(offset);
+    const hasMore = limit === 0 ? false : rows.length > limit;
+    const paginatedUsers = limit === 0 ? [] : rows.slice(0, limit);
 
-  return c.json({
-    users: paginatedUsers,
-    limit,
-    offset,
-    hasMore,
-  });
+    return c.json({
+      users: paginatedUsers,
+      pagination: {
+        limit,
+        offset,
+        hasMore,
+      },
+    });
+  } catch (error) {
+    if (error instanceof HTTPException) {
+      throw error;
+    }
+
+    console.error('Failed to fetch users:', error);
+    throw error;
+  }
 });
 
 usersRoute.post('/', async (c) => {
