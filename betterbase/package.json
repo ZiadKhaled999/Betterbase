@@ -1,7 +1,7 @@
 {
   "name": "betterbase",
   "private": true,
-  "packageManager": "bun@1.1.38",
+  "packageManager": "bun@1.2.14",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -10,7 +10,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
