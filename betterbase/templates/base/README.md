@@ -26,3 +26,15 @@ src/
 betterbase.config.ts
 drizzle.config.ts
 ```
+
+
+## Quick Start
+
+- Install dependencies: `bun install`
+- Start development server: `bun run dev`
+- Generate Drizzle migrations: `bun run db:generate`
+- Apply migrations locally: `bun run db:push`
+- Build for production: `bun run build`
+- Start production server: `bun run start`
+
+Environment variables are validated in `src/lib/env.ts` (`NODE_ENV`, `PORT`, `DB_PATH`).
