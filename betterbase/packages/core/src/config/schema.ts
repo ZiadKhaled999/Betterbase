@@ -13,8 +13,8 @@ export const BetterBaseConfigSchema = z.object({
   provider: z.object({
     type: ProviderTypeSchema,
     connectionString: z.string().optional(),
-    url: z.string().optional(),           // Turso
-    authToken: z.string().optional(),     // Turso
+    url: z.string().optional(),           // Turso - libSQL connection URL
+    authToken: z.string().optional(),     // Turso - auth token for managed DB
   }),
   storage: z.object({
     provider: z.enum(['s3', 'r2', 'backblaze', 'minio', 'managed']),

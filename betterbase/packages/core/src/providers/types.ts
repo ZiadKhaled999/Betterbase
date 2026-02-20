@@ -4,7 +4,7 @@ export interface ProviderAdapter {
   type: ProviderType
   dialect: 'postgres' | 'mysql' | 'sqlite'
   connect(config: ProviderConfig): Promise<DatabaseConnection>
-  getMigrationsDriver(): unknown           // typed per phase 10.1
+  getMigrationsDriver(): unknown           // TODO: typed per phase 10.1
   supportsRLS(): boolean
   supportsGraphQL(): boolean
 }
