@@ -2,20 +2,29 @@
   "name": "@betterbase/client",
   "version": "0.1.0",
   "description": "TypeScript client for BetterBase backends",
+  "license": "MIT",
+  "author": "BetterBase",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/betterbase/betterbase.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
     }
   },
   "scripts": {
     "build": "bun run src/build.ts",
-    "dev": "bun run src/build.ts --watch",
+    "dev": "bun --watch run src/build.ts",
     "test": "bun test",
     "typecheck": "tsc --project tsconfig.test.json"
   },

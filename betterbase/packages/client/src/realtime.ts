@@ -2,67 +2,37 @@ import type { RealtimeCallback, RealtimeSubscription } from './types';
 
 type RealtimeEvent = 'INSERT' | 'UPDATE' | 'DELETE' | '*';
 
-interface TableSubscription {
-  callbacks: Set<RealtimeCallback>;
+interface SubscriberEntry {
+  callback: RealtimeCallback;
+  event: RealtimeEvent;
   filter?: Record<string, unknown>;
-  refCount: number;
 }
 
 export class RealtimeClient {
   private ws: WebSocket | null = null;
-  private subscriptions = new Map<string, TableSubscription>();
+  private subscriptions = new Map<string, Map<string, SubscriberEntry>>();
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
+  private subscriberSequence = 0;
 
   constructor(private url: string) {}
 
-  private connect(): void {
-    if (typeof WebSocket === 'undefined') {
+  private scheduleReconnect(): void {
+    if (this.reconnectTimeout || this.subscriptions.size === 0) {
       return;
     }
 
-    if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       return;
     }
 
-    const wsUrl = this.url.replace(/^http/, 'ws') + '/ws';
-
-    this.ws = new WebSocket(wsUrl);
-
-    this.ws.onopen = () => {
-      this.reconnectAttempts = 0;
-      for (const [table, subscription] of this.subscriptions.entries()) {
-        this.sendSubscribe(table, subscription.filter);
-      }
-    };
-
-    this.ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data as string);
-        if (data.type !== 'update') return;
-
-        const subscription = this.subscriptions.get(data.table);
-        if (subscription) {
-          for (const callback of subscription.callbacks) {
-            callback({ event: data.event, data: data.data, timestamp: data.timestamp });
-          }
-        }
-      } catch {
-        // noop
-      }
-    };
-
-    this.ws.onclose = () => {
-      this.ws = null;
-      if (this.reconnectAttempts < this.maxReconnectAttempts && this.subscriptions.size > 0) {
-        const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 10000);
-        this.reconnectTimeout = setTimeout(() => {
-          this.reconnectAttempts++;
-          this.connect();
-        }, delay);
-      }
-    };
+    const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 10000);
+    this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null;
+      this.reconnectAttempts += 1;
+      this.connect();
+    }, delay);
   }
 
   private sendSubscribe(table: string, filter?: Record<string, unknown>): void {
@@ -77,6 +47,79 @@ export class RealtimeClient {
     }
   }
 
+  private sendSubscribeAll(table: string): void {
+    const tableSubscribers = this.subscriptions.get(table);
+    if (!tableSubscribers || tableSubscribers.size === 0) {
+      return;
+    }
+
+    for (const subscriber of tableSubscribers.values()) {
+      this.sendSubscribe(table, subscriber.filter);
+    }
+  }
+
+  private connect(): void {
+    if (typeof WebSocket === 'undefined') {
+      const message = '[BetterBase] WebSocket is not available in this environment';
+      console.warn(message);
+      throw new Error(message);
+    }
+
+    if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+
+    const wsUrl = this.url.replace(/^http/, 'ws') + '/ws';
+    this.ws = new WebSocket(wsUrl);
+
+    this.ws.onopen = () => {
+      this.reconnectAttempts = 0;
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
+
+      for (const table of this.subscriptions.keys()) {
+        this.sendSubscribeAll(table);
+      }
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data as string);
+        if (data.type !== 'update') return;
+
+        const tableSubscribers = this.subscriptions.get(data.table);
+        if (!tableSubscribers) {
+          return;
+        }
+
+        for (const subscriber of tableSubscribers.values()) {
+          if (subscriber.event === '*' || subscriber.event === data.event) {
+            subscriber.callback({ event: data.event, data: data.data, timestamp: data.timestamp });
+          }
+        }
+      } catch {
+        // noop
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('[BetterBase] WebSocket error:', error);
+      this.ws = null;
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
+      this.scheduleReconnect();
+    };
+
+    this.ws.onclose = () => {
+      this.ws = null;
+      this.scheduleReconnect();
+    };
+  }
+
   from(table: string): {
     on: <T = unknown>(event: RealtimeEvent, callback: RealtimeCallback<T>) => {
       subscribe: (filter?: Record<string, unknown>) => RealtimeSubscription;
@@ -87,48 +130,41 @@ export class RealtimeClient {
         subscribe: (filter) => {
           this.connect();
 
-          const wrappedCallback: RealtimeCallback = (payload) => {
-            if (event === '*' || payload.event === event) {
-              callback(payload as Parameters<typeof callback>[0]);
-            }
-          };
+          const tableSubscribers = this.subscriptions.get(table) ?? new Map<string, SubscriberEntry>();
+          const id = `${table}:${this.subscriberSequence++}`;
 
-          const subscription = this.subscriptions.get(table) ?? {
-            callbacks: new Set<RealtimeCallback>(),
-            refCount: 0,
+          tableSubscribers.set(id, {
+            event,
             filter,
-          };
+            callback: (payload) => callback(payload as Parameters<typeof callback>[0]),
+          });
 
-          subscription.callbacks.add(wrappedCallback);
-          subscription.refCount += 1;
-
-          if (filter !== undefined) {
-            subscription.filter = filter;
-          }
-
-          this.subscriptions.set(table, subscription);
-          this.sendSubscribe(table, subscription.filter);
+          this.subscriptions.set(table, tableSubscribers);
+          this.sendSubscribe(table, filter);
 
           return {
             unsubscribe: () => {
-              const current = this.subscriptions.get(table);
-              if (!current) {
+              const currentSubscribers = this.subscriptions.get(table);
+              if (!currentSubscribers) {
                 return;
               }
 
-              current.callbacks.delete(wrappedCallback);
-              current.refCount = Math.max(0, current.refCount - 1);
+              currentSubscribers.delete(id);
 
-              if (current.refCount === 0 || current.callbacks.size === 0) {
+              this.sendUnsubscribe(table);
+
+              if (currentSubscribers.size === 0) {
                 this.subscriptions.delete(table);
-                this.sendUnsubscribe(table);
 
                 if (this.subscriptions.size === 0) {
                   this.disconnect();
                 }
-              } else {
-                this.subscriptions.set(table, current);
+
+                return;
               }
+
+              this.subscriptions.set(table, currentSubscribers);
+              this.sendSubscribeAll(table);
             },
           };
         },
