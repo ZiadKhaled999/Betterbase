@@ -18,10 +18,9 @@ import {
   Terminal,
   FileCode,
 } from 'lucide-react';
-import { betterbase } from '@/lib/betterbase';
 
 // Types
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 interface ApiRequest {
   method: HttpMethod;
@@ -93,6 +92,7 @@ const HTTP_METHOD_COLORS: Record<HttpMethod, string> = {
   GET: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   POST: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
   PUT: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  PATCH: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
   DELETE: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
 };
 
@@ -157,10 +157,14 @@ export default function ApiExplorerPage() {
         bodyData = body;
       }
 
+      // Get token from localStorage
+      const token = typeof window !== 'undefined' ? localStorage.getItem('betterbase_token') : null;
+
       const response = await fetch(url.toString(), {
         method,
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: bodyData,
       });
@@ -186,7 +190,7 @@ export default function ApiExplorerPage() {
       setResponse(data);
       setError(null);
 
-      // Add to history
+      // Add to history using functional updater to avoid stale closure
       const historyItem: HistoryItem = {
         id: crypto.randomUUID(),
         method,
@@ -202,8 +206,12 @@ export default function ApiExplorerPage() {
         },
       };
 
-      const newHistory = [historyItem, ...history].slice(0, MAX_HISTORY_ITEMS);
-      saveHistory(newHistory);
+      // Use functional updater to get latest history state
+      setHistory((currentHistory) => {
+        const newHistory = [historyItem, ...currentHistory].slice(0, MAX_HISTORY_ITEMS);
+        saveHistory(newHistory);
+        return newHistory;
+      });
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : 'Request failed');
@@ -289,8 +297,9 @@ export default function ApiExplorerPage() {
   -H "Content-Type: application/json"`;
 
     if (method !== 'GET' && body.trim()) {
+      const escapedBody = body.replace(/'/g, "'\\''");
       curl += ` \\
-  -d '${body}'`;
+  -d '${escapedBody}'`;
     }
 
     return curl;
@@ -323,6 +332,28 @@ console.log(data);`;
       .join('&');
     const fullUrl = `${baseUrl}${path}${queryString ? `?${queryString}` : ''}`;
 
+    const tableName = path.replace('/rest/v1/', '');
+
+    // Generate appropriate QueryBuilder method based on HTTP verb
+    let queryMethod: string;
+    switch (method) {
+      case 'GET':
+        queryMethod = `.from("${tableName}").select().execute()`;
+        break;
+      case 'POST':
+        queryMethod = `.from("${tableName}").insert(${body})`;
+        break;
+      case 'PUT':
+      case 'PATCH':
+        queryMethod = `.from("${tableName}").update("id", ${body})`;
+        break;
+      case 'DELETE':
+        queryMethod = `.from("${tableName}").delete("id")`;
+        break;
+      default:
+        queryMethod = '';
+    }
+
     return `import { createClient } from '@betterbase/client';
 
 const client = createClient({
@@ -332,9 +363,8 @@ const client = createClient({
 // Using the client
 ${path.startsWith('/rest/v1/')
   ? `const { data, error } = await client
-  .from("${path.replace('/rest/v1/', '')}")
-  .${method.toLowerCase()}(${method === 'GET' ? '' : method === 'POST' ? body : `"id", ${body}`})
-  .execute();
+  .from("${tableName}")
+  ${queryMethod};
 
 if (error) {
   console.error('Error:', error);
@@ -694,3 +724,4 @@ const data = await response.json();`}`;
     </div>
   );
 }
+

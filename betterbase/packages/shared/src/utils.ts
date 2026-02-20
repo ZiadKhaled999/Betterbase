@@ -1,3 +1,16 @@
+import type { SerializedError } from './types'
+
+/**
+ * Converts an Error object into a JSON-serializable SerializedError
+ */
+export function serializeError(error: Error): SerializedError {
+  return {
+    message: error.message,
+    name: error.name,
+    stack: error.stack,
+  }
+}
+
 /**
  * Validates if a string is a valid project name (slug-safe)
  * Only allows lowercase letters, numbers, and hyphens
@@ -22,11 +35,13 @@ export function toCamelCase(str: string): string {
 }
 
 /**
- * Converts a camelCase string to snake_case
+ * Converts a camelCase or PascalCase string to snake_case
  */
 export function toSnakeCase(str: string): string {
   if (!str) return str
-  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
+  const result = str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
+  // Remove leading underscore for PascalCase inputs (e.g., "FooBar" -> "foo_bar", not "_foo_bar")
+  return result.startsWith('_') ? result.slice(1) : result
 }
 
 /**
@@ -44,8 +59,12 @@ export function safeJsonParse<T>(str: string): T | null {
 /**
  * Formats bytes to human readable string
  * Uses binary units (KiB, MiB, GiB, etc.)
+ * @throws RangeError if bytes is negative
  */
 export function formatBytes(bytes: number): string {
+  if (bytes < 0) {
+    throw new RangeError('bytes must be non-negative')
+  }
   if (bytes === 0) return '0 B'
 
   const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']

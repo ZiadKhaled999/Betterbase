@@ -1,6 +1,7 @@
 // Types
 export type {
   BetterBaseResponse,
+  SerializedError,
   DBEventType,
   DBEvent,
   ProviderType,
@@ -34,4 +35,5 @@ export {
   toSnakeCase,
   safeJsonParse,
   formatBytes,
+  serializeError,
 } from './utils'

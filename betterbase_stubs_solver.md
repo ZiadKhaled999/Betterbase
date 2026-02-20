@@ -7,8 +7,7 @@
 
 ## PROJECT CONTEXT
 
-```
-PROJECT: BetterBase — AI-Native Backend-as-a-Service Framework
+```text
 MONOREPO ROOT: /betterbase
 RUNTIME: Bun
 LANGUAGE: TypeScript (strict mode, no `any` allowed)
@@ -265,7 +264,7 @@ Do NOT implement the full business logic of Phases 10–15 here. That is done se
 - Include `src/**/*`
 
 **Create the following folder structure with index.ts placeholder files in each:**
-```
+```text
 packages/core/src/
   index.ts                    ← main export, re-exports from all submodules
   config/
@@ -521,7 +520,7 @@ A functional API Explorer page where developers can:
 - Switch between endpoints via a sidebar list
 
 ### Structure
-```
+```text
 Left panel (1/3 width):
   - List of endpoints grouped by table/route
   - Each item shows: METHOD badge + path
@@ -576,7 +575,7 @@ An Auth Manager page that shows:
 - A "Total users" count badge
 
 ### Structure
-```
+```text
 Header: "Auth Manager" title + "Total: N users" badge
 
 Search bar: filter by email (client-side filter on fetched data)
@@ -626,7 +625,7 @@ A Logs Viewer page that shows:
 - A "Clear" button to reset the displayed logs
 
 ### Structure
-```
+```text
 Header: "Request Logs" + Live indicator (green dot + "Live" text)
 
 Filter bar:

@@ -34,16 +34,26 @@ authRoute.post('/signup', async (c) => {
   const body = result.data;
   const passwordHash = await Bun.password.hash(body.password);
 
-  const created = await db
-    .insert(users)
-    .values({
-      email: body.email,
-      name: body.name ?? null,
-      passwordHash,
-    })
-    .returning();
+  let createdUser;
+  try {
+    const created = await db
+      .insert(users)
+      .values({
+        email: body.email,
+        name: body.name ?? null,
+        passwordHash,
+      })
+      .returning();
+    createdUser = created[0];
+  } catch (err) {
+    // Check for SQLite unique constraint error (code 2067 for UNIQUE constraint)
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    if (errorMsg.includes('UNIQUE') || errorMsg.includes('unique') || errorMsg.includes('duplicate')) {
+      return c.json({ error: 'Email already registered' }, 409);
+    }
+    return c.json({ error: 'Database error', details: errorMsg }, 500);
+  }
 
-  const createdUser = created[0];
   if (!createdUser) {
     return c.json({ error: 'Failed to create user record' }, 500);
   }
@@ -86,11 +96,29 @@ authRoute.post('/login', async (c) => {
   const sessionId = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
+  // Extract client IP, handling comma-separated x-forwarded-for
+  const cfIp = c.req.header('cf-connecting-ip');
+  const forwardedFor = c.req.header('x-forwarded-for');
+  let ipAddress: string | null = null;
+  if (cfIp) {
+    ipAddress = cfIp.trim();
+  } else if (forwardedFor) {
+    // x-forwarded-for may be a comma-separated list; take the first (client) IP
+    const parts = forwardedFor.split(',');
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (trimmed) {
+        ipAddress = trimmed;
+        break;
+      }
+    }
+  }
+
   await db.insert(sessions).values({
     id: sessionId,
     userId: user[0].id,
     expiresAt,
-    ipAddress: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || null,
+    ipAddress,
     userAgent: c.req.header('user-agent') || null,
   });
 

@@ -1,9 +1,10 @@
 import { z } from 'zod'
-import type { ProviderType } from '@betterbase/shared'
 
 export const ProviderTypeSchema = z.enum([
   'neon', 'turso', 'planetscale', 'supabase', 'postgres', 'managed'
 ])
+
+export type ProviderType = z.infer<typeof ProviderTypeSchema>
 
 export const BetterBaseConfigSchema = z.object({
   project: z.object({
@@ -36,6 +37,6 @@ export const BetterBaseConfigSchema = z.object({
 
 export type BetterBaseConfig = z.infer<typeof BetterBaseConfigSchema>
 
-export function defineConfig(config: BetterBaseConfig): BetterBaseConfig {
+export function defineConfig(config: z.input<typeof BetterBaseConfigSchema>): BetterBaseConfig {
   return BetterBaseConfigSchema.parse(config)
 }

@@ -23,8 +23,6 @@ import {
   Terminal,
 } from 'lucide-react';
 import { useState } from 'react';
-
-// Types for auth data
 interface AuthUser {
   id: string;
   email: string;
@@ -142,10 +140,14 @@ const mockAuthConfig: AuthConfig = {
 function SetupInstructions() {
   const [copied, setCopied] = useState<string | null>(null);
 
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(id);
+      setTimeout(() => setCopied(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+    }
   };
 
   const codeSnippets = {
@@ -563,7 +565,13 @@ function SessionsTable({
 }
 
 // Auth providers card
-function AuthProvidersCard({ config }: { config: AuthConfig }) {
+function AuthProvidersCard({ 
+  config, 
+  onToggleProvider 
+}: { 
+  config: AuthConfig; 
+  onToggleProvider?: (providerId: string) => void 
+}) {
   const providers = [
     { id: 'email', name: 'Email/Password', icon: Mail, enabled: config.providers.email },
     { id: 'google', name: 'Google OAuth', icon: Chrome, enabled: config.providers.google },
@@ -589,6 +597,8 @@ function AuthProvidersCard({ config }: { config: AuthConfig }) {
               </div>
               <button
                 type="button"
+                onClick={() => onToggleProvider?.(provider.id)}
+                aria-pressed={provider.enabled}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   provider.enabled ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-700'
                 }`}
@@ -608,7 +618,13 @@ function AuthProvidersCard({ config }: { config: AuthConfig }) {
 }
 
 // Auth features card
-function AuthFeaturesCard({ config }: { config: AuthConfig }) {
+function AuthFeaturesCard({ 
+  config, 
+  onToggleFeature 
+}: { 
+  config: AuthConfig; 
+  onToggleFeature?: (featureId: string) => void 
+}) {
   const features = [
     { id: 'emailVerification', name: 'Email Verification', description: 'Require email verification for new users', enabled: config.features.emailVerification },
     { id: 'twoFactor', name: 'Two-Factor Auth', description: 'Enable 2FA for enhanced security', enabled: config.features.twoFactor },
@@ -631,6 +647,8 @@ function AuthFeaturesCard({ config }: { config: AuthConfig }) {
               </div>
               <button
                 type="button"
+                onClick={() => onToggleFeature?.(feature.id)}
+                aria-pressed={feature.enabled}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   feature.enabled ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-700'
                 }`}
@@ -651,6 +669,9 @@ function AuthFeaturesCard({ config }: { config: AuthConfig }) {
 
 export default function AuthPage() {
   const queryClient = useQueryClient();
+
+  // Local state for auth config (for toggling providers and features)
+  const [authConfig, setAuthConfig] = useState<AuthConfig>(mockAuthConfig);
 
   // Check if auth is configured
   const { data: authStatus, isLoading } = useQuery({
@@ -750,8 +771,26 @@ export default function AuthPage() {
     );
   }
 
-  // Auth config (in production, this would come from API)
-  const authConfig = mockAuthConfig;
+  // Handlers for toggling providers and features
+  const handleToggleProvider = (providerId: string) => {
+    setAuthConfig((prev) => ({
+      ...prev,
+      providers: {
+        ...prev.providers,
+        [providerId]: !prev.providers[providerId as keyof typeof prev.providers],
+      },
+    }));
+  };
+
+  const handleToggleFeature = (featureId: string) => {
+    setAuthConfig((prev) => ({
+      ...prev,
+      features: {
+        ...prev.features,
+        [featureId]: !prev.features[featureId as keyof typeof prev.features],
+      },
+    }));
+  };
 
   return (
     <div className="space-y-6">
@@ -774,8 +813,8 @@ export default function AuthPage() {
 
       {/* Auth Settings */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <AuthProvidersCard config={authConfig} />
-        <AuthFeaturesCard config={authConfig} />
+        <AuthProvidersCard config={authConfig} onToggleProvider={handleToggleProvider} />
+        <AuthFeaturesCard config={authConfig} onToggleFeature={handleToggleFeature} />
       </div>
     </div>
   );

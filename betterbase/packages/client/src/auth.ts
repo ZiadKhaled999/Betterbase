@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { BetterBaseResponse } from './types';
 import { AuthError, NetworkError, ValidationError } from './errors';
+import { serializeError } from '@betterbase/shared';
 
 export interface AuthCredentials {
   email: string;
@@ -55,7 +56,7 @@ export class AuthClient {
   async signUp(credentials: AuthCredentials): Promise<BetterBaseResponse<Session>> {
     const parsed = credentialsSchema.safeParse(credentials);
     if (!parsed.success) {
-      return { data: null, error: new ValidationError('Invalid sign up credentials', parsed.error.format()) };
+      return { data: null, error: serializeError(new ValidationError('Invalid sign up credentials', parsed.error.format())) };
     }
 
     const endpoint = `${this.url}/auth/signup`;
@@ -67,7 +68,7 @@ export class AuthClient {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Signup failed' }));
-        return { data: null, error: new AuthError(error.error || 'Failed to sign up', error) };
+        return { data: null, error: serializeError(new AuthError(error.error || 'Failed to sign up', error)) };
       }
       const session = (await response.json()) as Session;
       this.storage?.setItem('betterbase_token', session.token);
@@ -76,7 +77,7 @@ export class AuthClient {
     } catch (error) {
       return {
         data: null,
-        error: new NetworkError(error instanceof Error ? error.message : 'Network request failed', error),
+        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
       };
     }
   }
@@ -84,7 +85,7 @@ export class AuthClient {
   async signIn(credentials: Omit<AuthCredentials, 'name'>): Promise<BetterBaseResponse<Session>> {
     const parsed = credentialsSchema.safeParse(credentials);
     if (!parsed.success) {
-      return { data: null, error: new ValidationError('Invalid sign in credentials', parsed.error.format()) };
+      return { data: null, error: serializeError(new ValidationError('Invalid sign in credentials', parsed.error.format())) };
     }
 
     const endpoint = `${this.url}/auth/login`;
@@ -96,7 +97,7 @@ export class AuthClient {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Login failed' }));
-        return { data: null, error: new AuthError(error.error || 'Invalid credentials', error) };
+        return { data: null, error: serializeError(new AuthError(error.error || 'Invalid credentials', error)) };
       }
       const session = (await response.json()) as Session;
       this.storage?.setItem('betterbase_token', session.token);
@@ -105,7 +106,7 @@ export class AuthClient {
     } catch (error) {
       return {
         data: null,
-        error: new NetworkError(error instanceof Error ? error.message : 'Network request failed', error),
+        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
       };
     }
   }
@@ -127,7 +128,7 @@ export class AuthClient {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Logout failed' }));
-        return { data: null, error: new AuthError(error.error || 'Failed to sign out', error) };
+        return { data: null, error: serializeError(new AuthError(error.error || 'Failed to sign out', error)) };
       }
 
       return { data: null, error: null };
@@ -136,7 +137,7 @@ export class AuthClient {
       this.onAuthStateChange?.(null);
       return {
         data: null,
-        error: new NetworkError(error instanceof Error ? error.message : 'Network request failed', error),
+        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
       };
     }
   }
@@ -146,7 +147,7 @@ export class AuthClient {
     const token = this.storage?.getItem('betterbase_token') ?? null;
 
     if (!token) {
-      return { data: null, error: new AuthError('Not authenticated') };
+      return { data: null, error: serializeError(new AuthError('Not authenticated')) };
     }
 
     try {
@@ -156,14 +157,14 @@ export class AuthClient {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Failed to get user' }));
-        return { data: null, error: new AuthError(error.error || 'Failed to get user', error) };
+        return { data: null, error: serializeError(new AuthError(error.error || 'Failed to get user', error)) };
       }
       const result = await response.json();
       return { data: result.user, error: null };
     } catch (error) {
       return {
         data: null,
-        error: new NetworkError(error instanceof Error ? error.message : 'Network request failed', error),
+        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
       };
     }
   }

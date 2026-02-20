@@ -1,7 +1,14 @@
+// JSON-serializable error representation
+export interface SerializedError {
+  message: string
+  name?: string
+  stack?: string
+}
+
 // Generic API response wrapper — used by both client and server
 export interface BetterBaseResponse<T> {
   data: T | null
-  error: string | Error | null
+  error: string | SerializedError | null
   count?: number
   pagination?: {
     page: number

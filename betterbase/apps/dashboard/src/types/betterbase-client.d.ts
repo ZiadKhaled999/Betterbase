@@ -1,12 +1,21 @@
 declare module '@betterbase/client' {
+  export interface SerializedError {
+    message: string;
+    name?: string;
+    stack?: string;
+  }
+
+  export interface QueryBuilderOptions {
+    singularKey?: string;
+  }
+
   export interface BetterBaseResponse<T> {
     data: T | null;
-    error: Error | null;
+    error: string | SerializedError | null;
     count?: number;
     pagination?: {
       page: number;
       pageSize: number;
-      totalPages: number;
       total: number;
     };
   }
@@ -29,7 +38,7 @@ declare module '@betterbase/client' {
     auth: {
       getUser: () => Promise<{ data: unknown; error: { message: string } | null }>;
     };
-    from<T = unknown>(table: string): QueryBuilder<T>;
+    from<T = unknown>(table: string, options?: QueryBuilderOptions): QueryBuilder<T>;
   }
 
   export function createClient(config: {

@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -161,6 +160,45 @@ export default function LogsPage() {
   // Selected log for detail view
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
 
+  // Modal ref for focus management
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  // Handle escape key and focus management for modal
+  useEffect(() => {
+    if (selectedLog) {
+      // Store the currently focused element
+      previousActiveElement.current = document.activeElement as HTMLElement;
+      // Focus the modal panel
+      modalRef.current?.focus();
+    }
+  }, [selectedLog]);
+
+  // Handle escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedLog) {
+        setSelectedLog(null);
+      }
+    };
+
+    if (selectedLog) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedLog]);
+
+  // Restore focus when modal closes
+  useEffect(() => {
+    if (!selectedLog && previousActiveElement.current) {
+      previousActiveElement.current.focus();
+      previousActiveElement.current = null;
+    }
+  }, [selectedLog]);
+
   // Auto-refresh state
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30);
@@ -199,6 +237,7 @@ export default function LogsPage() {
       if (filters.dateFrom) {
         const logDate = new Date(log.timestamp);
         const fromDate = new Date(filters.dateFrom);
+        fromDate.setUTCHours(0, 0, 0, 0);
         if (logDate < fromDate) {
           return false;
         }
@@ -207,7 +246,7 @@ export default function LogsPage() {
       if (filters.dateTo) {
         const logDate = new Date(log.timestamp);
         const toDate = new Date(filters.dateTo);
-        toDate.setHours(23, 59, 59, 999);
+        toDate.setUTCHours(23, 59, 59, 999);
         if (logDate > toDate) {
           return false;
         }
@@ -489,9 +528,18 @@ export default function LogsPage() {
                 return (
                   <div
                     key={log.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSelectedLog(log)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedLog(log);
+                      }
+                    }}
+                    aria-label={`View details for log: ${log.message}`}
                     className={cn(
-                      'flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50',
+                      'flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring',
                       levelColors[log.level]
                     )}
                   >
@@ -525,10 +573,16 @@ export default function LogsPage() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
           onClick={() => setSelectedLog(null)}
+          role="presentation"
         >
           <div
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logDetailsTitle"
             className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-xl bg-background shadow-xl"
             onClick={(e) => e.stopPropagation()}
+            tabIndex={-1}
           >
             <div className="flex items-center justify-between border-b p-4">
               <div className="flex items-center gap-3">
@@ -536,9 +590,9 @@ export default function LogsPage() {
                   const LevelIcon = levelIcons[selectedLog.level];
                   return <LevelIcon className={cn('h-5 w-5', levelColors[selectedLog.level].split(' ')[0])} />;
                 })()}
-                <h3 className="text-lg font-semibold">Log Details</h3>
+                <h3 id="logDetailsTitle" className="text-lg font-semibold">Log Details</h3>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedLog(null)}>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedLog(null)} aria-label="Close log details">
                 <X className="h-5 w-5" />
               </Button>
             </div>

@@ -330,18 +330,23 @@ export function TableEditor({ tableName }: TableEditorProps) {
 
   // Handle delete row
   const handleDeleteRow = () => {
-    if (deleteRowId) {
+    if (deleteRowId && deleteRowId !== '') {
       deleteMutation.mutate(deleteRowId);
     }
   };
 
-  // Get row ID safely
-  const getRowId = (row: RowData): string => {
+  // Get row ID safely - returns undefined for invalid IDs
+  const getRowId = (row: RowData): string | undefined => {
     const id = row[idColumn];
-    if (id === null || id === undefined) {
-      return '';
+    if (id === null || id === undefined || id === '') {
+      return undefined;
     }
     return String(id);
+  };
+
+  // Check if row has a valid ID
+  const isValidRowId = (row: RowData): boolean => {
+    return getRowId(row) !== undefined;
   };
 
   // Not configured state
@@ -464,6 +469,7 @@ export function TableEditor({ tableName }: TableEditorProps) {
                 <tbody>
                   {rows.map((row: RowData, rowIndex: number) => {
                     const rowId = getRowId(row);
+                    const hasValidId = isValidRowId(row);
                     return (
                       <tr key={rowId || rowIndex} className="border-b last:border-b-0 hover:bg-muted/30">
                         {columns.map((column) => (
@@ -471,8 +477,8 @@ export function TableEditor({ tableName }: TableEditorProps) {
                             <EditableCell
                               value={row[column]}
                               column={column}
-                              rowId={rowId}
-                              onSave={(col, value) => handleCellSave(rowId, col, value)}
+                              rowId={rowId || ''}
+                              onSave={(col, value) => rowId && handleCellSave(rowId, col, value)}
                               isIdColumn={column === idColumn}
                             />
                           </td>
@@ -482,7 +488,8 @@ export function TableEditor({ tableName }: TableEditorProps) {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => setDeleteRowId(rowId)}
+                            onClick={() => rowId && setDeleteRowId(rowId)}
+                            disabled={!hasValidId}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
