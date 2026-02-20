@@ -151,10 +151,9 @@ export class RealtimeClient {
 
               currentSubscribers.delete(id);
 
-              this.sendUnsubscribe(table);
-
               if (currentSubscribers.size === 0) {
                 this.subscriptions.delete(table);
+                this.sendUnsubscribe(table);
 
                 if (this.subscriptions.size === 0) {
                   this.disconnect();
@@ -164,7 +163,6 @@ export class RealtimeClient {
               }
 
               this.subscriptions.set(table, currentSubscribers);
-              this.sendSubscribeAll(table);
             },
           };
         },
