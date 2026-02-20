@@ -1,8 +1,8 @@
 {
   "image": "://mcr.microsoft.com",
   "features": {
-    // You can also try adding a community feature if one exists
-    // "ghcr.io/meaningful-zero/devcontainer-features/bun:1": "latest"
+    // You can also try adding a community feature 
+    "ghcr.io/devcontainer-community/devcontainer-features/bun.sh:1": {}
   },
   "postCreateCommand": "curl -fsSL https://bun.sh | bash"
 }
