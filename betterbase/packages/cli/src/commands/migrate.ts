@@ -277,8 +277,7 @@ function splitStatements(sql: string): string[] {
 
     if (inLineComment) {
       current += ch;
-      if (ch === '
-') {
+      if (ch === '') {
         inLineComment = false;
       }
       continue;

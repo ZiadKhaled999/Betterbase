@@ -249,9 +249,30 @@ function ensureRealtimeUtility(projectRoot: string): void {
   const realtimePath = path.join(projectRoot, 'src/lib/realtime.ts');
   if (existsSync(realtimePath)) return;
 
-  const canonicalRealtimePath = path.resolve(import.meta.dir, '../../../../templates/base/src/lib/realtime.ts');
-  if (!existsSync(canonicalRealtimePath)) {
-    throw new Error(`Canonical realtime template not found at ${canonicalRealtimePath}`);
+  // Try multiple possible template locations to support both development and production scenarios
+  const possiblePaths = [
+    // When installed globally and templates are copied to dist/templates (production)
+    path.resolve(import.meta.dir, '../../templates/base/src/lib/realtime.ts'),
+    // When running from built monorepo (packages/cli/dist -> betterbase/templates)
+    path.resolve(import.meta.dir, '../../../templates/base/src/lib/realtime.ts'),
+    // When running from monorepo source with one level of nesting
+    path.resolve(import.meta.dir, '../../../../templates/base/src/lib/realtime.ts'),
+    // When running from monorepo source with betterbase/ subdirectory  
+    path.resolve(import.meta.dir, '../../../../../betterbase/templates/base/src/lib/realtime.ts'),
+  ];
+
+  let canonicalRealtimePath: string | null = null;
+  for (const testPath of possiblePaths) {
+    if (existsSync(testPath)) {
+      canonicalRealtimePath = testPath;
+      break;
+    }
+  }
+
+  if (!canonicalRealtimePath) {
+    throw new Error(
+      `Canonical realtime template not found. Searched:\n${possiblePaths.map((p) => `  - ${p}`).join('\n')}`
+    );
   }
 
   mkdirSync(path.dirname(realtimePath), { recursive: true });
