@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { BetterBaseResponse, QueryOptions } from './types';
 import { BetterBaseError, NetworkError, ValidationError } from './errors';
+import { serializeError } from '@betterbase/shared';
 
 export interface QueryBuilderOptions {
   singularKey?: string;
@@ -69,7 +70,7 @@ export class QueryBuilder<T = unknown> {
 
   async execute(): Promise<BetterBaseResponse<T[]>> {
     if (this.executed) {
-      return { data: null, error: new ValidationError('QueryBuilder instances are single-use; create a new one via from().') };
+      return { data: null, error: serializeError(new ValidationError('QueryBuilder instances are single-use; create a new one via from().')) };
     }
     this.executed = true;
 
@@ -98,12 +99,12 @@ export class QueryBuilder<T = unknown> {
         const error = await response.json().catch(() => ({ error: 'Unknown error' }));
         return {
           data: null,
-          error: new BetterBaseError(
+          error: serializeError(new BetterBaseError(
             error.error || `Request failed with status ${response.status}`,
             'REQUEST_FAILED',
             error,
             response.status
-          ),
+          )),
         };
       }
 
@@ -117,7 +118,7 @@ export class QueryBuilder<T = unknown> {
     } catch (error) {
       return {
         data: null,
-        error: new NetworkError(error instanceof Error ? error.message : 'Network request failed', error),
+        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
       };
     }
   }
@@ -134,7 +135,7 @@ export class QueryBuilder<T = unknown> {
         const error = await response.json().catch(() => ({ error: 'Not found' }));
         return {
           data: null,
-          error: new BetterBaseError(error.error || 'Resource not found', 'NOT_FOUND', error, response.status),
+          error: serializeError(new BetterBaseError(error.error || 'Resource not found', 'NOT_FOUND', error, response.status)),
         };
       }
       const result = await response.json();
@@ -143,7 +144,7 @@ export class QueryBuilder<T = unknown> {
     } catch (error) {
       return {
         data: null,
-        error: new NetworkError(error instanceof Error ? error.message : 'Network request failed', error),
+        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
       };
     }
   }
@@ -160,7 +161,7 @@ export class QueryBuilder<T = unknown> {
         const error = await response.json().catch(() => ({ error: 'Insert failed' }));
         return {
           data: null,
-          error: new BetterBaseError(error.error || 'Failed to insert record', 'INSERT_FAILED', error, response.status),
+          error: serializeError(new BetterBaseError(error.error || 'Failed to insert record', 'INSERT_FAILED', error, response.status)),
         };
       }
       const result = await response.json();
@@ -169,7 +170,7 @@ export class QueryBuilder<T = unknown> {
     } catch (error) {
       return {
         data: null,
-        error: new NetworkError(error instanceof Error ? error.message : 'Network request failed', error),
+        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
       };
     }
   }
@@ -186,7 +187,7 @@ export class QueryBuilder<T = unknown> {
         const error = await response.json().catch(() => ({ error: 'Update failed' }));
         return {
           data: null,
-          error: new BetterBaseError(error.error || 'Failed to update record', 'UPDATE_FAILED', error, response.status),
+          error: serializeError(new BetterBaseError(error.error || 'Failed to update record', 'UPDATE_FAILED', error, response.status)),
         };
       }
       const result = await response.json();
@@ -195,7 +196,7 @@ export class QueryBuilder<T = unknown> {
     } catch (error) {
       return {
         data: null,
-        error: new NetworkError(error instanceof Error ? error.message : 'Network request failed', error),
+        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
       };
     }
   }
@@ -208,7 +209,7 @@ export class QueryBuilder<T = unknown> {
         const error = await response.json().catch(() => ({ error: 'Delete failed' }));
         return {
           data: null,
-          error: new BetterBaseError(error.error || 'Failed to delete record', 'DELETE_FAILED', error, response.status),
+          error: serializeError(new BetterBaseError(error.error || 'Failed to delete record', 'DELETE_FAILED', error, response.status)),
         };
       }
       const result = await response.json();
@@ -217,7 +218,7 @@ export class QueryBuilder<T = unknown> {
     } catch (error) {
       return {
         data: null,
-        error: new NetworkError(error instanceof Error ? error.message : 'Network request failed', error),
+        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
       };
     }
   }
