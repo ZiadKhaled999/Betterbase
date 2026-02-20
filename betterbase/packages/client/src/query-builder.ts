@@ -1,49 +1,78 @@
+import { z } from 'zod';
 import type { BetterBaseResponse, QueryOptions } from './types';
-import { BetterBaseError, NetworkError } from './errors';
+import { BetterBaseError, NetworkError, ValidationError } from './errors';
+
+export interface QueryBuilderOptions {
+  singularKey?: string;
+}
+
+const stringSchema = z.string().min(1);
+const valuesSchema = z.array(z.unknown());
+const nonNegativeIntSchema = z.number().int().nonnegative();
 
 export class QueryBuilder<T = unknown> {
   private filters: Record<string, unknown> = {};
   private options: QueryOptions = {};
   private selectFields = '*';
+  private executed = false;
 
   constructor(
     private url: string,
     private table: string,
     private headers: Record<string, string>,
-    private fetchImpl: typeof fetch = fetch
+    private fetchImpl: typeof fetch = fetch,
+    private builderOptions: QueryBuilderOptions = {}
   ) {}
 
+  private assertMutable(): void {
+    if (this.executed) {
+      throw new Error('QueryBuilder instances are single-use; create a new one via from().');
+    }
+  }
+
   select(fields = '*'): this {
-    this.selectFields = fields;
+    this.assertMutable();
+    this.selectFields = stringSchema.parse(fields);
     return this;
   }
 
   eq(column: string, value: unknown): this {
-    this.filters[column] = value;
+    this.assertMutable();
+    this.filters[stringSchema.parse(column)] = value;
     return this;
   }
 
   in(column: string, values: unknown[]): this {
-    this.filters[`${column}_in`] = values;
+    this.assertMutable();
+    const parsedValues = valuesSchema.parse(values);
+    this.filters[`${stringSchema.parse(column)}_in`] = JSON.stringify(parsedValues);
     return this;
   }
 
   limit(count: number): this {
-    this.options.limit = count;
+    this.assertMutable();
+    this.options.limit = nonNegativeIntSchema.parse(count);
     return this;
   }
 
   offset(count: number): this {
-    this.options.offset = count;
+    this.assertMutable();
+    this.options.offset = nonNegativeIntSchema.parse(count);
     return this;
   }
 
   order(column: string, direction: 'asc' | 'desc' = 'asc'): this {
-    this.options.orderBy = { column, direction };
+    this.assertMutable();
+    this.options.orderBy = { column: stringSchema.parse(column), direction };
     return this;
   }
 
   async execute(): Promise<BetterBaseResponse<T[]>> {
+    if (this.executed) {
+      return { data: null, error: new ValidationError('QueryBuilder instances are single-use; create a new one via from().') };
+    }
+    this.executed = true;
+
     const params = new URLSearchParams();
     params.append('select', this.selectFields);
 
@@ -93,6 +122,10 @@ export class QueryBuilder<T = unknown> {
     }
   }
 
+  private getSingularKey(): string {
+    return this.builderOptions.singularKey || (this.table.endsWith('s') ? this.table.slice(0, -1) : this.table);
+  }
+
   async single(id: string): Promise<BetterBaseResponse<T>> {
     const endpoint = `${this.url}/api/${this.table}/${id}`;
     try {
@@ -105,7 +138,7 @@ export class QueryBuilder<T = unknown> {
         };
       }
       const result = await response.json();
-      const singularKey = this.table.endsWith('s') ? this.table.slice(0, -1) : this.table;
+      const singularKey = this.getSingularKey();
       return { data: result[singularKey] || result.data || null, error: null };
     } catch (error) {
       return {
@@ -131,7 +164,7 @@ export class QueryBuilder<T = unknown> {
         };
       }
       const result = await response.json();
-      const singularKey = this.table.endsWith('s') ? this.table.slice(0, -1) : this.table;
+      const singularKey = this.getSingularKey();
       return { data: result[singularKey] || result.data || null, error: null };
     } catch (error) {
       return {
@@ -157,7 +190,7 @@ export class QueryBuilder<T = unknown> {
         };
       }
       const result = await response.json();
-      const singularKey = this.table.endsWith('s') ? this.table.slice(0, -1) : this.table;
+      const singularKey = this.getSingularKey();
       return { data: result[singularKey] || result.data || null, error: null };
     } catch (error) {
       return {
@@ -179,7 +212,7 @@ export class QueryBuilder<T = unknown> {
         };
       }
       const result = await response.json();
-      const singularKey = this.table.endsWith('s') ? this.table.slice(0, -1) : this.table;
+      const singularKey = this.getSingularKey();
       return { data: result[singularKey] || result.data || null, error: null };
     } catch (error) {
       return {

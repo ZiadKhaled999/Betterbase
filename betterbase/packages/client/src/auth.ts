@@ -1,5 +1,6 @@
+import { z } from 'zod';
 import type { BetterBaseResponse } from './types';
-import { AuthError, NetworkError } from './errors';
+import { AuthError, NetworkError, ValidationError } from './errors';
 
 export interface AuthCredentials {
   email: string;
@@ -17,6 +18,17 @@ export interface Session {
   token: string;
   user: User;
 }
+
+interface StorageAdapter {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+const credentialsSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
 
 function getStorage(): Storage | null {
   try {
@@ -36,23 +48,29 @@ export class AuthClient {
     private url: string,
     private headers: Record<string, string>,
     private onAuthStateChange?: (token: string | null) => void,
-    private fetchImpl: typeof fetch = fetch
+    private fetchImpl: typeof fetch = fetch,
+    private storage: StorageAdapter | null = getStorage()
   ) {}
 
   async signUp(credentials: AuthCredentials): Promise<BetterBaseResponse<Session>> {
+    const parsed = credentialsSchema.safeParse(credentials);
+    if (!parsed.success) {
+      return { data: null, error: new ValidationError('Invalid sign up credentials', parsed.error.format()) };
+    }
+
     const endpoint = `${this.url}/auth/signup`;
     try {
       const response = await this.fetchImpl(endpoint, {
         method: 'POST',
         headers: { ...this.headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({ ...credentials, ...parsed.data }),
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Signup failed' }));
         return { data: null, error: new AuthError(error.error || 'Failed to sign up', error) };
       }
       const session = (await response.json()) as Session;
-      getStorage()?.setItem('betterbase_token', session.token);
+      this.storage?.setItem('betterbase_token', session.token);
       this.onAuthStateChange?.(session.token);
       return { data: session, error: null };
     } catch (error) {
@@ -64,19 +82,24 @@ export class AuthClient {
   }
 
   async signIn(credentials: Omit<AuthCredentials, 'name'>): Promise<BetterBaseResponse<Session>> {
+    const parsed = credentialsSchema.safeParse(credentials);
+    if (!parsed.success) {
+      return { data: null, error: new ValidationError('Invalid sign in credentials', parsed.error.format()) };
+    }
+
     const endpoint = `${this.url}/auth/login`;
     try {
       const response = await this.fetchImpl(endpoint, {
         method: 'POST',
         headers: { ...this.headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
+        body: JSON.stringify(parsed.data),
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Login failed' }));
         return { data: null, error: new AuthError(error.error || 'Invalid credentials', error) };
       }
       const session = (await response.json()) as Session;
-      getStorage()?.setItem('betterbase_token', session.token);
+      this.storage?.setItem('betterbase_token', session.token);
       this.onAuthStateChange?.(session.token);
       return { data: session, error: null };
     } catch (error) {
@@ -89,7 +112,7 @@ export class AuthClient {
 
   async signOut(): Promise<BetterBaseResponse<null>> {
     const endpoint = `${this.url}/auth/logout`;
-    const token = getStorage()?.getItem('betterbase_token') ?? null;
+    const token = this.storage?.getItem('betterbase_token') ?? null;
     try {
       const response = await this.fetchImpl(endpoint, {
         method: 'POST',
@@ -99,7 +122,7 @@ export class AuthClient {
         },
       });
 
-      getStorage()?.removeItem('betterbase_token');
+      this.storage?.removeItem('betterbase_token');
       this.onAuthStateChange?.(null);
 
       if (!response.ok) {
@@ -109,7 +132,7 @@ export class AuthClient {
 
       return { data: null, error: null };
     } catch (error) {
-      getStorage()?.removeItem('betterbase_token');
+      this.storage?.removeItem('betterbase_token');
       this.onAuthStateChange?.(null);
       return {
         data: null,
@@ -120,7 +143,7 @@ export class AuthClient {
 
   async getUser(): Promise<BetterBaseResponse<User>> {
     const endpoint = `${this.url}/auth/me`;
-    const token = getStorage()?.getItem('betterbase_token') ?? null;
+    const token = this.storage?.getItem('betterbase_token') ?? null;
 
     if (!token) {
       return { data: null, error: new AuthError('Not authenticated') };
@@ -146,15 +169,14 @@ export class AuthClient {
   }
 
   getToken(): string | null {
-    return getStorage()?.getItem('betterbase_token') ?? null;
+    return this.storage?.getItem('betterbase_token') ?? null;
   }
 
   setToken(token: string | null): void {
-    const storage = getStorage();
     if (token) {
-      storage?.setItem('betterbase_token', token);
+      this.storage?.setItem('betterbase_token', token);
     } else {
-      storage?.removeItem('betterbase_token');
+      this.storage?.removeItem('betterbase_token');
     }
     this.onAuthStateChange?.(token);
   }

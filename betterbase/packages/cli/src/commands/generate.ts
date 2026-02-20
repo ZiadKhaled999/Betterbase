@@ -6,26 +6,11 @@ import * as logger from '../utils/logger';
 function toSingular(name: string): string {
   const lower = name.toLowerCase();
   const invariants = new Set(['status', 'news', 'series']);
-  if (invariants.has(lower)) {
-    return name;
-  }
-
-  if (/men$/i.test(name)) {
-    return name.replace(/men$/i, 'man');
-  }
-
-  if (/ies$/i.test(name)) {
-    return name.replace(/ies$/i, 'y');
-  }
-
-  if (/(ses|xes|zes|ches|shes)$/i.test(name)) {
-    return name.replace(/es$/i, '');
-  }
-
-  if (name.endsWith('s') && !name.endsWith('ss')) {
-    return name.slice(0, -1);
-  }
-
+  if (invariants.has(lower)) return name;
+  if (/men$/i.test(name)) return name.replace(/men$/i, 'man');
+  if (/ies$/i.test(name)) return name.replace(/ies$/i, 'y');
+  if (/(ses|xes|zes|ches|shes)$/i.test(name)) return name.replace(/es$/i, '');
+  if (name.endsWith('s') && !name.endsWith('ss')) return name.slice(0, -1);
   return `${name}Item`;
 }
 
@@ -48,12 +33,28 @@ function buildSchemaShape(table: TableInfo, mode: 'create' | 'update'): string {
     .join(',\n');
 }
 
+function buildFilterableColumns(table: TableInfo): string {
+  return Object.entries(table.columns)
+    .filter(([, column]) => !column.primaryKey)
+    .map(([column]) => `  '${column}',`)
+    .join('\n');
+}
+
+function buildFilterCoercers(table: TableInfo): string {
+  return Object.entries(table.columns)
+    .filter(([, column]) => !column.primaryKey)
+    .map(([column, info]) => `  ${column}: ${schemaTypeToZod(info.type)},`)
+    .join('\n');
+}
+
 function generateRouteFile(tableName: string, table: TableInfo): string {
   const singular = toSingular(tableName);
   const createShape = buildSchemaShape(table, 'create');
   const updateShape = buildSchemaShape(table, 'update');
+  const filterableColumns = buildFilterableColumns(table);
+  const filterCoercers = buildFilterCoercers(table);
 
-  return `import { and, asc, desc, eq } from 'drizzle-orm';
+  return `import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
@@ -71,16 +72,24 @@ const updateSchema = z.object({
 ${updateShape}
 });
 
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+const DEFAULT_OFFSET = 0;
+
+const paginationSchema = z.object({
+  limit: z.coerce.number().int().nonnegative().default(DEFAULT_LIMIT),
+  offset: z.coerce.number().int().nonnegative().default(DEFAULT_OFFSET),
+});
+
+const FILTERABLE_COLUMNS = new Set([
+${filterableColumns}
+]);
+
+const FILTER_COERCE = {
+${filterCoercers}
+} as const;
+
 ${tableName}Route.get('/', async (c) => {
-  const DEFAULT_LIMIT = 50;
-  const MAX_LIMIT = 100;
-  const DEFAULT_OFFSET = 0;
-
-  const paginationSchema = z.object({
-    limit: z.coerce.number().int().nonnegative().default(DEFAULT_LIMIT),
-    offset: z.coerce.number().int().nonnegative().default(DEFAULT_OFFSET),
-  });
-
   const queryParams = c.req.query();
   const paginationResult = paginationSchema.safeParse({
     limit: queryParams.limit,
@@ -94,16 +103,37 @@ ${tableName}Route.get('/', async (c) => {
   const { limit, offset } = paginationResult.data;
   const fetchLimit = Math.min(limit, MAX_LIMIT);
   const sort = queryParams.sort;
-  const filters = Object.entries(queryParams).filter(([key, value]) => key !== 'limit' && key !== 'offset' && key !== 'sort' && value !== undefined);
+  const filters = Object.entries(queryParams).filter(
+    ([key, value]) => key !== 'limit' && key !== 'offset' && key !== 'sort' && value !== undefined,
+  );
 
   let query = db.select().from(${tableName}).$dynamic();
 
   if (filters.length > 0) {
-    // Security note: by default all table columns are filterable. Consider adding a schema scanner
-    // annotation (e.g., "filterable") and replacing this with an explicit allowlist for sensitive tables.
     const conditions = filters
-      .filter(([key]) => key in ${tableName})
-      .map(([key, value]) => eq(${tableName}[key as keyof typeof ${tableName}] as never, value as never));
+      .flatMap(([rawKey, value]) => {
+        if (rawKey.endsWith('_in')) {
+          const key = rawKey.slice(0, -3);
+          if (!FILTERABLE_COLUMNS.has(key)) return [];
+
+          try {
+            const parsedInValues = JSON.parse(String(value));
+            if (!Array.isArray(parsedInValues)) return [];
+            return [inArray(${tableName}[key as keyof typeof ${tableName}] as never, parsedInValues as never[])];
+          } catch {
+            return [];
+          }
+        }
+
+        if (!FILTERABLE_COLUMNS.has(rawKey)) return [];
+        const schema = FILTER_COERCE[rawKey as keyof typeof FILTER_COERCE];
+        if (!schema) return [];
+
+        const parsed = schema.safeParse(value);
+        if (!parsed.success) return [];
+
+        return [eq(${tableName}[rawKey as keyof typeof ${tableName}] as never, parsed.data as never)];
+      });
 
     if (conditions.length > 0) {
       query = query.where(and(...conditions));
@@ -185,7 +215,9 @@ function updateMainRouter(projectRoot: string, tableName: string): void {
 
   if (!router.includes(importLine)) {
     const firstRouteImport = /import\s+\{\s*healthRoute\s*\}\s+from\s+'\.\/health';/;
-    router = firstRouteImport.test(router) ? router.replace(firstRouteImport, (m) => `${m}\n${importLine}`) : `${importLine}\n${router}`;
+    router = firstRouteImport.test(router)
+      ? router.replace(firstRouteImport, (m) => `${m}\n${importLine}`)
+      : `${importLine}\n${router}`;
   }
 
   if (!router.includes(routeLine)) {
@@ -216,39 +248,49 @@ function ensureRealtimeUtility(projectRoot: string): void {
 }
 
 async function ensureZodValidatorInstalled(projectRoot: string): Promise<void> {
-  const packageJsonPath = path.join(projectRoot, 'package.json');
-  const modulePath = path.join(projectRoot, 'node_modules', '@hono', 'zod-validator');
+  let current = path.resolve(projectRoot);
 
-  if (existsSync(modulePath)) {
-    return;
-  }
+  while (true) {
+    const modulePath = path.join(current, 'node_modules', '@hono', 'zod-validator');
+    if (existsSync(modulePath)) return;
 
-  if (existsSync(packageJsonPath)) {
-    try {
-      const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
-        dependencies?: Record<string, string>;
-        devDependencies?: Record<string, string>;
-      };
+    const packageJsonPath = path.join(current, 'package.json');
+    if (existsSync(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+          peerDependencies?: Record<string, string>;
+        };
 
-      if (packageJson.dependencies?.['@hono/zod-validator'] || packageJson.devDependencies?.['@hono/zod-validator']) {
-        return;
+        if (
+          packageJson.dependencies?.['@hono/zod-validator']
+          || packageJson.devDependencies?.['@hono/zod-validator']
+          || packageJson.peerDependencies?.['@hono/zod-validator']
+        ) {
+          return;
+        }
+      } catch {
+        // Fall through to install branch.
       }
-    } catch {
-      // Fall through to install branch.
     }
+
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
   }
 
   logger.info('Installing @hono/zod-validator...');
-  const process = Bun.spawn(['bun', 'add', '@hono/zod-validator'], {
+  const child = Bun.spawn(['bun', 'add', '@hono/zod-validator'], {
     cwd: projectRoot,
     stdout: 'pipe',
     stderr: 'pipe',
   });
 
   const [exitCode, stdout, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
   ]);
 
   if (exitCode !== 0) {

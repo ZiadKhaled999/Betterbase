@@ -15,11 +15,19 @@ export class RealtimeClient {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private subscriberSequence = 0;
+  private disabled = false;
+  private token: string | null;
 
-  constructor(private url: string) {}
+  constructor(private url: string, token: string | null = null) {
+    this.token = token;
+  }
+
+  setToken(token: string | null): void {
+    this.token = token;
+  }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimeout || this.subscriptions.size === 0) {
+    if (this.disabled || this.reconnectTimeout || this.subscriptions.size === 0) {
       return;
     }
 
@@ -36,12 +44,14 @@ export class RealtimeClient {
   }
 
   private sendSubscribe(table: string, filter?: Record<string, unknown>): void {
+    if (this.disabled) return;
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'subscribe', table, filter }));
     }
   }
 
   private sendUnsubscribe(table: string): void {
+    if (this.disabled) return;
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'unsubscribe', table }));
     }
@@ -60,16 +70,17 @@ export class RealtimeClient {
 
   private connect(): void {
     if (typeof WebSocket === 'undefined') {
-      const message = '[BetterBase] WebSocket is not available in this environment';
-      console.warn(message);
-      throw new Error(message);
+      this.disabled = true;
+      console.warn('[BetterBase] WebSocket is not available in this environment; realtime disabled');
+      return;
     }
 
     if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
-    const wsUrl = this.url.replace(/^http/, 'ws') + '/ws';
+    const baseUrl = this.url.replace(/^http/, 'ws') + '/ws';
+    const wsUrl = this.token ? `${baseUrl}?token=${encodeURIComponent(this.token)}` : baseUrl;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
@@ -106,11 +117,12 @@ export class RealtimeClient {
 
     this.ws.onerror = (error) => {
       console.error('[BetterBase] WebSocket error:', error);
-      this.ws = null;
+      this.ws?.close();
       if (this.reconnectTimeout) {
         clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = null;
       }
+      this.ws = null;
       this.scheduleReconnect();
     };
 
@@ -128,7 +140,9 @@ export class RealtimeClient {
     return {
       on: (event, callback) => ({
         subscribe: (filter) => {
-          this.connect();
+          if (!this.disabled) {
+            this.connect();
+          }
 
           const tableSubscribers = this.subscriptions.get(table) ?? new Map<string, SubscriberEntry>();
           const id = `${table}:${this.subscriberSequence++}`;
@@ -140,7 +154,9 @@ export class RealtimeClient {
           });
 
           this.subscriptions.set(table, tableSubscribers);
-          this.sendSubscribe(table, filter);
+          if (!this.disabled) {
+            this.sendSubscribe(table, filter);
+          }
 
           return {
             unsubscribe: () => {
@@ -153,9 +169,11 @@ export class RealtimeClient {
 
               if (currentSubscribers.size === 0) {
                 this.subscriptions.delete(table);
-                this.sendUnsubscribe(table);
+                if (!this.disabled) {
+                  this.sendUnsubscribe(table);
+                }
 
-                if (this.subscriptions.size === 0) {
+                if (this.subscriptions.size === 0 && !this.disabled) {
                   this.disconnect();
                 }
 

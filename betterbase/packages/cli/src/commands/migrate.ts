@@ -268,21 +268,43 @@ function splitStatements(sql: string): string[] {
   let inSingle = false;
   let inDouble = false;
   let inBacktick = false;
-  let escapeNext = false;
+  let inLineComment = false;
+  let inBlockComment = false;
 
   for (let i = 0; i < sql.length; i += 1) {
     const ch = sql[i];
     const next = sql[i + 1];
 
-    if (escapeNext) {
+    if (inLineComment) {
       current += ch;
-      escapeNext = false;
+      if (ch === '
+') {
+        inLineComment = false;
+      }
       continue;
     }
 
-    if ((inSingle || inDouble || inBacktick) && ch === '\\') {
+    if (inBlockComment) {
       current += ch;
-      escapeNext = true;
+      if (ch === '*' && next === '/') {
+        current += next;
+        i += 1;
+        inBlockComment = false;
+      }
+      continue;
+    }
+
+    if (!inSingle && !inDouble && !inBacktick && ch === '-' && next === '-') {
+      current += ch + next;
+      i += 1;
+      inLineComment = true;
+      continue;
+    }
+
+    if (!inSingle && !inDouble && !inBacktick && ch === '/' && next === '*') {
+      current += ch + next;
+      i += 1;
+      inBlockComment = true;
       continue;
     }
 
@@ -319,7 +341,7 @@ function splitStatements(sql: string): string[] {
       continue;
     }
 
-    if (ch === ';' && !inSingle && !inDouble && !inBacktick) {
+    if (ch === ';' && !inSingle && !inDouble && !inBacktick && !inLineComment && !inBlockComment) {
       const statement = current.trim();
       if (statement.length > 0) {
         statements.push(statement);
@@ -394,7 +416,7 @@ export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Prom
   }
 
   logger.info('Applying migrations with drizzle-kit push...');
-  logger.info('drizzle/ files are for preview; push applied changes.');
+  logger.info('drizzle/ files are for preview; running push will apply changes.');
   const push = await runDrizzleKit(['push']);
 
   if (!push.success) {
@@ -411,5 +433,6 @@ export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Prom
     throw new Error(`Migration push failed.\n${push.stderr || push.stdout}`);
   }
 
+  logger.info('drizzle-kit push completed; changes applied.');
   logger.success('Migration complete!');
 }

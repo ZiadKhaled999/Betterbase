@@ -1,7 +1,20 @@
+import { z } from 'zod';
 import type { BetterBaseConfig } from './types';
-import { QueryBuilder } from './query-builder';
+import { QueryBuilder, type QueryBuilderOptions } from './query-builder';
 import { AuthClient } from './auth';
 import { RealtimeClient } from './realtime';
+
+const BetterBaseConfigSchema = z.object({
+  url: z.string().url(),
+  key: z.string().min(1).optional(),
+  schema: z.string().optional(),
+  fetch: z.function().optional(),
+  storage: z.object({
+    getItem: z.function(),
+    setItem: z.function(),
+    removeItem: z.function(),
+  }).optional(),
+});
 
 export class BetterBaseClient {
   private headers: Record<string, string>;
@@ -11,12 +24,13 @@ export class BetterBaseClient {
   public realtime: RealtimeClient;
 
   constructor(config: BetterBaseConfig) {
-    this.url = config.url.replace(/\/$/, '');
+    const parsed = BetterBaseConfigSchema.parse(config);
+    this.url = parsed.url.replace(/\/$/, '');
     this.headers = {
       'Content-Type': 'application/json',
-      ...(config.key ? { 'X-BetterBase-Key': config.key } : {}),
+      ...(parsed.key ? { 'X-BetterBase-Key': parsed.key } : {}),
     };
-    this.fetchImpl = config.fetch ?? fetch;
+    this.fetchImpl = parsed.fetch ?? fetch;
 
     this.auth = new AuthClient(
       this.url,
@@ -27,11 +41,13 @@ export class BetterBaseClient {
         } else {
           delete this.headers.Authorization;
         }
+        this.realtime.setToken(token);
       },
-      this.fetchImpl
+      this.fetchImpl,
+      parsed.storage
     );
 
-    this.realtime = new RealtimeClient(this.url);
+    this.realtime = new RealtimeClient(this.url, this.auth.getToken());
 
     const token = this.auth.getToken();
     if (token) {
@@ -39,8 +55,8 @@ export class BetterBaseClient {
     }
   }
 
-  from<T = unknown>(table: string): QueryBuilder<T> {
-    return new QueryBuilder<T>(this.url, table, this.headers, this.fetchImpl);
+  from<T = unknown>(table: string, options?: QueryBuilderOptions): QueryBuilder<T> {
+    return new QueryBuilder<T>(this.url, table, this.headers, this.fetchImpl, options);
   }
 }
 

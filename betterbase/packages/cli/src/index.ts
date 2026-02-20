@@ -35,8 +35,18 @@ export function createProgram(): Command {
     .action(async (projectRoot: string) => {
       const cleanup = await runDevCommand(projectRoot);
 
+      let cleanedUp = false;
       const onExit = (): void => {
-        cleanup();
+        if (!cleanedUp) {
+          cleanedUp = true;
+          try {
+            cleanup();
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.warn(`Dev cleanup failed: ${message}`);
+          }
+        }
+
         process.off('SIGINT', onSigInt);
         process.off('SIGTERM', onSigTerm);
         process.off('exit', onProcessExit);
