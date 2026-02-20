@@ -28,6 +28,36 @@ betterbase/
 
 ---
 
+## Root-Level Templates (Duplicate)
+
+**Note:** The following templates exist at the repository root level (outside the `betterbase/` monorepo). These appear to be for direct usage or as alternates to the templates in `betterbase/templates/`.
+
+### [`templates/auth/README.md`](templates/auth/README.md)
+**Purpose:** Auth template documentation (root level).
+
+### [`templates/auth/src/auth/index.ts`](templates/auth/src/auth/index.ts)
+**Purpose:** Auth module entry point.
+
+### [`templates/auth/src/db/auth-schema.ts`](templates/auth/src/db/auth-schema.ts)
+**Purpose:** BetterAuth database schema for SQLite.
+
+### [`templates/auth/src/db/index.ts`](templates/auth/src/db/index.ts)
+**Purpose:** Database connection with auth schema.
+
+### [`templates/auth/src/db/schema.ts`](templates/auth/src/db/schema.ts)
+**Purpose:** Database schema with user table.
+
+### [`templates/auth/src/middleware/auth.ts`](templates/auth/src/middleware/auth.ts)
+**Purpose:** Authentication middleware for Hono routes.
+
+### [`templates/auth/src/routes/auth.ts`](templates/auth/src/routes/auth.ts)
+**Purpose:** Authentication API routes.
+
+### [`templates/base/.gitignore`](templates/base/.gitignore)
+**Purpose:** Git ignore patterns for base template projects.
+
+---
+
 ## apps/cli
 
 Legacy CLI wrapper that forwards execution to the canonical `@betterbase/cli` package.
@@ -59,6 +89,9 @@ Next.js 15 dashboard application for managing BetterBase backends (like Supabase
 **Purpose:** Package manifest for dashboard app.
 - **Name:** `@betterbase/dashboard`
 - **Key Dependencies:** `next@^15.2.0`, `react@^19.0.0`, `@tanstack/react-query@^5.67.0`, `recharts@^2.15.0`, `@betterbase/client` (workspace), `lucide-react`, Radix UI components, `tailwind-merge`, `zod`
+
+### [`apps/dashboard/README.md`](betterbase/apps/dashboard/README.md)
+**Purpose:** Dashboard application documentation.
 
 ### [`apps/dashboard/tsconfig.json`](betterbase/apps/dashboard/tsconfig.json)
 **Purpose:** TypeScript config for Next.js with path alias `@/*` → `./src/*`.
@@ -106,16 +139,19 @@ Next.js 15 dashboard application for managing BetterBase backends (like Supabase
 - **Internal Deps:** `@/components/charts/api-usage-chart`, `@/components/ui/card`, `lucide-react`
 
 ### [`apps/dashboard/src/app/(dashboard)/api-explorer/page.tsx`](betterbase/apps/dashboard/src/app/(dashboard)/api-explorer/page.tsx)
-**Purpose:** API explorer page [stub - ships in Phase 9.3].
+**Purpose:** API explorer page - interactive REST API testing interface.
 - **Exports:** `ApiPage` - default export
+- **Features:** Endpoint listing, request builder, response viewer
 
 ### [`apps/dashboard/src/app/(dashboard)/auth/page.tsx`](betterbase/apps/dashboard/src/app/(dashboard)/auth/page.tsx)
-**Purpose:** Authentication manager page [stub - ships in Phase 9.4].
+**Purpose:** Authentication manager page - manage users, sessions, and providers.
 - **Exports:** `AuthManagerPage` - default export
+- **Features:** User list, session management, provider configuration
 
 ### [`apps/dashboard/src/app/(dashboard)/logs/page.tsx`](betterbase/apps/dashboard/src/app/(dashboard)/logs/page.tsx)
-**Purpose:** Logs viewer page [stub - ships in Phase 9.5].
+**Purpose:** Logs viewer page - view application and API request logs.
 - **Exports:** `LogsPage` - default export
+- **Features:** Log filtering, search, export functionality
 
 ### [`apps/dashboard/src/app/(dashboard)/settings/page.tsx`](betterbase/apps/dashboard/src/app/(dashboard)/settings/page.tsx)
 **Purpose:** Project settings page.
@@ -373,19 +409,96 @@ Canonical `@betterbase/cli` implementation - the `bb` command-line tool.
 
 ## packages/core
 
-Core backend engine package [stub - not yet implemented].
+Core backend engine package - framework for building BetterBase-compatible backends.
+
+### [`packages/core/package.json`](betterbase/packages/core/package.json)
+**Purpose:** Package manifest for core engine.
+- **Name:** `@betterbase/core`
+- **Version:** `0.1.0`
+- **Dependencies:** `hono`, `drizzle-orm`, `zod`
 
 ### [`packages/core/README.md`](betterbase/packages/core/README.md)
-**Purpose:** Placeholder documentation for core engine package.
+**Purpose:** Core engine package documentation.
+
+### [`packages/core/tsconfig.json`](betterbase/packages/core/tsconfig.json)
+**Purpose:** TypeScript config extending base with Bun types.
+
+### [`packages/core/src/index.ts`](betterbase/packages/core/src/index.ts)
+**Purpose:** Main entry point for core package.
+- **Exports:** Re-exports from submodules
+
+### [`packages/core/src/config/index.ts`](betterbase/packages/core/src/config/index.ts)
+**Purpose:** Configuration module entry point.
+
+### [`packages/core/src/config/schema.ts`](betterbase/packages/core/src/config/schema.ts)
+**Purpose:** Configuration schema validation.
+- **Exports:** Configuration types and Zod schemas
+
+### [`packages/core/src/functions/index.ts`](betterbase/packages/core/src/functions/index.ts)
+**Purpose:** Edge functions module entry point.
+
+### [`packages/core/src/graphql/index.ts`](betterbase/packages/core/src/graphql/index.ts)
+**Purpose:** GraphQL API module entry point.
+
+### [`packages/core/src/middleware/index.ts`](betterbase/packages/core/src/middleware/index.ts)
+**Purpose:** Middleware module entry point.
+
+### [`packages/core/src/migration/index.ts`](betterbase/packages/core/src/migration/index.ts)
+**Purpose:** Database migration module entry point.
+
+### [`packages/core/src/providers/index.ts`](betterbase/packages/core/src/providers/index.ts)
+**Purpose:** External providers module entry point.
+
+### [`packages/core/src/providers/types.ts`](betterbase/packages/core/src/providers/types.ts)
+**Purpose:** Provider type definitions.
+- **Exports:** Provider interfaces and types
+
+### [`packages/core/src/rls/index.ts`](betterbase/packages/core/src/rls/index.ts)
+**Purpose:** Row-Level Security module entry point.
+
+### [`packages/core/src/storage/index.ts`](betterbase/packages/core/src/storage/index.ts)
+**Purpose:** Storage module entry point.
+
+### [`packages/core/src/webhooks/index.ts`](betterbase/packages/core/src/webhooks/index.ts)
+**Purpose:** Webhooks module entry point.
 
 ---
 
 ## packages/shared
 
-Shared utilities and types [stub - not yet implemented].
+Shared utilities and types used across BetterBase packages.
+
+### [`packages/shared/package.json`](betterbase/packages/shared/package.json)
+**Purpose:** Package manifest for shared utilities.
+- **Name:** `@betterbase/shared`
+- **Version:** `0.1.0`
+- **Dependencies:** `zod`
 
 ### [`packages/shared/README.md`](betterbase/packages/shared/README.md)
-**Purpose:** Documentation with planned contents: common types, utilities, constants, validation schemas, error primitives.
+**Purpose:** Shared utilities package documentation.
+
+### [`packages/shared/tsconfig.json`](betterbase/packages/shared/tsconfig.json)
+**Purpose:** TypeScript config extending base.
+
+### [`packages/shared/src/index.ts`](betterbase/packages/shared/src/index.ts)
+**Purpose:** Main entry point - exports all public APIs.
+- **Exports:** Re-exports from submodules
+
+### [`packages/shared/src/constants.ts`](betterbase/packages/shared/src/constants.ts)
+**Purpose:** Shared constants across packages.
+- **Exports:** Common constants
+
+### [`packages/shared/src/errors.ts`](betterbase/packages/shared/src/errors.ts)
+**Purpose:** Shared error classes.
+- **Exports:** `BetterBaseError`, error factory functions
+
+### [`packages/shared/src/types.ts`](betterbase/packages/shared/src/types.ts)
+**Purpose:** Shared type definitions.
+- **Exports:** Common TypeScript interfaces and types
+
+### [`packages/shared/src/utils.ts`](betterbase/packages/shared/src/utils.ts)
+**Purpose:** Shared utility functions.
+- **Exports:** Common utility functions
 
 ---
 
@@ -412,6 +525,9 @@ Base starter template for BetterBase projects - Bun + Hono + Drizzle + SQLite.
 
 ### [`templates/base/.gitignore`](betterbase/templates/base/.gitignore)
 **Purpose:** Git ignore patterns for template projects.
+
+### [`templates/base/tsconfig.json`](betterbase/templates/base/tsconfig.json)
+**Purpose:** TypeScript config extending base with Bun types.
 
 ### [`templates/base/README.md`](betterbase/templates/base/README.md)
 **Purpose:** Template documentation with scripts and usage.
@@ -472,10 +588,31 @@ Base starter template for BetterBase projects - Bun + Hono + Drizzle + SQLite.
 
 ## templates/auth
 
-Auth template placeholder [stub - not yet implemented].
+Auth template with BetterAuth integration - Bun + Hono + BetterAuth.
 
 ### [`templates/auth/README.md`](betterbase/templates/auth/README.md)
-**Purpose:** Placeholder for BetterAuth template files.
+**Purpose:** Auth template documentation.
+
+### [`templates/auth/src/auth/index.ts`](betterbase/templates/auth/src/auth/index.ts)
+**Purpose:** Auth module entry point.
+
+### [`templates/auth/src/db/auth-schema.ts`](betterbase/templates/auth/src/db/auth-schema.ts)
+**Purpose:** BetterAuth database schema for SQLite.
+- **Exports:** Auth-related table definitions
+
+### [`templates/auth/src/db/index.ts`](betterbase/templates/auth/src/db/index.ts)
+**Purpose:** Database connection with auth schema.
+
+### [`templates/auth/src/db/schema.ts`](betterbase/templates/auth/src/db/schema.ts)
+**Purpose:** Database schema with user table.
+
+### [`templates/auth/src/middleware/auth.ts`](betterbase/templates/auth/src/middleware/auth.ts)
+**Purpose:** Authentication middleware for Hono routes.
+- **Exports:** `requireAuth`, `optionalAuth` middleware functions
+
+### [`templates/auth/src/routes/auth.ts`](betterbase/templates/auth/src/routes/auth.ts)
+**Purpose:** Authentication API routes.
+- **Endpoints:** Sign up, sign in, sign out, session management
 
 ---
 
