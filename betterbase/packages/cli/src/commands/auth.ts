@@ -70,7 +70,7 @@ authRoute.post('/signup', async (c) => {
     .returning();
 
   const createdUser = created[0];
-  if (!createdUser || typeof createdUser !== 'object') {
+  if (!createdUser) {
     return c.json({ error: 'Failed to create user record' }, 500);
   }
 
@@ -257,7 +257,6 @@ function ensurePasswordHashColumn(schemaPath: string): void {
 
   while (i < current.length) {
     const ch = current[i];
-    const next = current[i + 1];
 
     if (escaped) {
       escaped = false;
@@ -272,10 +271,6 @@ function ensurePasswordHashColumn(schemaPath: string): void {
     }
 
     if (!inDouble && !inBacktick && ch === "'") {
-      if (inSingle && next === "'") {
-        i += 2;
-        continue;
-      }
       inSingle = !inSingle;
       i += 1;
       continue;

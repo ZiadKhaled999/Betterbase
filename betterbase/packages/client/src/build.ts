@@ -15,7 +15,7 @@ const esmResult = await Bun.build({
 });
 
 if (!esmResult.success) {
-  console.error('ESM build failed:', esmResult.logs);
+  console.error(`ESM build failed: ${esmResult.logs.map((log) => log.toString()).join('\n')}`);
   process.exit(1);
 }
 
@@ -30,7 +30,7 @@ const cjsResult = await Bun.build({
 });
 
 if (!cjsResult.success) {
-  console.error('CJS build failed:', cjsResult.logs);
+  console.error(`CJS build failed: ${cjsResult.logs.map((log) => log.toString()).join('\n')}`);
   process.exit(1);
 }
 

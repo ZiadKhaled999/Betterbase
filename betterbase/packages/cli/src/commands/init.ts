@@ -123,6 +123,7 @@ export default defineConfig({
   out: './drizzle',
   dialect: '${dialect[databaseMode]}',
   dbCredentials: {
+    // Keep local fallback in sync with src/lib/env.ts DEFAULT_DB_PATH
     url: ${databaseUrl[databaseMode]},${tursoAuthTokenLine}
   },
 });
@@ -539,7 +540,7 @@ const DEFAULT_OFFSET = 0;
 // (DEFAULT_LIMIT / DEFAULT_OFFSET with MAX_LIMIT clamping applied by caller). If strict validation
 // is needed, callers should parse with Zod and return 400 instead of using this helper.
 function parseNonNegativeInt(value: string | undefined, fallback: number): number {
-  if (!value) {
+  if (!value || value.trim() === '') {
     return fallback;
   }
 
@@ -595,11 +596,14 @@ usersRoute.post('/', async (c) => {
     const body = await c.req.json();
     const parsed = parseBody(createUserSchema, body);
 
-    // TODO: persist parsed user via db.insert(users) or a dedicated UsersService.
+    const created = await db.insert(users).values(parsed).returning();
+    if (created.length === 0) {
+      throw new HTTPException(500, { message: 'Failed to persist user' });
+    }
+
     return c.json({
-      message: 'User payload validated (not persisted)',
-      user: parsed,
-    });
+      user: created[0],
+    }, 201);
   } catch (error) {
     if (error instanceof HTTPException) {
       throw error;

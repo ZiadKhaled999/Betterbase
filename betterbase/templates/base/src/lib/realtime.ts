@@ -1,4 +1,5 @@
 import type { ServerWebSocket } from 'bun';
+import deepEqual from 'fast-deep-equal';
 import { z } from 'zod';
 
 export interface Subscription {
@@ -38,33 +39,16 @@ const realtimeLogger = {
   warn: (message: string): void => console.warn(`[realtime] ${message}`),
 };
 
-function deepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a == null || b == null) return a === b;
-
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-    return a.every((value, idx) => deepEqual(value, b[idx]));
-  }
-
-  if (typeof a === 'object' && typeof b === 'object') {
-    const aObj = a as Record<string, unknown>;
-    const bObj = b as Record<string, unknown>;
-    const aKeys = Object.keys(aObj);
-    const bKeys = Object.keys(bObj);
-    if (aKeys.length !== bKeys.length) return false;
-    return aKeys.every((key) => deepEqual(aObj[key], bObj[key]));
-  }
-
-  return false;
-}
-
 export class RealtimeServer {
   private clients = new Map<ServerWebSocket<unknown>, Client>();
   private tableSubscribers = new Map<string, Set<ServerWebSocket<unknown>>>();
   private config: RealtimeConfig;
 
   constructor(config?: Partial<RealtimeConfig>) {
+    if (process.env.NODE_ENV !== 'development' && process.env.ENABLE_DEV_AUTH !== 'true') {
+      realtimeLogger.warn('Realtime auth verifier is not configured; dev token parser is disabled. Configure a real verifier for production.');
+    }
+
     this.config = {
       maxClients: 1000,
       maxSubscriptionsPerClient: 50,
@@ -76,8 +60,11 @@ export class RealtimeServer {
   authenticate(token: string | undefined): { userId: string; claims: string[] } | null {
     if (!token || !token.trim()) return null;
 
-    // TODO: Replace this placeholder with real auth verification in production:
-    // verify signature/issuer, enforce expiry, and map claims/scopes from your auth provider.
+    const allowDevAuth = process.env.NODE_ENV === 'development' || process.env.ENABLE_DEV_AUTH === 'true';
+    if (!allowDevAuth) {
+      return null;
+    }
+
     const [userId, rawClaims] = token.trim().split(':', 2);
     if (!userId) return null;
 

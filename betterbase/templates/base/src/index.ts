@@ -10,8 +10,13 @@ app.get(
   '/ws',
   upgradeWebSocket((c) => {
     const authHeaderToken = c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
+    // Prefer Authorization header. Query token is compatibility fallback and should be short-lived in production.
     const queryToken = c.req.query('token');
     const token = authHeaderToken ?? queryToken;
+
+    if (!authHeaderToken && queryToken) {
+      console.warn('WebSocket auth using query token fallback; prefer header/cookie/subprotocol in production.');
+    }
 
     return {
     onOpen(_event, ws) {

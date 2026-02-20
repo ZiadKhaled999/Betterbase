@@ -22,6 +22,7 @@ src/
     validation.ts
   lib/
     env.ts
+    realtime.ts
   index.ts
 betterbase.config.ts
 drizzle.config.ts

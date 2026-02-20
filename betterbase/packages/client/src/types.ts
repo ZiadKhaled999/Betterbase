@@ -5,6 +5,11 @@ export interface BetterBaseConfig {
   key?: string;
   schema?: string;
   fetch?: typeof fetch;
+  storage?: {
+    getItem(key: string): string | null;
+    setItem(key: string, value: string): void;
+    removeItem(key: string): void;
+  };
 }
 
 export interface QueryOptions {

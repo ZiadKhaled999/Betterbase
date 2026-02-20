@@ -96,7 +96,7 @@ export class SchemaScanner {
           const functionName = getCallName(initializer);
           if (functionName === 'sqliteTable' || functionName === 'pgTable' || functionName === 'mysqlTable') {
             const tableObj = this.parseTable(initializer);
-            const tableKey = tableObj.name ?? declaration.name.text;
+            const tableKey = tableObj.name || declaration.name.text;
             tables[tableKey] = tableObj;
           }
         }

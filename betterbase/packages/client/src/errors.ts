@@ -6,7 +6,7 @@ export class BetterBaseError extends Error {
     public status?: number
   ) {
     super(message);
-    this.name = 'BetterBaseError';
+    this.name = this.constructor.name;
   }
 }
 
