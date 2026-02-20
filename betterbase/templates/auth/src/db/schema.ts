@@ -22,8 +22,9 @@ export const uuid = (name = 'id') =>
  * });
  */
 export const timestamps = {
-  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at')
+    .notNull()
     .$defaultFn(() => new Date().toISOString())
     .$onUpdate(() => new Date().toISOString()),
 };
@@ -41,9 +42,10 @@ export const softDelete = {
   deletedAt: text('deleted_at'),
 };
 
-export const users = sqliteTable('users', {
+export const users = sqliteTable('user', {
   id: uuid(),
   email: text('email').notNull().unique(),
+  emailVerified: text('email_verified'),
   name: text('name'),
   status: statusEnum(),
   ...timestamps,
