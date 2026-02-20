@@ -168,7 +168,7 @@ export default function LogsPage() {
   useEffect(() => {
     if (selectedLog) {
       // Store the currently focused element
-      previousActiveElement.current = document.activeElement as HTMLElement;
+      previousActiveElement.current = document.activeElement as HTMLElement | null;
       // Focus the modal panel
       modalRef.current?.focus();
     }
