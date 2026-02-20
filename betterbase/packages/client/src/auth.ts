@@ -19,10 +19,16 @@ export interface Session {
 }
 
 function getStorage(): Storage | null {
-  if (typeof globalThis !== 'undefined' && 'localStorage' in globalThis) {
-    return globalThis.localStorage;
+  try {
+    if (typeof globalThis === 'undefined') {
+      return null;
+    }
+
+    const storage = globalThis.localStorage;
+    return storage ?? null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export class AuthClient {

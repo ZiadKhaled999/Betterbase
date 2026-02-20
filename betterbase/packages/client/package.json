@@ -17,7 +17,7 @@
     "build": "bun run src/build.ts",
     "dev": "bun run src/build.ts --watch",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --project tsconfig.test.json"
   },
   "keywords": [
     "betterbase",

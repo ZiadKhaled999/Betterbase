@@ -34,7 +34,7 @@ if (!cjsResult.success) {
   process.exit(1);
 }
 
-const proc = Bun.spawn(['bunx', 'tsc', '--emitDeclarationOnly', '--outDir', outdir], {
+const proc = Bun.spawn(['bunx', 'tsc', '--project', 'tsconfig.json', '--emitDeclarationOnly', '--outDir', outdir], {
   cwd: path.resolve(moduleDir, '..'),
   stdout: 'inherit',
   stderr: 'inherit',

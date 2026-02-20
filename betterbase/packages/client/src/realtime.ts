@@ -2,9 +2,15 @@ import type { RealtimeCallback, RealtimeSubscription } from './types';
 
 type RealtimeEvent = 'INSERT' | 'UPDATE' | 'DELETE' | '*';
 
+interface TableSubscription {
+  callbacks: Set<RealtimeCallback>;
+  filter?: Record<string, unknown>;
+  refCount: number;
+}
+
 export class RealtimeClient {
   private ws: WebSocket | null = null;
-  private subscriptions = new Map<string, Set<RealtimeCallback>>();
+  private subscriptions = new Map<string, TableSubscription>();
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
@@ -26,8 +32,8 @@ export class RealtimeClient {
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
-      for (const table of this.subscriptions.keys()) {
-        this.sendSubscribe(table);
+      for (const [table, subscription] of this.subscriptions.entries()) {
+        this.sendSubscribe(table, subscription.filter);
       }
     };
 
@@ -36,9 +42,9 @@ export class RealtimeClient {
         const data = JSON.parse(event.data as string);
         if (data.type !== 'update') return;
 
-        const callbacks = this.subscriptions.get(data.table);
-        if (callbacks) {
-          for (const callback of callbacks) {
+        const subscription = this.subscriptions.get(data.table);
+        if (subscription) {
+          for (const callback of subscription.callbacks) {
             callback({ event: data.event, data: data.data, timestamp: data.timestamp });
           }
         }
@@ -87,25 +93,41 @@ export class RealtimeClient {
             }
           };
 
-          if (!this.subscriptions.has(table)) {
-            this.subscriptions.set(table, new Set());
+          const subscription = this.subscriptions.get(table) ?? {
+            callbacks: new Set<RealtimeCallback>(),
+            refCount: 0,
+            filter,
+          };
+
+          subscription.callbacks.add(wrappedCallback);
+          subscription.refCount += 1;
+
+          if (filter !== undefined) {
+            subscription.filter = filter;
           }
 
-          this.subscriptions.get(table)?.add(wrappedCallback);
-          this.sendSubscribe(table, filter);
+          this.subscriptions.set(table, subscription);
+          this.sendSubscribe(table, subscription.filter);
 
           return {
             unsubscribe: () => {
-              const callbacks = this.subscriptions.get(table);
-              callbacks?.delete(wrappedCallback);
+              const current = this.subscriptions.get(table);
+              if (!current) {
+                return;
+              }
 
-              if (callbacks && callbacks.size === 0) {
+              current.callbacks.delete(wrappedCallback);
+              current.refCount = Math.max(0, current.refCount - 1);
+
+              if (current.refCount === 0 || current.callbacks.size === 0) {
                 this.subscriptions.delete(table);
                 this.sendUnsubscribe(table);
 
                 if (this.subscriptions.size === 0) {
                   this.disconnect();
                 }
+              } else {
+                this.subscriptions.set(table, current);
               }
             },
           };
