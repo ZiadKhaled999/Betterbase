@@ -33,7 +33,29 @@ export function createProgram(): Command {
     .description('Watch schema/routes and regenerate .betterbase-context.json')
     .argument('[project-root]', 'project root directory', process.cwd())
     .action(async (projectRoot: string) => {
-      await runDevCommand(projectRoot);
+      const cleanup = await runDevCommand(projectRoot);
+
+      const onExit = (): void => {
+        cleanup();
+        process.off('SIGINT', onSigInt);
+        process.off('SIGTERM', onSigTerm);
+        process.off('exit', onProcessExit);
+      };
+      const onSigInt = (): void => {
+        onExit();
+        process.exit(0);
+      };
+      const onSigTerm = (): void => {
+        onExit();
+        process.exit(0);
+      };
+      const onProcessExit = (): void => {
+        onExit();
+      };
+
+      process.on('SIGINT', onSigInt);
+      process.on('SIGTERM', onSigTerm);
+      process.on('exit', onProcessExit);
     });
 
 
@@ -59,22 +81,22 @@ export function createProgram(): Command {
       await runGenerateCrudCommand(projectRoot, tableName);
     });
 
-  program
-    .command('migrate')
-    .description('Generate and apply migrations for local development')
+  const migrate = program.command('migrate').description('Generate and apply migrations for local development');
+
+  migrate
     .action(async () => {
       await runMigrateCommand({});
     });
 
-  program
-    .command('migrate:preview')
+  migrate
+    .command('preview')
     .description('Preview migration diff without applying changes')
     .action(async () => {
       await runMigrateCommand({ preview: true });
     });
 
-  program
-    .command('migrate:production')
+  migrate
+    .command('production')
     .description('Apply migrations to production (requires confirmation)')
     .action(async () => {
       await runMigrateCommand({ production: true });

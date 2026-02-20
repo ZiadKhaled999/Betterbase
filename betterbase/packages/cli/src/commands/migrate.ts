@@ -263,10 +263,80 @@ async function restoreBackup(backup: MigrationBackup | null): Promise<void> {
 }
 
 function splitStatements(sql: string): string[] {
-  return sql
-    .split(/;\s*/g)
-    .map((statement) => statement.trim())
-    .filter((statement) => statement.length > 0);
+  const statements: string[] = [];
+  let current = '';
+  let inSingle = false;
+  let inDouble = false;
+  let inBacktick = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < sql.length; i += 1) {
+    const ch = sql[i];
+    const next = sql[i + 1];
+
+    if (escapeNext) {
+      current += ch;
+      escapeNext = false;
+      continue;
+    }
+
+    if ((inSingle || inDouble || inBacktick) && ch === '\\') {
+      current += ch;
+      escapeNext = true;
+      continue;
+    }
+
+    if (!inDouble && !inBacktick && ch === "'") {
+      current += ch;
+      if (inSingle && next === "'") {
+        current += next;
+        i += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+
+    if (!inSingle && !inBacktick && ch === '"') {
+      current += ch;
+      if (inDouble && next === '"') {
+        current += next;
+        i += 1;
+        continue;
+      }
+      inDouble = !inDouble;
+      continue;
+    }
+
+    if (!inSingle && !inDouble && ch === '`') {
+      current += ch;
+      if (inBacktick && next === '`') {
+        current += next;
+        i += 1;
+        continue;
+      }
+      inBacktick = !inBacktick;
+      continue;
+    }
+
+    if (ch === ';' && !inSingle && !inDouble && !inBacktick) {
+      const statement = current.trim();
+      if (statement.length > 0) {
+        statements.push(statement);
+      }
+      current = '';
+      continue;
+    }
+
+    current += ch;
+  }
+
+  const tail = current.trim();
+  if (tail.length > 0) {
+    statements.push(tail);
+  }
+
+  return statements;
 }
 
 async function collectChangesFromGenerate(): Promise<MigrationChange[]> {
@@ -324,6 +394,7 @@ export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Prom
   }
 
   logger.info('Applying migrations with drizzle-kit push...');
+  logger.info('drizzle/ files are for preview; push applied changes.');
   const push = await runDrizzleKit(['push']);
 
   if (!push.success) {

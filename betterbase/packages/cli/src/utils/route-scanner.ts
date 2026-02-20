@@ -22,6 +22,8 @@ function isAuthLikeName(value: string): boolean {
   return /\bauth\b/i.test(value) || /^auth/i.test(value) || /^(authMiddleware|requireAuth)$/i.test(value);
 }
 
+const httpMethods = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head']);
+
 function collectTsFiles(dir: string): string[] {
   const files: string[] = [];
 
@@ -108,7 +110,6 @@ export class RouteScanner {
     const visit = (node: ts.Node): void => {
       if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const method = node.expression.name.text.toLowerCase();
-        const httpMethods = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head']);
 
         if (httpMethods.has(method)) {
           const [pathArg, ...handlerArgs] = node.arguments;

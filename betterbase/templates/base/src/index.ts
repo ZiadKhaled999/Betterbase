@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { upgradeWebSocket } from 'hono/bun';
+import { upgradeWebSocket, websocket } from 'hono/bun';
 import { env } from './lib/env';
 import { realtime } from './lib/realtime';
 import { registerRoutes } from './routes';
@@ -8,9 +8,14 @@ const app = new Hono();
 
 app.get(
   '/ws',
-  upgradeWebSocket(() => ({
+  upgradeWebSocket((c) => {
+    const authHeaderToken = c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
+    const queryToken = c.req.query('token');
+    const token = authHeaderToken ?? queryToken;
+
+    return {
     onOpen(_event, ws) {
-      realtime.handleConnection(ws.raw);
+      realtime.handleConnection(ws.raw, token);
     },
     onMessage(event, ws) {
       const message = typeof event.data === 'string' ? event.data : event.data.toString();
@@ -19,13 +24,15 @@ app.get(
     onClose(_event, ws) {
       realtime.handleClose(ws.raw);
     },
-  })),
+  };
+  }),
 );
 
 registerRoutes(app);
 
 const server = Bun.serve({
   fetch: app.fetch,
+  websocket,
   port: env.PORT,
   development: env.NODE_ENV === 'development',
 });
