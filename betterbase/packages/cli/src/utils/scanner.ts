@@ -95,7 +95,7 @@ export class SchemaScanner {
           const functionName = getCallName(initializer);
           if (functionName === 'sqliteTable' || functionName === 'pgTable' || functionName === 'mysqlTable') {
             const tableObj = this.parseTable(initializer);
-            const tableKey = tableObj.name || declaration.name.text;
+            const tableKey = tableObj.name ?? declaration.name.text;
             tables[tableKey] = tableObj;
           }
         }
@@ -167,7 +167,14 @@ export class SchemaScanner {
         }
 
         let value = unwrapExpression(property.initializer);
+        const MAX_ITER = 50;
+        let iter = 0;
+
         while (ts.isCallExpression(value)) {
+          iter += 1;
+          if (iter > MAX_ITER) {
+            break;
+          }
           const callName = getCallName(value);
           if (callName === 'index' || callName === 'uniqueIndex') {
             const key = ts.isIdentifier(property.name)

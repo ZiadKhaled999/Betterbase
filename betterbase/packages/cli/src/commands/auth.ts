@@ -44,7 +44,15 @@ const loginSchema = z.object({
 });
 
 authRoute.post('/signup', async (c) => {
-  const result = signupSchema.safeParse(await c.req.json());
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
+    return c.json({ error: 'Invalid JSON', details }, 400);
+  }
+
+  const result = signupSchema.safeParse(rawBody);
   if (!result.success) {
     return c.json({ error: 'Invalid signup payload', details: result.error.format() }, 400);
   }
@@ -76,7 +84,15 @@ authRoute.post('/signup', async (c) => {
 });
 
 authRoute.post('/login', async (c) => {
-  const result = loginSchema.safeParse(await c.req.json());
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
+    return c.json({ error: 'Invalid JSON', details }, 400);
+  }
+
+  const result = loginSchema.safeParse(rawBody);
   if (!result.success) {
     return c.json({ error: 'Invalid login payload', details: result.error.format() }, 400);
   }

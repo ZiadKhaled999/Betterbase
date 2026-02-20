@@ -28,8 +28,8 @@ interface RealtimeConfig {
 }
 
 const messageSchema = z.union([
-  z.object({ type: z.literal('subscribe'), table: z.string().min(1), filter: z.record(z.string(), z.unknown()).optional() }),
-  z.object({ type: z.literal('unsubscribe'), table: z.string().min(1) }),
+  z.object({ type: z.literal('subscribe'), table: z.string().min(1).max(255), filter: z.record(z.string(), z.unknown()).optional() }),
+  z.object({ type: z.literal('unsubscribe'), table: z.string().min(1).max(255) }),
 ]);
 
 const realtimeLogger = {
@@ -75,7 +75,14 @@ export class RealtimeServer {
 
   authenticate(token: string | undefined): { userId: string; claims: string[] } | null {
     if (!token || !token.trim()) return null;
-    return { userId: token.trim(), claims: ['realtime:*'] };
+
+    // TODO: Replace this placeholder with real auth verification in production:
+    // verify signature/issuer, enforce expiry, and map claims/scopes from your auth provider.
+    const [userId, rawClaims] = token.trim().split(':', 2);
+    if (!userId) return null;
+
+    const claims = rawClaims ? rawClaims.split(',').map((claim) => claim.trim()).filter(Boolean) : ['realtime:*'];
+    return { userId, claims };
   }
 
   authorize(userId: string, claims: string[], table: string): boolean {
@@ -168,7 +175,8 @@ export class RealtimeServer {
 
     const message = JSON.stringify(payload);
 
-    for (const ws of [...subscribers]) {
+    const subs = Array.from(subscribers);
+    for (const ws of subs) {
       const client = this.clients.get(ws);
       const subscription = client?.subscriptions.get(table);
       if (!this.matchesFilter(subscription?.filter, data)) {

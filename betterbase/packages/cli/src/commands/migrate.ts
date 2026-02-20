@@ -298,14 +298,24 @@ function splitStatements(sql: string): string[] {
     }
 
     if (!inSingle && !inBacktick && ch === '"') {
-      inDouble = !inDouble;
       current += ch;
+      if (inDouble && next === '"') {
+        current += next;
+        i += 1;
+        continue;
+      }
+      inDouble = !inDouble;
       continue;
     }
 
     if (!inSingle && !inDouble && ch === '`') {
-      inBacktick = !inBacktick;
       current += ch;
+      if (inBacktick && next === '`') {
+        current += next;
+        i += 1;
+        continue;
+      }
+      inBacktick = !inBacktick;
       continue;
     }
 
