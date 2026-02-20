@@ -38,3 +38,9 @@ drizzle.config.ts
 - Start production server: `bun run start`
 
 Environment variables are validated in `src/lib/env.ts` (`NODE_ENV`, `PORT`, `DB_PATH`).
+
+
+## Realtime
+
+The template includes WebSocket realtime support at `GET /ws` using `src/lib/realtime.ts`.
+Clients should provide an auth token (Bearer header or `?token=` query) before subscribing.

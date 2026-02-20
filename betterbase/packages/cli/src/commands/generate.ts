@@ -72,19 +72,35 @@ ${updateShape}
 });
 
 ${tableName}Route.get('/', async (c) => {
-  const limit = Number(c.req.query('limit') ?? 50);
-  const offset = Number(c.req.query('offset') ?? 0);
-  const safeLimit = Number.isFinite(limit) && limit >= 0 ? Math.min(limit, 100) : 50;
-  const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0;
+  const DEFAULT_LIMIT = 50;
+  const MAX_LIMIT = 100;
+  const DEFAULT_OFFSET = 0;
+
+  const paginationSchema = z.object({
+    limit: z.coerce.number().int().nonnegative().default(DEFAULT_LIMIT),
+    offset: z.coerce.number().int().nonnegative().default(DEFAULT_OFFSET),
+  });
 
   const queryParams = c.req.query();
-  const sort = queryParams.sort;
+  const paginationResult = paginationSchema.safeParse({
+    limit: queryParams.limit,
+    offset: queryParams.offset,
+  });
 
+  if (!paginationResult.success) {
+    return c.json({ error: 'Invalid pagination params', details: paginationResult.error.format() }, 400);
+  }
+
+  const { limit, offset } = paginationResult.data;
+  const fetchLimit = Math.min(limit, MAX_LIMIT);
+  const sort = queryParams.sort;
   const filters = Object.entries(queryParams).filter(([key, value]) => key !== 'limit' && key !== 'offset' && key !== 'sort' && value !== undefined);
 
   let query = db.select().from(${tableName}).$dynamic();
 
   if (filters.length > 0) {
+    // Security note: by default all table columns are filterable. Consider adding a schema scanner
+    // annotation (e.g., "filterable") and replacing this with an explicit allowlist for sensitive tables.
     const conditions = filters
       .filter(([key]) => key in ${tableName})
       .map(([key, value]) => eq(${tableName}[key as keyof typeof ${tableName}] as never, value as never));
@@ -102,8 +118,13 @@ ${tableName}Route.get('/', async (c) => {
     }
   }
 
-  const items = await query.limit(safeLimit).offset(safeOffset);
-  return c.json({ ${tableName}: items, count: items.length, pagination: { limit: safeLimit, offset: safeOffset } });
+  const items = await query.limit(fetchLimit + 1).offset(offset);
+  const hasMore = items.length > fetchLimit;
+
+  return c.json({
+    ${tableName}: items.slice(0, fetchLimit),
+    pagination: { limit: fetchLimit, offset, hasMore },
+  });
 });
 
 ${tableName}Route.get('/:id', async (c) => {
@@ -185,7 +206,7 @@ function ensureRealtimeUtility(projectRoot: string): void {
   const realtimePath = path.join(projectRoot, 'src/lib/realtime.ts');
   if (existsSync(realtimePath)) return;
 
-  const canonicalRealtimePath = path.resolve(import.meta.dir, '../../../templates/base/src/lib/realtime.ts');
+  const canonicalRealtimePath = path.resolve(import.meta.dir, '../../../../templates/base/src/lib/realtime.ts');
   if (!existsSync(canonicalRealtimePath)) {
     throw new Error(`Canonical realtime template not found at ${canonicalRealtimePath}`);
   }
@@ -195,6 +216,28 @@ function ensureRealtimeUtility(projectRoot: string): void {
 }
 
 async function ensureZodValidatorInstalled(projectRoot: string): Promise<void> {
+  const packageJsonPath = path.join(projectRoot, 'package.json');
+  const modulePath = path.join(projectRoot, 'node_modules', '@hono', 'zod-validator');
+
+  if (existsSync(modulePath)) {
+    return;
+  }
+
+  if (existsSync(packageJsonPath)) {
+    try {
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+
+      if (packageJson.dependencies?.['@hono/zod-validator'] || packageJson.devDependencies?.['@hono/zod-validator']) {
+        return;
+      }
+    } catch {
+      // Fall through to install branch.
+    }
+  }
+
   logger.info('Installing @hono/zod-validator...');
   const process = Bun.spawn(['bun', 'add', '@hono/zod-validator'], {
     cwd: projectRoot,

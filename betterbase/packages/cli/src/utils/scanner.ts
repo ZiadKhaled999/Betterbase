@@ -1,22 +1,30 @@
 import { readFileSync } from 'node:fs';
 import * as ts from 'typescript';
+import { z } from 'zod';
 
-export interface ColumnInfo {
-  name: string;
-  type: string;
-  nullable: boolean;
-  unique: boolean;
-  primaryKey: boolean;
-  defaultValue?: string;
-  references?: string;
-}
+export const ColumnTypeSchema = z.enum(['text', 'integer', 'number', 'boolean', 'datetime', 'json', 'blob', 'unknown']);
 
-export interface TableInfo {
-  name: string;
-  columns: Record<string, ColumnInfo>;
-  relations: string[];
-  indexes: string[];
-}
+export const ColumnInfoSchema = z.object({
+  name: z.string(),
+  type: ColumnTypeSchema,
+  nullable: z.boolean(),
+  unique: z.boolean(),
+  primaryKey: z.boolean(),
+  defaultValue: z.string().optional(),
+  references: z.string().optional(),
+});
+
+export const TableInfoSchema = z.object({
+  name: z.string(),
+  columns: z.record(z.string(), ColumnInfoSchema),
+  relations: z.array(z.string()),
+  indexes: z.array(z.string()),
+});
+
+export const TablesRecordSchema = z.record(z.string(), TableInfoSchema);
+
+export type ColumnInfo = z.infer<typeof ColumnInfoSchema>;
+export type TableInfo = z.infer<typeof TableInfoSchema>;
 
 function unwrapExpression(expression: ts.Expression): ts.Expression {
   let current = expression;
@@ -27,8 +35,7 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
     ts.isTypeAssertionExpression(current) ||
     ts.isSatisfiesExpression(current)
   ) {
-    current = (current as ts.ParenthesizedExpression | ts.AsExpression | ts.TypeAssertion | ts.SatisfiesExpression)
-      .expression;
+    current = (current as ts.ParenthesizedExpression | ts.AsExpression | ts.TypeAssertion | ts.SatisfiesExpression).expression;
   }
 
   return current;
@@ -87,7 +94,9 @@ export class SchemaScanner {
 
           const functionName = getCallName(initializer);
           if (functionName === 'sqliteTable' || functionName === 'pgTable' || functionName === 'mysqlTable') {
-            tables[declaration.name.text] = this.parseTable(initializer);
+            const tableObj = this.parseTable(initializer);
+            const tableKey = tableObj.name || declaration.name.text;
+            tables[tableKey] = tableObj;
           }
         }
       }
@@ -96,7 +105,13 @@ export class SchemaScanner {
     };
 
     visit(this.sourceFile);
-    return tables;
+
+    const validated = TablesRecordSchema.safeParse(tables);
+    if (!validated.success) {
+      throw new Error(`Schema scanner produced invalid output: ${JSON.stringify(validated.error.format())}`);
+    }
+
+    return validated.data;
   }
 
   private parseTable(callExpression: ts.CallExpression): TableInfo {
@@ -151,19 +166,25 @@ export class SchemaScanner {
           continue;
         }
 
-        const value = unwrapExpression(property.initializer);
-        if (!ts.isCallExpression(value)) {
-          continue;
-        }
-
-        const callName = getCallName(value);
-        if (callName === 'index' || callName === 'uniqueIndex') {
-          const key = ts.isIdentifier(property.name)
-            ? property.name.text
-            : ts.isStringLiteral(property.name)
+        let value = unwrapExpression(property.initializer);
+        while (ts.isCallExpression(value)) {
+          const callName = getCallName(value);
+          if (callName === 'index' || callName === 'uniqueIndex') {
+            const key = ts.isIdentifier(property.name)
               ? property.name.text
-              : property.name.getText(this.sourceFile);
-          indexes.push(key);
+              : ts.isStringLiteral(property.name)
+                ? property.name.text
+                : property.name.getText(this.sourceFile);
+            indexes.push(key);
+            break;
+          }
+
+          if (ts.isPropertyAccessExpression(value.expression)) {
+            value = unwrapExpression(value.expression.expression);
+            continue;
+          }
+
+          break;
         }
       }
     };
@@ -192,7 +213,7 @@ export class SchemaScanner {
   }
 
   private parseColumn(columnName: string, expression: ts.Expression): ColumnInfo {
-    let type = 'unknown';
+    let type: ColumnInfo['type'] = 'unknown';
     let nullable = true;
     let unique = false;
     let primaryKey = false;

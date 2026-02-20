@@ -36,6 +36,8 @@ describe('RouteScanner', () => {
 
       expect(routes['/users']).toBeDefined();
       expect(routes['/users'].length).toBe(2);
+      expect(routes['/users'][0].method).toBe('GET');
+      expect(routes['/users'][1].method).toBe('POST');
       expect(routes['/users'][0].requiresAuth).toBe(true);
       expect(routes['/users'][1].inputSchema).toBe('createUserSchema');
     } finally {
