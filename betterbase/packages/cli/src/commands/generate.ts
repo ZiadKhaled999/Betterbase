@@ -116,10 +116,21 @@ ${tableName}Route.get('/', async (c) => {
           const key = rawKey.slice(0, -3);
           if (!FILTERABLE_COLUMNS.has(key)) return [];
 
+          const schema = FILTER_COERCE[key as keyof typeof FILTER_COERCE];
+          if (!schema) return [];
+
           try {
             const parsedInValues = JSON.parse(String(value));
             if (!Array.isArray(parsedInValues)) return [];
-            return [inArray(${tableName}[key as keyof typeof ${tableName}] as never, parsedInValues as never[])];
+
+            const coercedValues = parsedInValues
+              .map((item) => schema.safeParse(item))
+              .filter((result) => result.success)
+              .map((result) => result.data);
+
+            if (coercedValues.length === 0) return [];
+
+            return [inArray(${tableName}[key as keyof typeof ${tableName}] as never, coercedValues as never[])];
           } catch {
             return [];
           }
