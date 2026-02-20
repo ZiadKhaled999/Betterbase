@@ -4,7 +4,6 @@ Initial BetterBase monorepo scaffold with a concrete base template.
 
 ## Structure
 
-- `apps/cli` — legacy CLI wrapper/stub
 - `apps/dashboard` — dashboard/studio app
 - `packages/cli` — canonical `@betterbase/cli` implementation
 - `packages/core` — core backend engine
