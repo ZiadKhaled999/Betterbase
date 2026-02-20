@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import * as ts from 'typescript';
 import { z } from 'zod';
+import * as logger from './logger';
 
 export const ColumnTypeSchema = z.enum(['text', 'integer', 'number', 'boolean', 'datetime', 'json', 'blob', 'unknown']);
 
@@ -106,12 +107,7 @@ export class SchemaScanner {
 
     visit(this.sourceFile);
 
-    const validated = TablesRecordSchema.safeParse(tables);
-    if (!validated.success) {
-      throw new Error(`Schema scanner produced invalid output: ${JSON.stringify(validated.error.format())}`);
-    }
-
-    return validated.data;
+    return TablesRecordSchema.parse(tables);
   }
 
   private parseTable(callExpression: ts.CallExpression): TableInfo {
@@ -173,6 +169,9 @@ export class SchemaScanner {
         while (ts.isCallExpression(value)) {
           iter += 1;
           if (iter > MAX_ITER) {
+            logger.warn(
+              `SchemaScanner parseIndexes reached MAX_ITER=${MAX_ITER} while scanning index chain: ${value.getText(this.sourceFile)}`,
+            );
             break;
           }
           const callName = getCallName(value);

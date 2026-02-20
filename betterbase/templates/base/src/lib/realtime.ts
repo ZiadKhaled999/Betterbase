@@ -81,7 +81,7 @@ export class RealtimeServer {
     const [userId, rawClaims] = token.trim().split(':', 2);
     if (!userId) return null;
 
-    const claims = rawClaims ? rawClaims.split(',').map((claim) => claim.trim()).filter(Boolean) : ['realtime:*'];
+    const claims = rawClaims ? rawClaims.split(',').map((claim) => claim.trim()).filter(Boolean) : [];
     return { userId, claims };
   }
 
@@ -204,14 +204,16 @@ export class RealtimeServer {
       return;
     }
 
-    if (client.subscriptions.size >= this.config.maxSubscriptionsPerClient) {
+    const existingSubscription = client.subscriptions.has(table);
+    if (!existingSubscription && client.subscriptions.size >= this.config.maxSubscriptionsPerClient) {
       realtimeLogger.warn(`Subscription limit reached for ${client.userId}`);
       this.safeSend(ws, { error: 'Subscription limit reached' });
       return;
     }
 
     const tableSet = this.tableSubscribers.get(table) ?? new Set<ServerWebSocket<unknown>>();
-    if (tableSet.size >= this.config.maxSubscribersPerTable) {
+    const alreadyInTableSet = tableSet.has(ws);
+    if (!alreadyInTableSet && tableSet.size >= this.config.maxSubscribersPerTable) {
       realtimeLogger.warn(`Table subscriber cap reached for ${table}`);
       this.safeSend(ws, { error: 'Table subscription limit reached' });
       return;

@@ -394,7 +394,7 @@ export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Prom
   }
 
   logger.info('Applying migrations with drizzle-kit push...');
-  logger.info('Note: drizzle-kit generate produced files in drizzle/ for preview/diff analysis only; push is what applied changes in this run.');
+  logger.info('drizzle/ files are for preview; push applied changes.');
   const push = await runDrizzleKit(['push']);
 
   if (!push.success) {
