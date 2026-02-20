@@ -14,17 +14,41 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+function getInitialThemePreference() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const storedTheme = window.localStorage.getItem('theme');
+  if (storedTheme === 'dark') {
+    return true;
+  }
+
+  if (storedTheme === 'light') {
+    return false;
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
 export function Header() {
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(getInitialThemePreference);
 
   useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
+    const root = document.documentElement;
+    const storedTheme = window.localStorage.getItem('theme');
+    const shouldBeDark = storedTheme ? storedTheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    root.classList.toggle('dark', shouldBeDark);
+    setIsDark(shouldBeDark);
   }, []);
 
   const toggleTheme = () => {
     const root = document.documentElement;
-    const next = !root.classList.contains('dark');
+    const next = !isDark;
+
     root.classList.toggle('dark', next);
+    window.localStorage.setItem('theme', next ? 'dark' : 'light');
     setIsDark(next);
   };
 
@@ -59,7 +83,7 @@ export function Header() {
 
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
-          {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          <span suppressHydrationWarning>{isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}</span>
         </Button>
         <Button variant="ghost" size="icon">
           <HelpCircle className="h-5 w-5" />

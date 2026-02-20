@@ -52,6 +52,7 @@ export default function DashboardPage() {
             <div className="space-y-2">
               {['Create new table', 'Test API endpoint', 'View logs'].map((action) => (
                 <button
+                  type="button"
                   key={action}
                   className="w-full rounded-lg border border-zinc-200 p-3 text-left text-sm hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
                 >

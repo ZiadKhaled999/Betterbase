@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 export const navigation = [
   { name: 'Tables', href: '/tables', icon: TableIcon },
-  { name: 'API', href: '/api', icon: Code },
+  { name: 'API', href: '/api-explorer', icon: Code },
   { name: 'Auth', href: '/auth', icon: Users },
   { name: 'Logs', href: '/logs', icon: Activity },
   { name: 'Settings', href: '/settings', icon: Settings },
@@ -30,7 +30,7 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
 
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.name}
