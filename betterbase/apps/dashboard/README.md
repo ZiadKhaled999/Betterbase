@@ -1,28 +1,21 @@
-# Dashboard App (Scaffold)
+# BetterBase Dashboard
 
-Future BetterBase dashboard/studio app.
+Next.js 15 dashboard for managing BetterBase projects (Supabase Studio-style UX).
 
-## Planned Features (Optional)
+## Stack
 
-- [ ] Table browser and editor
-- [ ] API explorer / request runner
-- [ ] Auth and session management views
-- [ ] Project settings and environment controls
+- Next.js 15 App Router
+- React 19 + TypeScript strict mode
+- Tailwind CSS + shadcn-style UI primitives
+- TanStack Query v5
+- Recharts + Lucide React
+- `@betterbase/client` for API access
 
-## Tech Stack (Optional)
+## Development
 
-- Framework: _TBD_ (e.g., Next.js / Astro / React)
-- UI: _TBD_ (e.g., Tailwind CSS / shadcn/ui)
-- State/Data: _TBD_ (e.g., TanStack Query)
+```bash
+bun install
+bun run dev
+```
 
-## Setup (Placeholder)
-
-- `cd betterbase/apps/dashboard`
-- `bun install`
-- `bun run dev`
-
-## Related Docs / Links (Optional)
-
-- Design doc: _TBD_
-- Roadmap ticket(s): _TBD_
-- UX references: _TBD_
+Set `NEXT_PUBLIC_BETTERBASE_URL` to your BetterBase server URL.
