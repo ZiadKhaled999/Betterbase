@@ -86,6 +86,7 @@ describe('ContextGenerator', () => {
 
       const context = await new ContextGenerator().generate(root);
       expect(context.tables).toEqual({});
+      expect(context.routes).toEqual({});
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -100,6 +101,7 @@ describe('ContextGenerator', () => {
 
       const context = await new ContextGenerator().generate(root);
       expect(context.tables).toEqual({});
+      expect(context.routes).toEqual({});
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

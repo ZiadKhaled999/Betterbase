@@ -44,7 +44,20 @@ const loginSchema = z.object({
 });
 
 authRoute.post('/signup', async (c) => {
-  const body = signupSchema.parse(await c.req.json());
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
+    return c.json({ error: 'Invalid JSON', details }, 400);
+  }
+
+  const result = signupSchema.safeParse(rawBody);
+  if (!result.success) {
+    return c.json({ error: 'Invalid signup payload', details: result.error.format() }, 400);
+  }
+
+  const body = result.data;
   const passwordHash = await Bun.password.hash(body.password);
 
   const created = await db
@@ -56,17 +69,35 @@ authRoute.post('/signup', async (c) => {
     })
     .returning();
 
+  const createdUser = created[0];
+  if (!createdUser) {
+    return c.json({ error: 'Failed to create user record' }, 500);
+  }
+
   return c.json({
     user: {
-      id: created[0].id,
-      email: created[0].email,
-      name: created[0].name,
+      id: createdUser.id,
+      email: createdUser.email,
+      name: createdUser.name,
     },
   }, 201);
 });
 
 authRoute.post('/login', async (c) => {
-  const body = loginSchema.parse(await c.req.json());
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
+    return c.json({ error: 'Invalid JSON', details }, 400);
+  }
+
+  const result = loginSchema.safeParse(rawBody);
+  if (!result.success) {
+    return c.json({ error: 'Invalid login payload', details: result.error.format() }, 400);
+  }
+
+  const body = result.data;
 
   const user = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
   if (user.length === 0 || !user[0].passwordHash) {
@@ -142,7 +173,16 @@ async function validateSession(token: string): Promise<AuthContext['user'] | nul
 
   if (session.length === 0) return null;
 
-  const user = await db.select().from(users).where(eq(users.id, session[0].userId)).limit(1);
+  const user = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+    })
+    .from(users)
+    .where(eq(users.id, session[0].userId))
+    .limit(1);
+
   return user.length > 0 ? user[0] : null;
 }
 
@@ -196,14 +236,94 @@ function ensurePasswordHashColumn(schemaPath: string): void {
     return;
   }
 
-  const usersBlock = current.match(/export\s+const\s+users\s*=\s*sqliteTable\([^]+?\}\);/m);
-  if (!usersBlock) {
+  const usersExportIdx = current.search(/export\s+const\s+users\s*=\s*sqliteTable\s*\(/);
+  if (usersExportIdx === -1) {
     logger.warn('Could not find sqlite users table block; skipping passwordHash injection.');
     return;
   }
 
-  const replacement = usersBlock[0].replace(/\n\}\);$/, "\n  passwordHash: text('password_hash').notNull(),\n});");
-  writeFileSync(schemaPath, current.replace(usersBlock[0], replacement));
+  const callStart = current.indexOf('sqliteTable(', usersExportIdx);
+  if (callStart === -1) {
+    logger.warn('Could not locate sqliteTable call for users; skipping passwordHash injection.');
+    return;
+  }
+
+  let i = callStart;
+  let parenDepth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inBacktick = false;
+  let escaped = false;
+
+  while (i < current.length) {
+    const ch = current[i];
+
+    if (escaped) {
+      escaped = false;
+      i += 1;
+      continue;
+    }
+
+    if ((inSingle || inDouble || inBacktick) && ch === '\\') {
+      escaped = true;
+      i += 1;
+      continue;
+    }
+
+    if (!inDouble && !inBacktick && ch === "'") {
+      inSingle = !inSingle;
+      i += 1;
+      continue;
+    }
+
+    if (!inSingle && !inBacktick && ch === '"') {
+      inDouble = !inDouble;
+      i += 1;
+      continue;
+    }
+
+    if (!inSingle && !inDouble && ch === '`') {
+      inBacktick = !inBacktick;
+      i += 1;
+      continue;
+    }
+
+    if (inSingle || inDouble || inBacktick) {
+      i += 1;
+      continue;
+    }
+
+    if (ch === '(') {
+      parenDepth += 1;
+    } else if (ch === ')') {
+      parenDepth -= 1;
+      if (parenDepth === 0) {
+        break;
+      }
+    }
+
+    i += 1;
+  }
+
+  if (i >= current.length || parenDepth !== 0) {
+    logger.warn('Could not safely parse users sqliteTable block; skipping passwordHash injection.');
+    return;
+  }
+
+  const statementEnd = current.indexOf(';', i);
+  if (statementEnd === -1) {
+    logger.warn('Could not locate end of users sqliteTable statement; skipping passwordHash injection.');
+    return;
+  }
+
+  const usersBlock = current.slice(usersExportIdx, statementEnd + 1);
+  const replacement = usersBlock.replace(/\n\}\);\s*$/, "\n  passwordHash: text('password_hash').notNull(),\n});");
+  if (replacement === usersBlock) {
+    logger.warn('Could not inject passwordHash into users table; block layout was unexpected.');
+    return;
+  }
+
+  writeFileSync(schemaPath, `${current.slice(0, usersExportIdx)}${replacement}${current.slice(statementEnd + 1)}`);
 }
 
 function ensureAuthInConfig(projectRoot: string): void {
@@ -253,17 +373,31 @@ function ensureRoutesIndexHook(projectRoot: string): void {
   const routesIndexPath = path.join(projectRoot, 'src/routes/index.ts');
   if (!existsSync(routesIndexPath)) return;
 
-  let current = readFileSync(routesIndexPath, 'utf-8');
+  const current = readFileSync(routesIndexPath, 'utf-8');
+  const importAnchor = "import { usersRoute } from './users';";
+  const routeAnchor = "app.route('/api/users', usersRoute);";
 
-  if (!current.includes("import { authRoute } from './auth';")) {
-    current = current.replace("import { usersRoute } from './users';", "import { usersRoute } from './users';\nimport { authRoute } from './auth';");
+  let next = current;
+
+  if (!next.includes("import { authRoute } from './auth';")) {
+    if (next.includes(importAnchor)) {
+      next = next.replace(importAnchor, `${importAnchor}\nimport { authRoute } from './auth';`);
+    } else {
+      logger.warn(`Could not find import anchor in ${routesIndexPath}; skipping auth route import injection.`);
+    }
   }
 
-  if (!current.includes("app.route('/auth', authRoute);")) {
-    current = current.replace("app.route('/api/users', usersRoute);", "app.route('/api/users', usersRoute);\n  app.route('/auth', authRoute);");
+  if (!next.includes("app.route('/auth', authRoute);")) {
+    if (next.includes(routeAnchor)) {
+      next = next.replace(routeAnchor, `${routeAnchor}\n  app.route('/auth', authRoute);`);
+    } else {
+      logger.warn(`Could not find route anchor in ${routesIndexPath}; skipping auth route registration injection.`);
+    }
   }
 
-  writeFileSync(routesIndexPath, current);
+  if (next !== current) {
+    writeFileSync(routesIndexPath, next);
+  }
 }
 
 export async function runAuthSetupCommand(projectRoot: string = process.cwd()): Promise<void> {

@@ -44,7 +44,7 @@ export class ContextGenerator {
 
     const outputPath = path.join(projectRoot, '.betterbase-context.json');
     writeFileSync(outputPath, `${JSON.stringify(context, null, 2)}\n`);
-    console.log(`✅ Generated ${outputPath}`);
+    logger.success(`Generated ${outputPath}`);
 
     return context;
   }

@@ -85,6 +85,8 @@ function buildPackageJson(projectName: string, databaseMode: DatabaseMode, useAu
     type: 'module',
     scripts: {
       dev: 'bun run src/index.ts',
+      build: 'bun build src/index.ts --outfile dist/index.js --target bun',
+      start: 'bun run dist/index.js',
       'db:generate': 'drizzle-kit generate',
       'db:push': 'bun run src/db/migrate.ts',
     },
@@ -107,7 +109,7 @@ function buildDrizzleConfig(databaseMode: DatabaseMode): string {
   };
 
   const databaseUrl: Record<DatabaseMode, string> = {
-    local: "process.env.DATABASE_URL || 'file:local.db'",
+    local: "process.env.DB_PATH ? `file:${process.env.DB_PATH}` : 'file:local.db'",
     neon: "process.env.DATABASE_URL || 'postgres://localhost'",
     turso: "process.env.DATABASE_URL || 'libsql://localhost'",
   };
@@ -121,6 +123,7 @@ export default defineConfig({
   out: './drizzle',
   dialect: '${dialect[databaseMode]}',
   dbCredentials: {
+    // Keep local fallback in sync with src/lib/env.ts DEFAULT_DB_PATH
     url: ${databaseUrl[databaseMode]},${tursoAuthTokenLine}
   },
 });
@@ -255,9 +258,10 @@ try {
   return `import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
+import { env } from '../lib/env';
 
 try {
-  const sqlite = new Database(process.env.DB_PATH ?? 'local.db', { create: true });
+  const sqlite = new Database(env.DB_PATH, { create: true });
   const db = drizzle(sqlite);
 
   migrate(db, { migrationsFolder: './drizzle' });
@@ -300,9 +304,10 @@ export const db = drizzle(client, { schema });
 
   return `import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { env } from '../lib/env';
 import * as schema from './schema';
 
-const client = new Database(process.env.DB_PATH ?? 'local.db', { create: true });
+const client = new Database(env.DB_PATH, { create: true });
 
 export const db = drizzle(client, { schema });
 `;
@@ -531,8 +536,11 @@ const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 const DEFAULT_OFFSET = 0;
 
+// Intentionally permissive: undefined, non-integer, or negative inputs fall back to caller defaults
+// (DEFAULT_LIMIT / DEFAULT_OFFSET with MAX_LIMIT clamping applied by caller). If strict validation
+// is needed, callers should parse with Zod and return 400 instead of using this helper.
 function parseNonNegativeInt(value: string | undefined, fallback: number): number {
-  if (!value) {
+  if (!value || value.trim() === '') {
     return fallback;
   }
 
@@ -588,11 +596,14 @@ usersRoute.post('/', async (c) => {
     const body = await c.req.json();
     const parsed = parseBody(createUserSchema, body);
 
-    // TODO: persist parsed user via db.insert(users) or a dedicated UsersService.
+    const created = await db.insert(users).values(parsed).returning();
+    if (created.length === 0) {
+      throw new HTTPException(500, { message: 'Failed to persist user' });
+    }
+
     return c.json({
-      message: 'User payload validated (not persisted)',
-      user: parsed,
-    });
+      user: created[0],
+    }, 201);
   } catch (error) {
     if (error instanceof HTTPException) {
       throw error;
