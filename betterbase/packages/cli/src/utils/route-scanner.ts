@@ -28,9 +28,14 @@ function collectTsFiles(dir: string): string[] {
   const files: string[] = [];
 
   const walk = (current: string): void => {
-    let entries: ReturnType<typeof readdirSync>;
+    let entries: Array<{ isDirectory: () => boolean; isFile: () => boolean; name: string }>;
     try {
-      entries = readdirSync(current, { withFileTypes: true });
+      const rawEntries = readdirSync(current, { withFileTypes: true });
+      entries = rawEntries.map(e => ({
+        isDirectory: () => e.isDirectory(),
+        isFile: () => e.isFile(),
+        name: e.name.toString()
+      }));
     } catch {
       return;
     }

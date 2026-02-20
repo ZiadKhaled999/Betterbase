@@ -10,9 +10,9 @@ const BetterBaseConfigSchema = z.object({
   schema: z.string().optional(),
   fetch: z.function().optional(),
   storage: z.object({
-    getItem: z.function(),
-    setItem: z.function(),
-    removeItem: z.function(),
+    getItem: z.function().args(z.string()).returns(z.string().nullable()),
+    setItem: z.function().args(z.string(), z.string()),
+    removeItem: z.function().args(z.string()),
   }).optional(),
 });
 
@@ -30,7 +30,7 @@ export class BetterBaseClient {
       'Content-Type': 'application/json',
       ...(parsed.key ? { 'X-BetterBase-Key': parsed.key } : {}),
     };
-    this.fetchImpl = parsed.fetch ?? fetch;
+    this.fetchImpl = (parsed.fetch ?? fetch) as typeof fetch;
 
     this.auth = new AuthClient(
       this.url,
@@ -44,7 +44,7 @@ export class BetterBaseClient {
         this.realtime.setToken(token);
       },
       this.fetchImpl,
-      parsed.storage
+      parsed.storage ?? undefined
     );
 
     this.realtime = new RealtimeClient(this.url, this.auth.getToken());

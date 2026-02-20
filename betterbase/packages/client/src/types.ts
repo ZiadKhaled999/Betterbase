@@ -1,4 +1,8 @@
 import type { BetterBaseError } from './errors';
+import type { BetterBaseResponse as SharedBetterBaseResponse } from '@betterbase/shared';
+
+// Re-export BetterBaseResponse from @betterbase/shared for external use
+export type BetterBaseResponse<T> = SharedBetterBaseResponse<T>;
 
 export interface BetterBaseConfig {
   url: string;
@@ -16,17 +20,6 @@ export interface QueryOptions {
   limit?: number;
   offset?: number;
   orderBy?: { column: string; direction: 'asc' | 'desc' };
-}
-
-export interface BetterBaseResponse<T> {
-  data: T | null;
-  error: BetterBaseError | null;
-  count?: number;
-  pagination?: {
-    limit: number;
-    offset: number;
-    hasMore: boolean;
-  };
 }
 
 export interface RealtimeSubscription {
