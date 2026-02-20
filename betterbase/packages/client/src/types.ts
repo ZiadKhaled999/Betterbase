@@ -1,0 +1,35 @@
+import type { BetterBaseError } from './errors';
+
+export interface BetterBaseConfig {
+  url: string;
+  key?: string;
+  schema?: string;
+  fetch?: typeof fetch;
+}
+
+export interface QueryOptions {
+  limit?: number;
+  offset?: number;
+  orderBy?: { column: string; direction: 'asc' | 'desc' };
+}
+
+export interface BetterBaseResponse<T> {
+  data: T | null;
+  error: BetterBaseError | null;
+  count?: number;
+  pagination?: {
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
+export interface RealtimeSubscription {
+  unsubscribe: () => void;
+}
+
+export type RealtimeCallback<T = unknown> = (payload: {
+  event: 'INSERT' | 'UPDATE' | 'DELETE';
+  data: T;
+  timestamp: string;
+}) => void;
