@@ -3,6 +3,7 @@ import { upgradeWebSocket, websocket } from 'hono/bun';
 import { env } from './lib/env';
 import { realtime } from './lib/realtime';
 import { registerRoutes } from './routes';
+import { auth } from './auth';
 
 const app = new Hono();
 
@@ -34,6 +35,10 @@ app.get(
 );
 
 registerRoutes(app);
+
+app.on(["POST", "GET"], "/api/auth/**", (c) => {
+  return auth.handler(c.req.raw)
+});
 
 const server = Bun.serve({
   fetch: app.fetch,

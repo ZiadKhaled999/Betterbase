@@ -1,184 +1,265 @@
-import { z } from 'zod';
-import type { BetterBaseResponse } from './types';
-import { AuthError, NetworkError, ValidationError } from './errors';
-import { serializeError } from '@betterbase/shared';
+import { createAuthClient, type AuthClient as BetterAuthClient } from "better-auth/client"
+import type { BetterBaseConfig, BetterBaseResponse } from "./types"
+import { AuthError, NetworkError } from "./errors"
 
-export interface AuthCredentials {
-  email: string;
-  password: string;
-  name?: string;
-}
+export interface BetterBaseClientConfig extends BetterBaseConfig {}
 
 export interface User {
-  id: string;
-  email: string;
-  name: string | null;
+  id: string
+  name: string
+  email: string
+  emailVerified: boolean
+  image: string | null
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface Session {
-  token: string;
-  user: User;
+  id: string
+  expiresAt: Date
+  token: string
+  createdAt: Date
+  updatedAt: Date
+  ipAddress: string | null
+  userAgent: string | null
+  userId: string
 }
 
 interface StorageAdapter {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+  removeItem(key: string): void
 }
-
-const credentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
 
 function getStorage(): Storage | null {
   try {
-    if (typeof globalThis === 'undefined') {
-      return null;
+    if (typeof globalThis === "undefined") {
+      return null
     }
-
-    const storage = globalThis.localStorage;
-    return storage ?? null;
+    const storage = globalThis.localStorage
+    return storage ?? null
   } catch {
-    return null;
+    return null
   }
 }
 
 export class AuthClient {
+  private authClient: BetterAuthClient
+  private storage: StorageAdapter | null
+  private onAuthStateChange?: (token: string | null) => void
+  private fetchImpl: typeof fetch
+
   constructor(
     private url: string,
     private headers: Record<string, string>,
-    private onAuthStateChange?: (token: string | null) => void,
-    private fetchImpl: typeof fetch = fetch,
-    private storage: StorageAdapter | null = getStorage()
-  ) {}
+    onAuthStateChange?: (token: string | null) => void,
+    fetchImpl: typeof fetch = fetch,
+    storage?: StorageAdapter | null
+  ) {
+    this.fetchImpl = fetchImpl
+    this.storage = storage ?? getStorage()
+    this.onAuthStateChange = onAuthStateChange
 
-  async signUp(credentials: AuthCredentials): Promise<BetterBaseResponse<Session>> {
-    const parsed = credentialsSchema.safeParse(credentials);
-    if (!parsed.success) {
-      return { data: null, error: serializeError(new ValidationError('Invalid sign up credentials', parsed.error.format())) };
-    }
+    this.authClient = createAuthClient({
+      baseURL: this.url,
+      fetch: fetchImpl,
+    })
+  }
 
-    const endpoint = `${this.url}/auth/signup`;
+  async signUp(
+    email: string,
+    password: string,
+    name: string
+  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
     try {
-      const response = await this.fetchImpl(endpoint, {
-        method: 'POST',
-        headers: { ...this.headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...credentials, ...parsed.data }),
-      });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Signup failed' }));
-        return { data: null, error: serializeError(new AuthError(error.error || 'Failed to sign up', error)) };
+      const result = await this.authClient.signUp.email({
+        email,
+        password,
+        name,
+      })
+
+      if (result.error) {
+        return {
+          data: null,
+          error: new AuthError(result.error.message, result.error),
+        }
       }
-      const session = (await response.json()) as Session;
-      this.storage?.setItem('betterbase_token', session.token);
-      this.onAuthStateChange?.(session.token);
-      return { data: session, error: null };
+
+      if (result.data) {
+        const sessionToken = result.data.session?.token
+        if (sessionToken) {
+          this.storage?.setItem("betterbase_session", sessionToken)
+          this.onAuthStateChange?.(sessionToken)
+        }
+      }
+
+      return {
+        data: result.data as { user: User; session: Session },
+        error: null,
+      }
     } catch (error) {
       return {
         data: null,
-        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
-      };
+        error: new NetworkError(
+          error instanceof Error ? error.message : "Network request failed",
+          error
+        ),
+      }
     }
   }
 
-  async signIn(credentials: Omit<AuthCredentials, 'name'>): Promise<BetterBaseResponse<Session>> {
-    const parsed = credentialsSchema.safeParse(credentials);
-    if (!parsed.success) {
-      return { data: null, error: serializeError(new ValidationError('Invalid sign in credentials', parsed.error.format())) };
-    }
-
-    const endpoint = `${this.url}/auth/login`;
+  async signIn(
+    email: string,
+    password: string
+  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
     try {
-      const response = await this.fetchImpl(endpoint, {
-        method: 'POST',
-        headers: { ...this.headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsed.data),
-      });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Login failed' }));
-        return { data: null, error: serializeError(new AuthError(error.error || 'Invalid credentials', error)) };
+      const result = await this.authClient.signIn.email({
+        email,
+        password,
+      })
+
+      if (result.error) {
+        return {
+          data: null,
+          error: new AuthError(result.error.message, result.error),
+        }
       }
-      const session = (await response.json()) as Session;
-      this.storage?.setItem('betterbase_token', session.token);
-      this.onAuthStateChange?.(session.token);
-      return { data: session, error: null };
+
+      if (result.data) {
+        const sessionToken = result.data.session?.token
+        if (sessionToken) {
+          this.storage?.setItem("betterbase_session", sessionToken)
+          this.onAuthStateChange?.(sessionToken)
+        }
+      }
+
+      return {
+        data: result.data as { user: User; session: Session },
+        error: null,
+      }
     } catch (error) {
       return {
         data: null,
-        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
-      };
+        error: new NetworkError(
+          error instanceof Error ? error.message : "Network request failed",
+          error
+        ),
+      }
     }
   }
 
   async signOut(): Promise<BetterBaseResponse<null>> {
-    const endpoint = `${this.url}/auth/logout`;
-    const token = this.storage?.getItem('betterbase_token') ?? null;
     try {
-      const response = await this.fetchImpl(endpoint, {
-        method: 'POST',
-        headers: {
-          ...this.headers,
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
+      const result = await this.authClient.signOut()
 
-      this.storage?.removeItem('betterbase_token');
-      this.onAuthStateChange?.(null);
+      this.storage?.removeItem("betterbase_session")
+      this.onAuthStateChange?.(null)
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Logout failed' }));
-        return { data: null, error: serializeError(new AuthError(error.error || 'Failed to sign out', error)) };
+      if (result.error) {
+        return {
+          data: null,
+          error: new AuthError(result.error.message, result.error),
+        }
       }
 
-      return { data: null, error: null };
+      return { data: null, error: null }
     } catch (error) {
-      this.storage?.removeItem('betterbase_token');
-      this.onAuthStateChange?.(null);
+      this.storage?.removeItem("betterbase_session")
+      this.onAuthStateChange?.(null)
       return {
         data: null,
-        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
-      };
+        error: new NetworkError(
+          error instanceof Error ? error.message : "Network request failed",
+          error
+        ),
+      }
     }
   }
 
-  async getUser(): Promise<BetterBaseResponse<User>> {
-    const endpoint = `${this.url}/auth/me`;
-    const token = this.storage?.getItem('betterbase_token') ?? null;
-
-    if (!token) {
-      return { data: null, error: serializeError(new AuthError('Not authenticated')) };
-    }
-
+  async getSession(): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
     try {
-      const response = await this.fetchImpl(endpoint, {
-        method: 'GET',
-        headers: { ...this.headers, Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Failed to get user' }));
-        return { data: null, error: serializeError(new AuthError(error.error || 'Failed to get user', error)) };
+      const result = await this.authClient.getSession()
+
+      if (result.error) {
+        return {
+          data: null,
+          error: new AuthError(result.error.message, result.error),
+        }
       }
-      const result = await response.json();
-      return { data: result.user, error: null };
+
+      if (!result.data) {
+        return { data: null, error: null }
+      }
+
+      return {
+        data: result.data as { user: User; session: Session },
+        error: null,
+      }
     } catch (error) {
       return {
         data: null,
-        error: serializeError(new NetworkError(error instanceof Error ? error.message : 'Network request failed', error)),
-      };
+        error: new NetworkError(
+          error instanceof Error ? error.message : "Network request failed",
+          error
+        ),
+      }
     }
   }
 
   getToken(): string | null {
-    return this.storage?.getItem('betterbase_token') ?? null;
+    return this.storage?.getItem("betterbase_session") ?? null
   }
 
   setToken(token: string | null): void {
     if (token) {
-      this.storage?.setItem('betterbase_token', token);
+      this.storage?.setItem("betterbase_session", token)
     } else {
-      this.storage?.removeItem('betterbase_token');
+      this.storage?.removeItem("betterbase_session")
     }
-    this.onAuthStateChange?.(token);
+    this.onAuthStateChange?.(token)
   }
+}
+
+export function createAuthClientInstance(config: BetterBaseClientConfig): BetterAuthClient {
+  return createAuthClient({
+    baseURL: config.url,
+    fetch: config.fetch,
+  })
+}
+
+export const authClient = {
+  signUp: async (
+    url: string,
+    email: string,
+    password: string,
+    name: string
+  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
+    const client = createAuthClient({ baseURL: url })
+    const result = await client.signUp.email({ email, password, name })
+    return result as { user: User; session: Session } | null as any
+  },
+
+  signIn: async (
+    url: string,
+    email: string,
+    password: string
+  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
+    const client = createAuthClient({ baseURL: url })
+    const result = await client.signIn.email({ email, password })
+    return result as { user: User; session: Session } | null as any
+  },
+
+  signOut: async (url: string): Promise<BetterBaseResponse<null>> => {
+    const client = createAuthClient({ baseURL: url })
+    const result = await client.signOut()
+    return result as any
+  },
+
+  getSession: async (
+    url: string
+  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
+    const client = createAuthClient({ baseURL: url })
+    const result = await client.getSession()
+    return result as { user: User; session: Session } | null as any
+  },
 }
