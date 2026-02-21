@@ -22,7 +22,11 @@
     "hono": "^4.6.10",
     "drizzle-orm": "^0.44.5",
     "zod": "^3.23.8",
-    "@betterbase/shared": "workspace:*"
+    "@betterbase/shared": "workspace:*",
+    "@neondatabase/serverless": "latest",
+    "@libsql/client": "latest",
+    "@planetscale/database": "latest",
+    "postgres": "latest"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

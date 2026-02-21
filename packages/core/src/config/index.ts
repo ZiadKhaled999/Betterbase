@@ -1,3 +1,30 @@
-// [stub] This module is implemented in Phase 10.2.
-// Do not implement here — wait for the Phase prompt.
-export {}
+/**
+ * BetterBase Configuration Module
+ * 
+ * This module provides configuration validation and Drizzle config generation
+ * for the BetterBase framework.
+ */
+
+// Re-export everything from schema
+export {
+  ProviderTypeSchema,
+  type ProviderType,
+  BetterBaseConfigSchema,
+  type BetterBaseConfig,
+  defineConfig,
+  validateConfig,
+  parseConfig,
+  assertConfig,
+} from './schema'
+
+// Re-export drizzle generator
+export {
+  generateDrizzleConfig,
+  getDialectForProvider,
+  getDriverForProvider,
+  getRequiredEnvVars,
+  type DrizzleDriver,
+  type DrizzleDialect,
+  type DrizzleConfigOutput,
+  type DbCredentials,
+} from './drizzle-generator'

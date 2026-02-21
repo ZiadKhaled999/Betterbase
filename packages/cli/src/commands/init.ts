@@ -3,6 +3,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import * as logger from '../utils/logger';
 import * as prompts from '../utils/prompts';
+import { promptForProvider, generateEnvContent } from '../utils/provider-prompts';
+import { generateDrizzleConfig } from '@betterbase/core/config';
 
 const projectNameSchema = z
   .string()
@@ -14,9 +16,9 @@ const initOptionsSchema = z.object({
   projectName: projectNameSchema.optional(),
 });
 
-export type ProviderType = 'local' | 'neon' | 'turso' | 'planetscale' | 'supabase' | 'postgres';
+import type { ProviderType } from '@betterbase/shared';
 
-const providerTypeSchema = z.enum(['local', 'neon', 'turso', 'planetscale', 'supabase', 'postgres']);
+const providerTypeSchema = z.enum(['neon', 'turso', 'planetscale', 'supabase', 'postgres', 'managed']);
 
 export type InitCommandOptions = z.infer<typeof initOptionsSchema>;
 
@@ -38,18 +40,18 @@ interface StorageCredentials {
 
 function getDatabaseLabel(provider: ProviderType): string {
   const labels: Record<ProviderType, string> = {
-    local: 'Local SQLite (local.db)',
     neon: 'Neon (serverless Postgres)',
     turso: 'Turso (edge SQLite)',
     planetscale: 'PlanetScale (MySQL-compatible)',
     supabase: 'Supabase (Postgres)',
     postgres: 'Raw Postgres',
+    managed: 'Managed by BetterBase (coming soon)',
   };
   return labels[provider];
 }
 
 function getAuthDialect(provider: ProviderType): 'sqlite' | 'pg' | 'mysql' {
-  if (provider === 'local' || provider === 'turso') {
+  if (provider === 'turso') {
     return 'sqlite';
   }
   if (provider === 'planetscale') {
@@ -97,11 +99,15 @@ function buildPackageJson(
     zod: '^4.3.6',
   };
 
+  if (provider === 'neon') {
+    dependencies['@neondatabase/serverless'] = '^1.0.0';
+  }
+
   if (provider === 'turso') {
     dependencies['@libsql/client'] = '^0.14.0';
   }
 
-  if (provider === 'neon' || provider === 'postgres' || provider === 'supabase') {
+  if (provider === 'postgres' || provider === 'supabase') {
     dependencies.pg = '^8.13.1';
   }
 
@@ -136,61 +142,21 @@ function buildPackageJson(
 }
 
 function buildDrizzleConfig(provider: ProviderType): string {
-  const configs: Record<ProviderType, string> = {
-    local: `import { defineConfig } from "drizzle-kit";
-export default defineConfig({
-  schema: "./src/db/schema.ts",
-  dialect: "sqlite",
-  dbCredentials: { url: "./local.db" },
-});`,
-    neon: `import { defineConfig } from "drizzle-kit";
-export default defineConfig({
-  schema: "./src/db/schema.ts",
-  dialect: "postgresql",
-  driver: "neon-serverless",
-  dbCredentials: { connectionString: process.env.DATABASE_URL },
-});`,
-    turso: `import { defineConfig } from "drizzle-kit";
-export default defineConfig({
-  schema: "./src/db/schema.ts",
-  dialect: "sqlite",
-  driver: "turso",
-  dbCredentials: { url: process.env.TURSO_URL, authToken: process.env.TURSO_AUTH_TOKEN },
-});`,
-    planetscale: `import { defineConfig } from "drizzle-kit";
-export default defineConfig({
-  schema: "./src/db/schema.ts",
-  dialect: "mysql",
-  driver: "planetscale",
-  dbCredentials: { connectionString: process.env.DATABASE_URL },
-});`,
-    supabase: `import { defineConfig } from "drizzle-kit";
-export default defineConfig({
-  schema: "./src/db/schema.ts",
-  dialect: "postgresql",
-  driver: "pg",
-  dbCredentials: { connectionString: process.env.DATABASE_URL },
-});`,
-    postgres: `import { defineConfig } from "drizzle-kit";
-export default defineConfig({
-  schema: "./src/db/schema.ts",
-  dialect: "postgresql",
-  driver: "pg",
-  dbCredentials: { connectionString: process.env.DATABASE_URL },
-});`,
-  };
-  return configs[provider];
+  // Use the generateDrizzleConfig from @betterbase/core
+  return generateDrizzleConfig(provider);
 }
 
 function buildBetterbaseConfig(projectName: string, provider: ProviderType): string {
   let providerBlock = `type: "${provider}",`;
 
-  if (provider === 'local') {
-    // No connection string for local
-  } else if (provider === 'turso') {
+  if (provider === 'turso') {
     providerBlock += `
     url: process.env.TURSO_URL,
     authToken: process.env.TURSO_AUTH_TOKEN,`;
+  } else if (provider === 'managed') {
+    // Managed provider - no connection string needed for now
+    providerBlock += `
+    connectionString: process.env.DATABASE_URL,`;
   } else {
     providerBlock += `
     connectionString: process.env.DATABASE_URL,`;
@@ -746,24 +712,11 @@ async function writeProjectFiles(
   await mkdir(path.join(projectPath, 'src/lib'), { recursive: true });
 
   // Build .env content based on provider and credentials
-  let envContent = '';
-  if (provider === 'local') {
-    envContent = `NODE_ENV=development
-PORT=3000
-DB_PATH=local.db
-`;
-  } else if (provider === 'turso') {
-    envContent = `NODE_ENV=development
-PORT=3000
-TURSO_URL=${dbCredentials.TURSO_URL || ''}
-TURSO_AUTH_TOKEN=${dbCredentials.TURSO_AUTH_TOKEN || ''}
-`;
-  } else {
-    envContent = `NODE_ENV=development
-PORT=3000
-DATABASE_URL=${dbCredentials.DATABASE_URL || ''}
-`;
-  }
+  // Use the generateEnvContent from provider-prompts for better comments
+  let envContent = generateEnvContent(provider, dbCredentials as Record<string, string>);
+
+  // Add NODE_ENV and PORT to all configs
+  envContent = `NODE_ENV=development\nPORT=3000\n` + envContent;
 
   if (useAuth) {
     const authSecret = crypto.randomUUID().replace(/-/g, '').slice(0, 32);
@@ -796,7 +749,7 @@ PORT=3000
     envExampleContent += `TURSO_URL=
 TURSO_AUTH_TOKEN=
 `;
-  } else if (provider !== 'local') {
+  } else {
     envExampleContent += `DATABASE_URL=
 `;
   }
@@ -834,19 +787,18 @@ const envSchema = z.object({
   DB_PATH: z.string().min(1).default(DEFAULT_DB_PATH),
 });
 `;
-  if (provider !== 'local') {
-    if (provider === 'turso') {
-      envSchemaContent += `
+  // All providers except managed need DATABASE_URL or Turso-specific env vars
+  if (provider === 'turso') {
+    envSchemaContent += `
 envSchema = envSchema.extend({
   TURSO_URL: z.string().url(),
   TURSO_AUTH_TOKEN: z.string().min(1),
 });`;
-    } else {
-      envSchemaContent += `
+  } else if (provider !== 'managed') {
+    envSchemaContent += `
 envSchema = envSchema.extend({
   DATABASE_URL: z.string().url(),
 });`;
-    }
   }
 
   if (useAuth) {
@@ -1174,54 +1126,10 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
   const projectName = projectNameSchema.parse(projectNameInput);
   const projectPath = path.resolve(process.cwd(), projectName);
 
-  // PROMPT 1 — Database Provider Selection
-  const selectedProvider = await prompts.select({
-    message: 'Which database provider?',
-    options: [
-      { value: 'local', label: 'Local SQLite (default, no config needed)' },
-      { value: 'neon', label: 'Neon (Serverless Postgres)' },
-      { value: 'turso', label: 'Turso (SQLite Edge)' },
-      { value: 'planetscale', label: 'PlanetScale (MySQL-compatible)' },
-      { value: 'supabase', label: 'Supabase (Postgres DB only)' },
-      { value: 'postgres', label: 'Raw Postgres' },
-      { value: 'managed', label: 'Managed by BetterBase (coming soon)' },
-    ],
-    default: 'local',
-  });
-
-  let provider: ProviderType = selectedProvider as ProviderType;
-
-  if (selectedProvider === 'managed') {
-    logger.warn('Managed database is coming soon. Defaulting to Local SQLite for now.');
-    provider = 'local';
-  }
-
-  // Collect credentials based on provider
-  const dbCredentials: DatabaseCredentials = {};
-
-  if (provider !== 'local') {
-    if (provider === 'turso') {
-      const tursoUrl = await prompts.text({
-        message: 'TURSO_URL (libsql connection string)',
-        initial: 'libsql://your-database.turso.io',
-      });
-      const tursoToken = await prompts.text({
-        message: 'TURSO_AUTH_TOKEN',
-        initial: '',
-      });
-      dbCredentials.TURSO_URL = tursoUrl;
-      dbCredentials.TURSO_AUTH_TOKEN = tursoToken;
-    } else {
-      const dbUrlLabel = provider === 'supabase' 
-        ? 'Direct connection string from Supabase project settings'
-        : 'DATABASE_URL';
-      const databaseUrl = await prompts.text({
-        message: dbUrlLabel,
-        initial: '',
-      });
-      dbCredentials.DATABASE_URL = databaseUrl;
-    }
-  }
+  // PROMPT 1 — Database Provider Selection using the new provider-prompts module
+  const { providerType, envVars } = await promptForProvider();
+  const provider: ProviderType = providerType;
+  const dbCredentials: DatabaseCredentials = envVars as DatabaseCredentials;
 
   // PROMPT 4 — BetterAuth Setup Option
   const authEnabled = await prompts.confirm({
@@ -1239,58 +1147,23 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
     logger.info('You can run bb auth setup later to add authentication.');
   }
 
-  // PROMPT 5 — Storage Setup Option
-  storageEnabled = await prompts.confirm({
+  // PROMPT 5 — Storage Setup Option (placeholder - Phase 14)
+  const storageChoice = await prompts.select({
     message: 'Set up S3-compatible storage now?',
-    default: false,
+    options: [
+      { value: 'yes', label: 'Yes' },
+      { value: 'skip', label: 'Skip' },
+    ],
+    default: 'skip',
   });
 
-  if (storageEnabled) {
-    const selectedStorageProvider = await prompts.select({
-      message: 'Which storage provider?',
-      options: [
-        { value: 's3', label: 'AWS S3' },
-        { value: 'r2', label: 'Cloudflare R2' },
-        { value: 'backblaze', label: 'Backblaze B2' },
-        { value: 'minio', label: 'MinIO (self-hosted)' },
-      ],
-      default: 's3',
-    });
-
-    storageProvider = selectedStorageProvider as StorageProvider;
-
-    // Collect storage credentials based on provider
-    const accessKey = await prompts.text({
-      message: 'STORAGE_ACCESS_KEY',
-      initial: '',
-    });
-    const secretKey = await prompts.text({
-      message: 'STORAGE_SECRET_KEY',
-      initial: '',
-    });
-    const bucket = await prompts.text({
-      message: 'STORAGE_BUCKET',
-      initial: '',
-    });
-
-    storageCredentials.STORAGE_ACCESS_KEY = accessKey;
-    storageCredentials.STORAGE_SECRET_KEY = secretKey;
-    storageCredentials.STORAGE_BUCKET = bucket;
-
-    if (storageProvider === 's3') {
-      const region = await prompts.text({
-        message: 'STORAGE_REGION',
-        initial: 'us-east-1',
-      });
-      storageCredentials.STORAGE_REGION = region;
-    } else {
-      const endpoint = await prompts.text({
-        message: 'STORAGE_ENDPOINT (e.g., https://r2.cloudflarestorage.com)',
-        initial: '',
-      });
-      storageCredentials.STORAGE_ENDPOINT = endpoint;
-    }
+  if (storageChoice === 'yes') {
+    logger.info('Storage setup coming in Phase 14');
   }
+
+  // Storage is disabled for now - placeholder only
+  storageEnabled = false;
+  storageProvider = null;
 
   // PROMPT 6 — FINAL SUMMARY AND CONFIRMATION
   logger.info(`Creating project: ${projectName}`);
