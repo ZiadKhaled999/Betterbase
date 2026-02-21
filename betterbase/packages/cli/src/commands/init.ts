@@ -14,22 +14,48 @@ const initOptionsSchema = z.object({
   projectName: projectNameSchema.optional(),
 });
 
-const databaseModeSchema = z.enum(['local', 'neon', 'turso']);
+export type ProviderType = 'local' | 'neon' | 'turso' | 'planetscale' | 'supabase' | 'postgres';
 
-type DatabaseMode = z.infer<typeof databaseModeSchema>;
+const providerTypeSchema = z.enum(['local', 'neon', 'turso', 'planetscale', 'supabase', 'postgres']);
 
 export type InitCommandOptions = z.infer<typeof initOptionsSchema>;
 
-function getDatabaseLabel(databaseMode: DatabaseMode): string {
-  if (databaseMode === 'neon') {
-    return 'Neon (serverless Postgres)';
-  }
+type StorageProvider = 's3' | 'r2' | 'backblaze' | 'minio';
 
-  if (databaseMode === 'turso') {
-    return 'Turso (edge SQLite)';
-  }
+interface DatabaseCredentials {
+  DATABASE_URL?: string;
+  TURSO_URL?: string;
+  TURSO_AUTH_TOKEN?: string;
+}
 
-  return 'SQLite (local.db)';
+interface StorageCredentials {
+  STORAGE_ACCESS_KEY?: string;
+  STORAGE_SECRET_KEY?: string;
+  STORAGE_BUCKET?: string;
+  STORAGE_REGION?: string;
+  STORAGE_ENDPOINT?: string;
+}
+
+function getDatabaseLabel(provider: ProviderType): string {
+  const labels: Record<ProviderType, string> = {
+    local: 'Local SQLite (local.db)',
+    neon: 'Neon (serverless Postgres)',
+    turso: 'Turso (edge SQLite)',
+    planetscale: 'PlanetScale (MySQL-compatible)',
+    supabase: 'Supabase (Postgres)',
+    postgres: 'Raw Postgres',
+  };
+  return labels[provider];
+}
+
+function getAuthDialect(provider: ProviderType): 'sqlite' | 'pg' | 'mysql' {
+  if (provider === 'local' || provider === 'turso') {
+    return 'sqlite';
+  }
+  if (provider === 'planetscale') {
+    return 'mysql';
+  }
+  return 'pg';
 }
 
 async function installDependencies(projectPath: string): Promise<void> {
@@ -60,19 +86,27 @@ async function initializeGitRepository(projectPath: string): Promise<void> {
   }
 }
 
-function buildPackageJson(projectName: string, databaseMode: DatabaseMode, useAuth: boolean): string {
+function buildPackageJson(
+  projectName: string,
+  provider: ProviderType,
+  useAuth: boolean,
+): string {
   const dependencies: Record<string, string> = {
     hono: '^4.11.9',
     'drizzle-orm': '^0.45.1',
     zod: '^4.3.6',
   };
 
-  if (databaseMode === 'turso') {
+  if (provider === 'turso') {
     dependencies['@libsql/client'] = '^0.14.0';
   }
 
-  if (databaseMode === 'neon') {
+  if (provider === 'neon' || provider === 'postgres' || provider === 'supabase') {
     dependencies.pg = '^8.13.1';
+  }
+
+  if (provider === 'planetscale') {
+    dependencies['@planetscale/database'] = '^1.22.0';
   }
 
   if (useAuth) {
@@ -101,37 +135,82 @@ function buildPackageJson(projectName: string, databaseMode: DatabaseMode, useAu
   return `${JSON.stringify(json, null, 2)}\n`;
 }
 
-function buildDrizzleConfig(databaseMode: DatabaseMode): string {
-  const dialect: Record<DatabaseMode, 'sqlite' | 'postgresql' | 'turso'> = {
-    local: 'sqlite',
-    neon: 'postgresql',
-    turso: 'turso',
+function buildDrizzleConfig(provider: ProviderType): string {
+  const configs: Record<ProviderType, string> = {
+    local: `import { defineConfig } from "drizzle-kit";
+export default defineConfig({
+  schema: "./src/db/schema.ts",
+  dialect: "sqlite",
+  dbCredentials: { url: "./local.db" },
+});`,
+    neon: `import { defineConfig } from "drizzle-kit";
+export default defineConfig({
+  schema: "./src/db/schema.ts",
+  dialect: "postgresql",
+  driver: "neon-serverless",
+  dbCredentials: { connectionString: process.env.DATABASE_URL },
+});`,
+    turso: `import { defineConfig } from "drizzle-kit";
+export default defineConfig({
+  schema: "./src/db/schema.ts",
+  dialect: "sqlite",
+  driver: "turso",
+  dbCredentials: { url: process.env.TURSO_URL, authToken: process.env.TURSO_AUTH_TOKEN },
+});`,
+    planetscale: `import { defineConfig } from "drizzle-kit";
+export default defineConfig({
+  schema: "./src/db/schema.ts",
+  dialect: "mysql",
+  driver: "planetscale",
+  dbCredentials: { connectionString: process.env.DATABASE_URL },
+});`,
+    supabase: `import { defineConfig } from "drizzle-kit";
+export default defineConfig({
+  schema: "./src/db/schema.ts",
+  dialect: "postgresql",
+  driver: "pg",
+  dbCredentials: { connectionString: process.env.DATABASE_URL },
+});`,
+    postgres: `import { defineConfig } from "drizzle-kit";
+export default defineConfig({
+  schema: "./src/db/schema.ts",
+  dialect: "postgresql",
+  driver: "pg",
+  dbCredentials: { connectionString: process.env.DATABASE_URL },
+});`,
   };
+  return configs[provider];
+}
 
-  const databaseUrl: Record<DatabaseMode, string> = {
-    local: "process.env.DB_PATH ? `file:${process.env.DB_PATH}` : 'file:local.db'",
-    neon: "process.env.DATABASE_URL || 'postgres://localhost'",
-    turso: "process.env.DATABASE_URL || 'libsql://localhost'",
-  };
+function buildBetterbaseConfig(projectName: string, provider: ProviderType): string {
+  let providerBlock = `type: "${provider}",`;
 
-  const tursoAuthTokenLine = databaseMode === 'turso' ? "\n    authToken: process.env.TURSO_AUTH_TOKEN || ''," : '';
+  if (provider === 'local') {
+    // No connection string for local
+  } else if (provider === 'turso') {
+    providerBlock += `
+    url: process.env.TURSO_URL,
+    authToken: process.env.TURSO_AUTH_TOKEN,`;
+  } else {
+    providerBlock += `
+    connectionString: process.env.DATABASE_URL,`;
+  }
 
-  return `import { defineConfig } from 'drizzle-kit';
+  return `import { defineConfig } from "@betterbase/core";
 
 export default defineConfig({
-  schema: './src/db/schema.ts',
-  out: './drizzle',
-  dialect: '${dialect[databaseMode]}',
-  dbCredentials: {
-    // Keep local fallback in sync with src/lib/env.ts DEFAULT_DB_PATH
-    url: ${databaseUrl[databaseMode]},${tursoAuthTokenLine}
+  project: {
+    name: "${projectName}",
+  },
+  provider: {
+    ${providerBlock}
   },
 });
 `;
 }
 
-async function buildSchema(databaseMode: DatabaseMode): Promise<string> {
-  if (databaseMode === 'neon') {
+async function buildSchema(provider: ProviderType): Promise<string> {
+  if (provider === 'neon' || provider === 'postgres' || provider === 'supabase') {
     return `import { integer, pgTable, timestamp, varchar } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -139,6 +218,18 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   name: varchar('name', { length: 255 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+`;
+  }
+
+  if (provider === 'planetscale') {
+    return `import { bigint, mysqlTable, timestamp, varchar } from 'drizzle-orm/mysql-core';
+
+export const users = mysqlTable('users', {
+  id: bigint('id', { mode: 'number', unsigned: true }).generatedAlwaysAsIdentity().primaryKey(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  name: varchar('name', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 `;
   }
@@ -207,8 +298,8 @@ export const posts = sqliteTable('posts', {
 `;
 }
 
-function buildMigrateScript(databaseMode: DatabaseMode): string {
-  if (databaseMode === 'neon') {
+function buildMigrateScript(provider: ProviderType): string {
+  if (provider === 'neon' || provider === 'postgres' || provider === 'supabase') {
     return `import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
@@ -232,14 +323,36 @@ try {
 `;
   }
 
-  if (databaseMode === 'turso') {
+  if (provider === 'turso') {
     return `import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 
 const client = createClient({
-  url: process.env.DATABASE_URL || 'file:local.db',
+  url: process.env.TURSO_URL || 'file:local.db',
   authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+const db = drizzle(client);
+
+try {
+  await migrate(db, { migrationsFolder: './drizzle' });
+  console.log('Migrations applied successfully.');
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('Failed to apply migrations:', message);
+  process.exit(1);
+}
+`;
+  }
+
+  if (provider === 'planetscale') {
+    return `import { connect } from '@planetscale/database';
+import { drizzle } from 'drizzle-orm/planetscale-serverless';
+import { migrate } from 'drizzle-orm/planetscale-serverless/migrator';
+
+const client = connect({
+  url: process.env.DATABASE_URL,
 });
 
 const db = drizzle(client);
@@ -274,8 +387,8 @@ try {
 `;
 }
 
-function buildDbIndex(databaseMode: DatabaseMode): string {
-  if (databaseMode === 'neon') {
+function buildDbIndex(provider: ProviderType): string {
+  if (provider === 'neon' || provider === 'postgres' || provider === 'supabase') {
     return `import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
@@ -288,14 +401,27 @@ export const db = drizzle(pool, { schema });
 `;
   }
 
-  if (databaseMode === 'turso') {
+  if (provider === 'turso') {
     return `import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import * as schema from './schema';
 
 const client = createClient({
-  url: process.env.DATABASE_URL || 'file:local.db',
+  url: process.env.TURSO_URL || 'file:local.db',
   authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+export const db = drizzle(client, { schema });
+`;
+  }
+
+  if (provider === 'planetscale') {
+    return `import { connect } from '@planetscale/database';
+import { drizzle } from 'drizzle-orm/planetscale-serverless';
+import * as schema from './schema';
+
+const client = connect({
+  url: process.env.DATABASE_URL,
 });
 
 export const db = drizzle(client, { schema });
@@ -323,10 +449,246 @@ export const authMiddleware = createMiddleware(async (_c, next) => {
 `;
 }
 
-function buildReadme(projectName: string): string {
+function buildAuthInstanceFile(dialect: 'sqlite' | 'pg' | 'mysql'): string {
+  const provider = dialect === 'sqlite' ? 'sqlite' : dialect === 'mysql' ? 'mysql' : 'pg';
+  return `import { betterAuth } from "better-auth"
+import { drizzleAdapter } from "better-auth/adapters/drizzle"
+import { db } from "../db"
+import * as schema from "../db/auth-schema"
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "${provider}",
+    schema: {
+      user: schema.user,
+      session: schema.session,
+      account: schema.account,
+      verification: schema.verification,
+    },
+  }),
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: false,
+  },
+  secret: process.env.AUTH_SECRET,
+  baseURL: process.env.AUTH_URL ?? "http://localhost:3000",
+  trustedOrigins: [process.env.AUTH_URL ?? "http://localhost:3000"],
+  plugins: [],
+})
+
+export type Auth = typeof auth
+`;
+}
+
+function buildAuthTypesFile(): string {
+  return `import type { auth } from "./index"
+
+export type Session = typeof auth.$Infer.Session.session
+export type User = typeof auth.$Infer.Session.user
+
+export type AuthVariables = {
+  user: User
+  session: Session
+}
+`;
+}
+
+function buildAuthMiddlewareFile(): string {
+  return `import { auth } from "../auth"
+import type { Context, Next } from "hono"
+
+export async function requireAuth(c: Context, next: Next) {
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+  })
+  if (!session) {
+    return c.json({ data: null, error: "Unauthorized" }, 401)
+  }
+  c.set("user", session.user)
+  c.set("session", session.session)
+  await next()
+}
+
+export async function optionalAuth(c: Context, next: Next) {
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+  })
+  if (session) {
+    c.set("user", session.user)
+    c.set("session", session.session)
+  }
+  await next()
+}
+
+export function getAuthUser(c: Context) {
+  return c.get("user")
+}
+`;
+}
+
+function buildAuthSchemaSqlite(): string {
+  return `import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+
+export const user = sqliteTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
+  image: text("image"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+})
+
+export const session = sqliteTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+})
+
+export const account = sqliteTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp" }),
+  refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp" }),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+})
+
+export const verification = sqliteTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }),
+  updatedAt: integer("updated_at", { mode: "timestamp" }),
+})
+`;
+}
+
+function buildAuthSchemaPg(): string {
+  return `import { pgTable, text, timestamp, boolean } from 'drizzle-orm/pg-core'
+
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull(),
+})
+
+export const session = pgTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+})
+
+export const account = pgTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", { mode: "date" }),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { mode: "date" }),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull(),
+})
+
+export const verification = pgTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }),
+  updatedAt: timestamp("updated_at", { mode: "date" }),
+})
+`;
+}
+
+function buildAuthSchemaMysql(): string {
+  return `import { bigint, boolean, datetime, mysqlTable, text } from 'drizzle-orm/mysql-core'
+
+export const user = mysqlTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
+  createdAt: datetime("created_at").notNull(),
+  updatedAt: datetime("updated_at").notNull(),
+})
+
+export const session = mysqlTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: datetime("expires_at").notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: datetime("created_at").notNull(),
+  updatedAt: datetime("updated_at").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+})
+
+export const account = mysqlTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: datetime("access_token_expires_at"),
+  refreshTokenExpiresAt: datetime("refresh_token_expires_at"),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: datetime("created_at").notNull(),
+  updatedAt: datetime("updated_at").notNull(),
+})
+
+export const verification = mysqlTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: datetime("expires_at").notNull(),
+  createdAt: datetime("created_at"),
+  updatedAt: datetime("updated_at"),
+})
+`;
+}
+
+function buildReadme(projectName: string, provider: ProviderType, authEnabled: boolean, storageEnabled: boolean): string {
   return `# ${projectName}
 
 Generated with BetterBase CLI.
+
+## Configuration
+
+- **Database**: ${getDatabaseLabel(provider)}
+- **Auth**: ${authEnabled ? 'BetterAuth enabled' : 'Not configured'}
+- **Storage**: ${storageEnabled ? 'S3-compatible storage enabled' : 'Not configured'}
 
 ## Scripts
 
@@ -372,18 +734,97 @@ export function registerRoutes(app: Hono): void {
 async function writeProjectFiles(
   projectPath: string,
   projectName: string,
-  databaseMode: DatabaseMode,
+  provider: ProviderType,
   useAuth: boolean,
+  storageProvider: StorageProvider | null,
+  dbCredentials: DatabaseCredentials,
+  storageCredentials: StorageCredentials,
 ): Promise<void> {
   await mkdir(path.join(projectPath, 'src/db'), { recursive: true });
   await mkdir(path.join(projectPath, 'src/routes'), { recursive: true });
   await mkdir(path.join(projectPath, 'src/middleware'), { recursive: true });
   await mkdir(path.join(projectPath, 'src/lib'), { recursive: true });
 
+  // Build .env content based on provider and credentials
+  let envContent = '';
+  if (provider === 'local') {
+    envContent = `NODE_ENV=development
+PORT=3000
+DB_PATH=local.db
+`;
+  } else if (provider === 'turso') {
+    envContent = `NODE_ENV=development
+PORT=3000
+TURSO_URL=${dbCredentials.TURSO_URL || ''}
+TURSO_AUTH_TOKEN=${dbCredentials.TURSO_AUTH_TOKEN || ''}
+`;
+  } else {
+    envContent = `NODE_ENV=development
+PORT=3000
+DATABASE_URL=${dbCredentials.DATABASE_URL || ''}
+`;
+  }
 
-  await writeFile(
-    path.join(projectPath, 'src/lib/env.ts'),
-    `import { z } from 'zod';
+  if (useAuth) {
+    const authSecret = crypto.randomUUID().replace(/-/g, '').slice(0, 32);
+    envContent += `\nAUTH_SECRET=${authSecret}
+AUTH_URL=http://localhost:3000
+`;
+  }
+
+  if (storageProvider) {
+    envContent += `\n# Storage (${storageProvider})
+STORAGE_PROVIDER=${storageProvider}
+STORAGE_ACCESS_KEY=${storageCredentials.STORAGE_ACCESS_KEY || ''}
+STORAGE_SECRET_KEY=${storageCredentials.STORAGE_SECRET_KEY || ''}
+STORAGE_BUCKET=${storageCredentials.STORAGE_BUCKET || ''}
+`;
+    if (storageProvider === 's3') {
+      envContent += `STORAGE_REGION=${storageCredentials.STORAGE_REGION || 'us-east-1'}\n`;
+    } else {
+      envContent += `STORAGE_ENDPOINT=${storageCredentials.STORAGE_ENDPOINT || ''}\n`;
+    }
+  }
+
+  await writeFile(path.join(projectPath, '.env'), envContent);
+
+  // .env.example without secrets
+  let envExampleContent = `NODE_ENV=development
+PORT=3000
+`;
+  if (provider === 'turso') {
+    envExampleContent += `TURSO_URL=
+TURSO_AUTH_TOKEN=
+`;
+  } else if (provider !== 'local') {
+    envExampleContent += `DATABASE_URL=
+`;
+  }
+
+  if (useAuth) {
+    envExampleContent += `\nAUTH_SECRET=your-secret-key-change-in-production
+AUTH_URL=http://localhost:3000
+`;
+  }
+
+  if (storageProvider) {
+    envExampleContent += `\n# Storage (${storageProvider})
+STORAGE_PROVIDER=${storageProvider}
+STORAGE_ACCESS_KEY=
+STORAGE_SECRET_KEY=
+STORAGE_BUCKET=
+`;
+    if (storageProvider === 's3') {
+      envExampleContent += `STORAGE_REGION=us-east-1\n`;
+    } else {
+      envExampleContent += `STORAGE_ENDPOINT=\n`;
+    }
+  }
+
+  await writeFile(path.join(projectPath, '.env.example'), envExampleContent);
+
+  // env.ts with appropriate schema
+  let envSchemaContent = `import { z } from 'zod';
 
 export const DEFAULT_DB_PATH = 'local.db';
 
@@ -392,28 +833,49 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   DB_PATH: z.string().min(1).default(DEFAULT_DB_PATH),
 });
+`;
+  if (provider !== 'local') {
+    if (provider === 'turso') {
+      envSchemaContent += `
+envSchema = envSchema.extend({
+  TURSO_URL: z.string().url(),
+  TURSO_AUTH_TOKEN: z.string().min(1),
+});`;
+    } else {
+      envSchemaContent += `
+envSchema = envSchema.extend({
+  DATABASE_URL: z.string().url(),
+});`;
+    }
+  }
 
-export const env = envSchema.parse(process.env);
-`,
-  );
+  if (useAuth) {
+    envSchemaContent += `
+envSchema = envSchema.extend({
+  AUTH_SECRET: z.string().min(32),
+  AUTH_URL: z.string().url().default('http://localhost:3000'),
+});`;
+  }
 
-  await writeFile(
-    path.join(projectPath, 'betterbase.config.ts'),
-    `export default {
-  mode: '${databaseMode}',
-  database: {
-    local: 'local.db',
-    production: process.env.DATABASE_URL,
-  },
-  auth: {
-    enabled: ${useAuth},
-  },
-};
-`,
-  );
+  if (storageProvider) {
+    envSchemaContent += `
+envSchema = envSchema.extend({
+  STORAGE_PROVIDER: z.enum(['s3', 'r2', 'backblaze', 'minio']),
+  STORAGE_ACCESS_KEY: z.string().min(1),
+  STORAGE_SECRET_KEY: z.string().min(1),
+  STORAGE_BUCKET: z.string().min(1),
+  STORAGE_REGION: z.string().optional(),
+  STORAGE_ENDPOINT: z.string().optional(),
+});`;
+  }
 
-  await writeFile(path.join(projectPath, 'drizzle.config.ts'), buildDrizzleConfig(databaseMode));
-  await writeFile(path.join(projectPath, 'package.json'), buildPackageJson(projectName, databaseMode, useAuth));
+  envSchemaContent += `\n\nexport const env = envSchema.parse(process.env);\n`;
+
+  await writeFile(path.join(projectPath, 'src/lib/env.ts'), envSchemaContent);
+
+  await writeFile(path.join(projectPath, 'betterbase.config.ts'), buildBetterbaseConfig(projectName, provider));
+  await writeFile(path.join(projectPath, 'drizzle.config.ts'), buildDrizzleConfig(provider));
+  await writeFile(path.join(projectPath, 'package.json'), buildPackageJson(projectName, provider, useAuth));
 
   await writeFile(
     path.join(projectPath, 'tsconfig.json'),
@@ -432,32 +894,27 @@ export const env = envSchema.parse(process.env);
 `,
   );
 
-  await writeFile(
-    path.join(projectPath, '.env.example'),
-    `DATABASE_URL=
-DB_PATH=local.db
-TURSO_AUTH_TOKEN=
-NODE_ENV=development
-PORT=3000
-`,
-  );
-
-  await writeFile(
-    path.join(projectPath, '.gitignore'),
-    `node_modules
+  let gitignoreContent = `node_modules
 bun.lockb
 .env
 .env.*
 !.env.example
 local.db
-`,
-  );
+drizzle
+`;
 
-  await writeFile(path.join(projectPath, 'README.md'), buildReadme(projectName));
-  await writeFile(path.join(projectPath, 'src/db/schema.ts'), await buildSchema(databaseMode));
-  await writeFile(path.join(projectPath, 'src/db/index.ts'), buildDbIndex(databaseMode));
+  if (storageProvider) {
+    gitignoreContent += `\n# Storage uploads
+uploads/
+`;
+  }
 
-  await writeFile(path.join(projectPath, 'src/db/migrate.ts'), buildMigrateScript(databaseMode));
+  await writeFile(path.join(projectPath, '.gitignore'), gitignoreContent);
+
+  await writeFile(path.join(projectPath, 'README.md'), buildReadme(projectName, provider, useAuth, !!storageProvider));
+  await writeFile(path.join(projectPath, 'src/db/schema.ts'), await buildSchema(provider));
+  await writeFile(path.join(projectPath, 'src/db/index.ts'), buildDbIndex(provider));
+  await writeFile(path.join(projectPath, 'src/db/migrate.ts'), buildMigrateScript(provider));
 
   await writeFile(
     path.join(projectPath, 'src/routes/health.ts'),
@@ -469,7 +926,7 @@ export const healthRoute = new Hono();
 
 healthRoute.get('/', async (c) => {
   try {
-    await db.${databaseMode === 'local' ? 'run' : 'execute'}(sql\`select 1\`);
+    await db.execute(sql\`select 1\`);
 
     return c.json({
       status: 'healthy',
@@ -536,9 +993,6 @@ const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 const DEFAULT_OFFSET = 0;
 
-// Intentionally permissive: undefined, non-integer, or negative inputs fall back to caller defaults
-// (DEFAULT_LIMIT / DEFAULT_OFFSET with MAX_LIMIT clamping applied by caller). If strict validation
-// is needed, callers should parse with Zod and return 400 instead of using this helper.
 function parseNonNegativeInt(value: string | undefined, fallback: number): number {
   if (!value || value.trim() === '') {
     return fallback;
@@ -621,15 +1075,24 @@ usersRoute.post('/', async (c) => {
 
   await writeFile(path.join(projectPath, 'src/routes/index.ts'), buildRoutesIndex());
 
-  await writeFile(
-    path.join(projectPath, 'src/index.ts'),
-    `import { Hono } from 'hono';
+  // Build index.ts with optional auth mounting
+  let indexContent = `import { Hono } from 'hono';
 import { env } from './lib/env';
 import { registerRoutes } from './routes';
 
 const app = new Hono();
 registerRoutes(app);
+`;
 
+  if (useAuth) {
+    indexContent += `
+import { auth } from './auth';
+
+app.on(["POST", "GET"], "/api/auth/**", (c) => auth.handler(c.req.raw));
+`;
+  }
+
+  indexContent += `
 const server = Bun.serve({
   fetch: app.fetch,
   port: env.PORT,
@@ -650,8 +1113,9 @@ process.on('SIGINT', () => {
 });
 
 export default server;
-`,
-  );
+`;
+
+  await writeFile(path.join(projectPath, 'src/index.ts'), indexContent);
 
   await writeFile(
     path.join(projectPath, 'src/lib/utils.ts'),
@@ -661,8 +1125,36 @@ export default server;
 `,
   );
 
+  // Write auth files if enabled
   if (useAuth) {
-    await writeFile(path.join(projectPath, 'src/middleware/auth.ts'), buildAuthMiddleware());
+    const dialect = getAuthDialect(provider);
+    
+    // Warn about PlanetScale RLS
+    if (provider === 'planetscale') {
+      logger.warn('Note: PlanetScale does not support Row Level Security (RLS).');
+    }
+
+    await mkdir(path.join(projectPath, 'src/auth'), { recursive: true });
+
+    await writeFile(path.join(projectPath, 'src/auth/index.ts'), buildAuthInstanceFile(dialect));
+    await writeFile(path.join(projectPath, 'src/auth/types.ts'), buildAuthTypesFile());
+    await writeFile(path.join(projectPath, 'src/middleware/auth.ts'), buildAuthMiddlewareFile());
+
+    // Write auth schema based on dialect
+    if (dialect === 'sqlite') {
+      await writeFile(path.join(projectPath, 'src/db/auth-schema.ts'), buildAuthSchemaSqlite());
+    } else if (dialect === 'mysql') {
+      await writeFile(path.join(projectPath, 'src/db/auth-schema.ts'), buildAuthSchemaMysql());
+    } else {
+      await writeFile(path.join(projectPath, 'src/db/auth-schema.ts'), buildAuthSchemaPg());
+    }
+
+    // Update db/index.ts to export auth-schema
+    const dbIndexContent = buildDbIndex(provider);
+    await writeFile(
+      path.join(projectPath, 'src/db/index.ts'),
+      dbIndexContent + '\nexport * from "./auth-schema";\n'
+    );
   }
 }
 
@@ -682,27 +1174,138 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
   const projectName = projectNameSchema.parse(projectNameInput);
   const projectPath = path.resolve(process.cwd(), projectName);
 
-  const databaseMode = databaseModeSchema.parse(
-    await prompts.select({
-      message: 'Choose your database setup:',
-      initial: 'local',
-      choices: [
-        { name: 'Local SQLite (development only)', value: 'local' },
-        { name: 'Connect to Neon (serverless Postgres)', value: 'neon' },
-        { name: 'Connect to Turso (edge SQLite)', value: 'turso' },
+  // PROMPT 1 — Database Provider Selection
+  const selectedProvider = await prompts.select({
+    message: 'Which database provider?',
+    options: [
+      { value: 'local', label: 'Local SQLite (default, no config needed)' },
+      { value: 'neon', label: 'Neon (Serverless Postgres)' },
+      { value: 'turso', label: 'Turso (SQLite Edge)' },
+      { value: 'planetscale', label: 'PlanetScale (MySQL-compatible)' },
+      { value: 'supabase', label: 'Supabase (Postgres DB only)' },
+      { value: 'postgres', label: 'Raw Postgres' },
+      { value: 'managed', label: 'Managed by BetterBase (coming soon)' },
+    ],
+    default: 'local',
+  });
+
+  let provider: ProviderType = selectedProvider as ProviderType;
+
+  if (selectedProvider === 'managed') {
+    logger.warn('Managed database is coming soon. Defaulting to Local SQLite for now.');
+    provider = 'local';
+  }
+
+  // Collect credentials based on provider
+  const dbCredentials: DatabaseCredentials = {};
+
+  if (provider !== 'local') {
+    if (provider === 'turso') {
+      const tursoUrl = await prompts.text({
+        message: 'TURSO_URL (libsql connection string)',
+        initial: 'libsql://your-database.turso.io',
+      });
+      const tursoToken = await prompts.text({
+        message: 'TURSO_AUTH_TOKEN',
+        initial: '',
+      });
+      dbCredentials.TURSO_URL = tursoUrl;
+      dbCredentials.TURSO_AUTH_TOKEN = tursoToken;
+    } else {
+      const dbUrlLabel = provider === 'supabase' 
+        ? 'Direct connection string from Supabase project settings'
+        : 'DATABASE_URL';
+      const databaseUrl = await prompts.text({
+        message: dbUrlLabel,
+        initial: '',
+      });
+      dbCredentials.DATABASE_URL = databaseUrl;
+    }
+  }
+
+  // PROMPT 4 — BetterAuth Setup Option
+  const authEnabled = await prompts.confirm({
+    message: 'Set up authentication now?',
+    default: true,
+  });
+
+  let storageEnabled = false;
+  let storageProvider: StorageProvider | null = null;
+  const storageCredentials: StorageCredentials = {};
+
+  if (authEnabled) {
+    logger.info('You can run bb auth setup later to add authentication.');
+  } else {
+    logger.info('You can run bb auth setup later to add authentication.');
+  }
+
+  // PROMPT 5 — Storage Setup Option
+  storageEnabled = await prompts.confirm({
+    message: 'Set up S3-compatible storage now?',
+    default: false,
+  });
+
+  if (storageEnabled) {
+    const selectedStorageProvider = await prompts.select({
+      message: 'Which storage provider?',
+      options: [
+        { value: 's3', label: 'AWS S3' },
+        { value: 'r2', label: 'Cloudflare R2' },
+        { value: 'backblaze', label: 'Backblaze B2' },
+        { value: 'minio', label: 'MinIO (self-hosted)' },
       ],
-    }),
-  );
+      default: 's3',
+    });
 
-  const useAuth = await prompts.confirm({
-    message: 'Add authentication? (yes/no)',
-    initial: true,
+    storageProvider = selectedStorageProvider as StorageProvider;
+
+    // Collect storage credentials based on provider
+    const accessKey = await prompts.text({
+      message: 'STORAGE_ACCESS_KEY',
+      initial: '',
+    });
+    const secretKey = await prompts.text({
+      message: 'STORAGE_SECRET_KEY',
+      initial: '',
+    });
+    const bucket = await prompts.text({
+      message: 'STORAGE_BUCKET',
+      initial: '',
+    });
+
+    storageCredentials.STORAGE_ACCESS_KEY = accessKey;
+    storageCredentials.STORAGE_SECRET_KEY = secretKey;
+    storageCredentials.STORAGE_BUCKET = bucket;
+
+    if (storageProvider === 's3') {
+      const region = await prompts.text({
+        message: 'STORAGE_REGION',
+        initial: 'us-east-1',
+      });
+      storageCredentials.STORAGE_REGION = region;
+    } else {
+      const endpoint = await prompts.text({
+        message: 'STORAGE_ENDPOINT (e.g., https://r2.cloudflarestorage.com)',
+        initial: '',
+      });
+      storageCredentials.STORAGE_ENDPOINT = endpoint;
+    }
+  }
+
+  // PROMPT 6 — FINAL SUMMARY AND CONFIRMATION
+  logger.info(`Creating project: ${projectName}`);
+  logger.info(`Provider: ${provider}`);
+  logger.info(`Auth: ${authEnabled ? 'BetterAuth' : 'skipped'}`);
+  logger.info(`Storage: ${storageProvider ?? 'skipped'}`);
+
+  const proceed = await prompts.confirm({
+    message: 'Proceed?',
+    default: true,
   });
 
-  const useGit = await prompts.confirm({
-    message: 'Initialize git repository? (yes/no)',
-    initial: true,
-  });
+  if (!proceed) {
+    process.exit(0);
+  }
 
   let createdProjectDir = false;
 
@@ -721,10 +1324,15 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
 
   try {
     logger.info('Creating project files...');
-    await writeProjectFiles(projectPath, projectName, databaseMode, useAuth);
+    await writeProjectFiles(projectPath, projectName, provider, authEnabled, storageProvider, dbCredentials, storageCredentials);
 
     logger.info('Installing dependencies with bun...');
     await installDependencies(projectPath);
+
+    const useGit = await prompts.confirm({
+      message: 'Initialize git repository?',
+      default: true,
+    });
 
     if (useGit) {
       logger.info('Initializing git repository...');
@@ -734,8 +1342,9 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
     logger.success('BetterBase project created successfully!');
     console.log('');
     console.log(`📁 Project: ${projectName}`);
-    console.log(`🗄️  Database: ${getDatabaseLabel(databaseMode)}`);
-    console.log(`🔐 Auth: ${useAuth ? 'Enabled' : 'Disabled'}`);
+    console.log(`🗄️  Database: ${getDatabaseLabel(provider)}`);
+    console.log(`🔐 Auth: ${authEnabled ? 'Enabled' : 'Disabled'}`);
+    console.log(`📦 Storage: ${storageProvider ?? 'Disabled'}`);
     console.log('');
     console.log('Next steps:');
     console.log(`  cd ${projectName}`);

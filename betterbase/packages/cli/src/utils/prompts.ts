@@ -8,25 +8,32 @@ const textOptionsSchema = z.object({
 
 const confirmOptionsSchema = z.object({
   message: z.string().min(1),
+  // Support both 'default' (new API) and 'initial' (backward compatibility)
+  default: z.boolean().optional(),
   initial: z.boolean().optional(),
 });
 
 const selectOptionSchema = z.object({
-  name: z.string().min(1),
   value: z.string().min(1),
+  label: z.string().min(1),
 });
 
 const selectOptionsSchema = z
   .object({
     message: z.string().min(1),
-    choices: z.array(selectOptionSchema).min(1),
+    options: z.array(selectOptionSchema).min(1),
+    // Support both 'default' (new API) and 'initial' (backward compatibility)
+    default: z.string().optional(),
     initial: z.string().optional(),
   })
   .refine(
-    ({ choices, initial }) => initial === undefined || choices.some((choice) => choice.value === initial),
+    ({ options, default: defaultValue, initial }) => {
+      const effectiveDefault = defaultValue ?? initial;
+      return effectiveDefault === undefined || options.some((option) => option.value === effectiveDefault);
+    },
     {
-      message: 'Select initial value must match one of the choice values.',
-      path: ['initial'],
+      message: 'Select default value must match one of the option values.',
+      path: ['default'],
     },
   );
 
@@ -51,15 +58,18 @@ export async function text(options: { message: string; initial?: string }): Prom
 /**
  * Prompt for yes/no confirmation.
  */
-export async function confirm(options: { message: string; initial?: boolean }): Promise<boolean> {
+export async function confirm(options: { message: string; default?: boolean; initial?: boolean }): Promise<boolean> {
   const parsed = confirmOptionsSchema.parse(options);
+
+  // Support both 'default' (new API) and 'initial' (backward compatibility)
+  const effectiveDefault = parsed.default ?? parsed.initial;
 
   const response = await inquirer.prompt<{ value: boolean }>([
     {
       type: 'confirm',
       name: 'value',
       message: parsed.message,
-      default: parsed.initial,
+      default: effectiveDefault,
     },
   ]);
 
@@ -70,17 +80,20 @@ export async function confirm(options: { message: string; initial?: boolean }): 
  * Prompt for selecting one option.
  */
 export async function select(
-  options: { message: string; choices: Array<{ name: string; value: string }>; initial?: string },
+  options: { message: string; options: Array<{ value: string; label: string }>; default?: string; initial?: string },
 ): Promise<string> {
   const parsed = selectOptionsSchema.parse(options);
+
+  // Support both 'default' (new API) and 'initial' (backward compatibility)
+  const effectiveDefault = parsed.default ?? parsed.initial;
 
   const response = await inquirer.prompt<{ value: string }>([
     {
       type: 'list',
       name: 'value',
       message: parsed.message,
-      choices: parsed.choices,
-      default: parsed.initial,
+      choices: parsed.options.map((opt) => ({ name: opt.label, value: opt.value })),
+      default: effectiveDefault,
     },
   ]);
 
