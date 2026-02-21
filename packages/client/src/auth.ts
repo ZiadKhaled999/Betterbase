@@ -1,6 +1,9 @@
-import { createAuthClient, type AuthClient as BetterAuthClient } from "better-auth/client"
+import { createAuthClient } from "better-auth/client"
 import type { BetterBaseConfig, BetterBaseResponse } from "./types"
 import { AuthError, NetworkError } from "./errors"
+
+// Infer the auth client type from createAuthClient return type
+type BetterAuthClient = ReturnType<typeof createAuthClient>
 
 export interface BetterBaseClientConfig extends BetterBaseConfig {}
 
@@ -81,20 +84,42 @@ export class AuthClient {
       if (result.error) {
         return {
           data: null,
-          error: new AuthError(result.error.message, result.error),
+          error: new AuthError(result.error.message ?? "Sign up failed", result.error),
         }
       }
 
       if (result.data) {
-        const sessionToken = result.data.session?.token
+        // better-auth returns token directly on the data object
+        const sessionToken = result.data.token
         if (sessionToken) {
           this.storage?.setItem("betterbase_session", sessionToken)
           this.onAuthStateChange?.(sessionToken)
         }
       }
 
+      // Map better-auth response to our expected format
+      const session: Session = {
+        id: "",
+        expiresAt: new Date(),
+        token: result.data?.token ?? "",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ipAddress: null,
+        userAgent: null,
+        userId: result.data?.user?.id ?? "",
+      }
+      const user: User = {
+        id: result.data?.user?.id ?? "",
+        name: result.data?.user?.name ?? "",
+        email: result.data?.user?.email ?? "",
+        emailVerified: result.data?.user?.emailVerified ?? false,
+        image: result.data?.user?.image ?? null,
+        createdAt: result.data?.user?.createdAt ?? new Date(),
+        updatedAt: result.data?.user?.updatedAt ?? new Date(),
+      }
+
       return {
-        data: result.data as { user: User; session: Session },
+        data: { user, session },
         error: null,
       }
     } catch (error) {
@@ -121,20 +146,42 @@ export class AuthClient {
       if (result.error) {
         return {
           data: null,
-          error: new AuthError(result.error.message, result.error),
+          error: new AuthError(result.error.message ?? "Sign in failed", result.error),
         }
       }
 
       if (result.data) {
-        const sessionToken = result.data.session?.token
+        // better-auth returns token directly on the data object
+        const sessionToken = result.data.token
         if (sessionToken) {
           this.storage?.setItem("betterbase_session", sessionToken)
           this.onAuthStateChange?.(sessionToken)
         }
       }
 
+      // Map better-auth response to our expected format
+      const session: Session = {
+        id: "",
+        expiresAt: new Date(),
+        token: result.data?.token ?? "",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ipAddress: null,
+        userAgent: null,
+        userId: result.data?.user?.id ?? "",
+      }
+      const user: User = {
+        id: result.data?.user?.id ?? "",
+        name: result.data?.user?.name ?? "",
+        email: result.data?.user?.email ?? "",
+        emailVerified: result.data?.user?.emailVerified ?? false,
+        image: result.data?.user?.image ?? null,
+        createdAt: result.data?.user?.createdAt ?? new Date(),
+        updatedAt: result.data?.user?.updatedAt ?? new Date(),
+      }
+
       return {
-        data: result.data as { user: User; session: Session },
+        data: { user, session },
         error: null,
       }
     } catch (error) {
@@ -158,7 +205,7 @@ export class AuthClient {
       if (result.error) {
         return {
           data: null,
-          error: new AuthError(result.error.message, result.error),
+          error: new AuthError(result.error.message ?? "Sign out failed", result.error),
         }
       }
 
@@ -183,7 +230,7 @@ export class AuthClient {
       if (result.error) {
         return {
           data: null,
-          error: new AuthError(result.error.message, result.error),
+          error: new AuthError(result.error.message ?? "Failed to get session", result.error),
         }
       }
 
@@ -191,8 +238,29 @@ export class AuthClient {
         return { data: null, error: null }
       }
 
+      // Map better-auth response to our expected format
+      const session: Session = {
+        id: result.data.session?.id ?? "",
+        expiresAt: result.data.session?.expiresAt ?? new Date(),
+        token: result.data.session?.token ?? "",
+        createdAt: result.data.session?.createdAt ?? new Date(),
+        updatedAt: result.data.session?.updatedAt ?? new Date(),
+        ipAddress: result.data.session?.ipAddress ?? null,
+        userAgent: result.data.session?.userAgent ?? null,
+        userId: result.data.session?.userId ?? "",
+      }
+      const user: User = {
+        id: result.data.user?.id ?? "",
+        name: result.data.user?.name ?? "",
+        email: result.data.user?.email ?? "",
+        emailVerified: result.data.user?.emailVerified ?? false,
+        image: result.data.user?.image ?? null,
+        createdAt: result.data.user?.createdAt ?? new Date(),
+        updatedAt: result.data.user?.updatedAt ?? new Date(),
+      }
+
       return {
-        data: result.data as { user: User; session: Session },
+        data: { user, session },
         error: null,
       }
     } catch (error) {
@@ -236,7 +304,35 @@ export const authClient = {
   ): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
     const client = createAuthClient({ baseURL: url })
     const result = await client.signUp.email({ email, password, name })
-    return result as { user: User; session: Session } | null as any
+    
+    if (result.error) {
+      return {
+        data: null,
+        error: new AuthError(result.error.message ?? "Sign up failed", result.error),
+      }
+    }
+    
+    const session: Session = {
+      id: "",
+      expiresAt: new Date(),
+      token: result.data?.token ?? "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ipAddress: null,
+      userAgent: null,
+      userId: result.data?.user?.id ?? "",
+    }
+    const user: User = {
+      id: result.data?.user?.id ?? "",
+      name: result.data?.user?.name ?? "",
+      email: result.data?.user?.email ?? "",
+      emailVerified: result.data?.user?.emailVerified ?? false,
+      image: result.data?.user?.image ?? null,
+      createdAt: result.data?.user?.createdAt ?? new Date(),
+      updatedAt: result.data?.user?.updatedAt ?? new Date(),
+    }
+    
+    return { data: { user, session }, error: null }
   },
 
   signIn: async (
@@ -246,13 +342,49 @@ export const authClient = {
   ): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
     const client = createAuthClient({ baseURL: url })
     const result = await client.signIn.email({ email, password })
-    return result as { user: User; session: Session } | null as any
+    
+    if (result.error) {
+      return {
+        data: null,
+        error: new AuthError(result.error.message ?? "Sign in failed", result.error),
+      }
+    }
+    
+    const session: Session = {
+      id: "",
+      expiresAt: new Date(),
+      token: result.data?.token ?? "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ipAddress: null,
+      userAgent: null,
+      userId: result.data?.user?.id ?? "",
+    }
+    const user: User = {
+      id: result.data?.user?.id ?? "",
+      name: result.data?.user?.name ?? "",
+      email: result.data?.user?.email ?? "",
+      emailVerified: result.data?.user?.emailVerified ?? false,
+      image: result.data?.user?.image ?? null,
+      createdAt: result.data?.user?.createdAt ?? new Date(),
+      updatedAt: result.data?.user?.updatedAt ?? new Date(),
+    }
+    
+    return { data: { user, session }, error: null }
   },
 
   signOut: async (url: string): Promise<BetterBaseResponse<null>> => {
     const client = createAuthClient({ baseURL: url })
     const result = await client.signOut()
-    return result as any
+    
+    if (result.error) {
+      return {
+        data: null,
+        error: new AuthError(result.error.message ?? "Sign out failed", result.error),
+      }
+    }
+    
+    return { data: null, error: null }
   },
 
   getSession: async (
@@ -260,6 +392,38 @@ export const authClient = {
   ): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
     const client = createAuthClient({ baseURL: url })
     const result = await client.getSession()
-    return result as { user: User; session: Session } | null as any
+    
+    if (result.error) {
+      return {
+        data: null,
+        error: new AuthError(result.error.message ?? "Failed to get session", result.error),
+      }
+    }
+    
+    if (!result.data) {
+      return { data: null, error: null }
+    }
+    
+    const session: Session = {
+      id: result.data.session?.id ?? "",
+      expiresAt: result.data.session?.expiresAt ?? new Date(),
+      token: result.data.session?.token ?? "",
+      createdAt: result.data.session?.createdAt ?? new Date(),
+      updatedAt: result.data.session?.updatedAt ?? new Date(),
+      ipAddress: result.data.session?.ipAddress ?? null,
+      userAgent: result.data.session?.userAgent ?? null,
+      userId: result.data.session?.userId ?? "",
+    }
+    const user: User = {
+      id: result.data.user?.id ?? "",
+      name: result.data.user?.name ?? "",
+      email: result.data.user?.email ?? "",
+      emailVerified: result.data.user?.emailVerified ?? false,
+      image: result.data.user?.image ?? null,
+      createdAt: result.data.user?.createdAt ?? new Date(),
+      updatedAt: result.data.user?.updatedAt ?? new Date(),
+    }
+    
+    return { data: { user, session }, error: null }
   },
 }

@@ -12,4 +12,4 @@ export type {
   RealtimeSubscription,
 } from './types';
 
-export type { User, Session, AuthCredentials } from './auth';
+export type { User, Session } from './auth';
