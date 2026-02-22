@@ -21,6 +21,9 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.995.0",
     "@aws-sdk/s3-request-presigner": "^3.995.0",
+    "@pothos/core": "^4.0.0",
+    "graphql": "^16.9.0",
+    "graphql-yoga": "^5.10.0",
     "hono": "^4.6.10",
     "drizzle-orm": "^0.44.5",
     "zod": "^3.23.8",
