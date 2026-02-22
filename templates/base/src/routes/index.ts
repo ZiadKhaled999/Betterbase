@@ -5,6 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import { env } from '../lib/env';
 import { healthRoute } from './health';
 import { usersRoute } from './users';
+import { storageRouter } from './storage';
 
 export function registerRoutes(app: Hono): void {
   app.use('*', cors());
@@ -26,4 +27,5 @@ export function registerRoutes(app: Hono): void {
 
   app.route('/health', healthRoute);
   app.route('/api/users', usersRoute);
+  app.route('/api/storage', storageRouter);
 }

@@ -4,6 +4,7 @@ import { runDevCommand } from './commands/dev';
 import { runMigrateCommand } from './commands/migrate';
 import { runAuthSetupCommand } from './commands/auth';
 import { runGenerateCrudCommand } from './commands/generate';
+import { runStorageInitCommand, runStorageBucketsListCommand, runStorageUploadCommand } from './commands/storage';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
@@ -110,6 +111,48 @@ export function createProgram(): Command {
     .description('Apply migrations to production (requires confirmation)')
     .action(async () => {
       await runMigrateCommand({ production: true });
+    });
+
+
+  const storage = program.command('storage').description('Storage management');
+
+  storage
+    .command('init')
+    .description('Initialize storage with a provider')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runStorageInitCommand(projectRoot);
+    });
+
+  storage
+    .command('list')
+    .description('List objects in storage bucket')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runStorageBucketsListCommand(projectRoot);
+    });
+
+  storage
+    .command('buckets')
+    .description('List objects in storage bucket (alias for list)')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runStorageBucketsListCommand(projectRoot);
+    });
+
+  storage
+    .command('upload')
+    .description('Upload a file to storage')
+    .argument('<file>', 'file path to upload')
+    .option('-b, --bucket <name>', 'bucket name')
+    .option('-p, --path <path>', 'remote path')
+    .option('-r, --root <path>', 'project root directory', process.cwd())
+    .action(async (file: string, options: { bucket?: string; path?: string; root?: string }) => {
+      await runStorageUploadCommand(file, {
+        bucket: options.bucket,
+        path: options.path,
+        projectRoot: options.root,
+      });
     });
 
   return program;
