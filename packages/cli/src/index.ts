@@ -5,6 +5,7 @@ import { runMigrateCommand } from './commands/migrate';
 import { runAuthSetupCommand } from './commands/auth';
 import { runGenerateCrudCommand } from './commands/generate';
 import { runStorageInitCommand, runStorageBucketsListCommand, runStorageUploadCommand } from './commands/storage';
+import { runRlsCommand } from './commands/rls';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
@@ -153,6 +154,37 @@ export function createProgram(): Command {
         path: options.path,
         projectRoot: options.root,
       });
+    });
+
+
+  const rls = program.command('rls').description('Row Level Security policy management');
+
+  rls
+    .command('create')
+    .description('Create a new RLS policy file for a table')
+    .argument('<table>', 'table name')
+    .action(async (table: string) => {
+      await runRlsCommand(['create', table]);
+    });
+
+  rls
+    .command('list')
+    .description('List all RLS policy files')
+    .action(async () => {
+      await runRlsCommand(['list']);
+    });
+
+  rls
+    .command('disable')
+    .description('Show how to disable RLS for a table')
+    .argument('<table>', 'table name')
+    .action(async (table: string) => {
+      await runRlsCommand(['disable', table]);
+    });
+
+  rls
+    .action(async () => {
+      await runRlsCommand([]);
     });
 
   return program;
