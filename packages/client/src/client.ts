@@ -3,6 +3,7 @@ import type { BetterBaseConfig } from './types';
 import { QueryBuilder, type QueryBuilderOptions } from './query-builder';
 import { AuthClient } from './auth';
 import { RealtimeClient } from './realtime';
+import { Storage } from './storage';
 
 const BetterBaseConfigSchema = z.object({
   url: z.string().url(),
@@ -19,13 +20,14 @@ const BetterBaseConfigSchema = z.object({
 export class BetterBaseClient {
   private headers: Record<string, string>;
   private fetchImpl: typeof fetch;
-  private url: string;
+  private _url: string;
   public auth: AuthClient;
   public realtime: RealtimeClient;
+  public storage: Storage;
 
   constructor(config: BetterBaseConfig) {
     const parsed = BetterBaseConfigSchema.parse(config);
-    this.url = parsed.url.replace(/\/$/, '');
+    this._url = parsed.url.replace(/\/$/, '');
     this.headers = {
       'Content-Type': 'application/json',
       ...(parsed.key ? { 'X-BetterBase-Key': parsed.key } : {}),
@@ -33,7 +35,7 @@ export class BetterBaseClient {
     this.fetchImpl = (parsed.fetch ?? fetch) as typeof fetch;
 
     this.auth = new AuthClient(
-      this.url,
+      this._url,
       this.headers,
       (token) => {
         if (token) {
@@ -47,7 +49,8 @@ export class BetterBaseClient {
       parsed.storage ?? undefined
     );
 
-    this.realtime = new RealtimeClient(this.url, this.auth.getToken());
+    this.realtime = new RealtimeClient(this._url, this.auth.getToken());
+    this.storage = new Storage(this);
 
     const token = this.auth.getToken();
     if (token) {
@@ -55,8 +58,36 @@ export class BetterBaseClient {
     }
   }
 
+  /**
+   * Get the base URL for API requests.
+   */
+  getUrl(): string {
+    return this._url;
+  }
+
+  /**
+   * Get the fetch implementation used by the client.
+   */
+  getFetch(): typeof fetch {
+    return this.fetchImpl;
+  }
+
+  /**
+   * Internal fetch method for making authenticated API requests.
+   */
+  async fetch(url: string, options: RequestInit = {}): Promise<Response> {
+    const response = await this.fetchImpl(url, {
+      ...options,
+      headers: {
+        ...this.headers,
+        ...options.headers,
+      },
+    });
+    return response;
+  }
+
   from<T = unknown>(table: string, options?: QueryBuilderOptions): QueryBuilder<T> {
-    return new QueryBuilder<T>(this.url, table, this.headers, this.fetchImpl, options);
+    return new QueryBuilder<T>(this._url, table, this.headers, this.fetchImpl, options);
   }
 }
 
