@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { DEFAULT_DB_PATH } from '../constants';
 import * as logger from '../utils/logger';
 import * as prompts from '../utils/prompts';
+import { runGenerateGraphqlCommand } from './graphql';
 
 const migrateOptionsSchema = z.object({
   preview: z.boolean().optional(),
@@ -434,4 +435,14 @@ export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Prom
 
   logger.info('drizzle-kit push completed; changes applied.');
   logger.success('Migration complete!');
+  
+  // Regenerate GraphQL schema after migration
+  // Use the directory where the migration was run (current working directory)
+  logger.info('Regenerating GraphQL schema...');
+  try {
+    const projectRoot = process.cwd();
+    await runGenerateGraphqlCommand(projectRoot);
+  } catch (err) {
+    logger.warn(`Failed to regenerate GraphQL: ${(err as Error).message}`);
+  }
 }

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { SchemaScanner, type TableInfo } from '../utils/schema-scanner';
 import * as logger from '../utils/logger';
+import { runGenerateGraphqlCommand } from './graphql';
 
 function toSingular(name: string): string {
   const lower = name.toLowerCase();
@@ -366,4 +367,12 @@ export async function runGenerateCrudCommand(projectRoot: string, tableName: str
   logger.info(`POST   /api/${tableName}`);
   logger.info(`PATCH  /api/${tableName}/:id`);
   logger.info(`DELETE /api/${tableName}/:id`);
+  
+  // Regenerate GraphQL schema after CRUD generation
+  logger.info('Regenerating GraphQL schema...');
+  try {
+    await runGenerateGraphqlCommand(resolvedRoot);
+  } catch (err) {
+    logger.warn(`Failed to regenerate GraphQL: ${(err as Error).message}`);
+  }
 }

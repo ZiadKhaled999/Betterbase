@@ -4,6 +4,7 @@ import { env } from './lib/env';
 import { realtime } from './lib/realtime';
 import { registerRoutes } from './routes';
 import { auth } from './auth';
+import config from '../betterbase.config';
 
 const app = new Hono();
 
@@ -39,6 +40,25 @@ registerRoutes(app);
 app.on(["POST", "GET"], "/api/auth/**", (c) => {
   return auth.handler(c.req.raw)
 });
+
+// Mount GraphQL API if enabled
+const graphqlEnabled = config.graphql?.enabled ?? true;
+if (graphqlEnabled) {
+  // Dynamic import to handle case where graphql route doesn't exist yet
+  try {
+    // Using require for dynamic loading of potentially non-existent module
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const graphql = require('./routes/graphql');
+    const graphqlRoute = graphql.graphqlRoute as ReturnType<typeof import('hono').Hono.prototype.route>;
+    app.route('/', graphqlRoute);
+    console.log('🛸 GraphQL API enabled at /api/graphql');
+  } catch {
+    // GraphQL route not generated yet
+    if (env.NODE_ENV === 'development') {
+      console.log('ℹ️  Run "bb graphql generate" to enable GraphQL API');
+    }
+  }
+}
 
 const server = Bun.serve({
   fetch: app.fetch,

@@ -10,6 +10,8 @@ export interface BetterBaseContext {
   tables: Record<string, TableInfo>
   routes: Record<string, RouteInfo[]>
   rls_policies: Record<string, RLSPolicyConfig>
+  graphql_schema: string | null
+  graphql_endpoint: string
   ai_prompt: string
 }
 
@@ -135,12 +137,25 @@ export class ContextGenerator {
     // Scan for RLS policies
     rlsPolicies = scanRLSPolicies(projectRoot)
 
+    // Read GraphQL schema if it exists
+    let graphqlSchema: string | null = null
+    const graphqlSchemaPath = path.join(projectRoot, 'src/lib/graphql/schema.graphql')
+    if (existsSync(graphqlSchemaPath)) {
+      try {
+        graphqlSchema = readFileSync(graphqlSchemaPath, 'utf-8')
+      } catch {
+        logger.warn('Failed to read GraphQL schema file')
+      }
+    }
+
     const context: BetterBaseContext = {
       version: '1.0.0',
       generated_at: new Date().toISOString(),
       tables,
       routes,
       rls_policies: rlsPolicies,
+      graphql_schema: graphqlSchema,
+      graphql_endpoint: '/api/graphql',
       ai_prompt: this.generateAIPrompt(tables, routes, rlsPolicies),
     }
 

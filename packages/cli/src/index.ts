@@ -5,6 +5,7 @@ import { runMigrateCommand } from './commands/migrate';
 import { runAuthSetupCommand } from './commands/auth';
 import { runGenerateCrudCommand } from './commands/generate';
 import { runStorageInitCommand, runStorageBucketsListCommand, runStorageUploadCommand } from './commands/storage';
+import { runGenerateGraphqlCommand, runGraphqlPlaygroundCommand } from './commands/graphql';
 import { runRlsCommand } from './commands/rls';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
@@ -91,6 +92,23 @@ export function createProgram(): Command {
     .argument('[project-root]', 'project root directory', process.cwd())
     .action(async (tableName: string, projectRoot: string) => {
       await runGenerateCrudCommand(projectRoot, tableName);
+    });
+
+  const graphql = program.command('graphql').description('GraphQL API management');
+
+  graphql
+    .command('generate')
+    .description('Generate GraphQL schema from database schema')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runGenerateGraphqlCommand(projectRoot);
+    });
+
+  graphql
+    .command('playground')
+    .description('Open GraphQL Playground in browser')
+    .action(async () => {
+      await runGraphqlPlaygroundCommand();
     });
 
   const migrate = program.command('migrate').description('Generate and apply migrations for local development');
