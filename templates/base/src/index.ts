@@ -1,12 +1,17 @@
 import { Hono } from 'hono';
 import { upgradeWebSocket, websocket } from 'hono/bun';
+import { EventEmitter } from 'events';
 import { env } from './lib/env';
 import { realtime } from './lib/realtime';
 import { registerRoutes } from './routes';
 import { auth } from './auth';
 import config from '../betterbase.config';
+import { initializeWebhooks } from '@betterbase/core/webhooks';
 
 const app = new Hono();
+
+// Create an event emitter for database changes (used by webhooks)
+const dbEventEmitter = new EventEmitter();
 
 app.get(
   '/ws',
@@ -60,6 +65,17 @@ if (graphqlEnabled) {
   }
 }
 
+// Initialize webhooks (Phase 13)
+initializeWebhooks(config, dbEventEmitter);
+
+// Webhook logs API endpoint (for CLI access)
+app.get('/api/webhooks/:id/logs', async (c) => {
+  const webhookId = c.req.param('id');
+  // In a full implementation, this would fetch logs from the dispatcher
+  // For now, return a placeholder
+  return c.json({ logs: [], message: 'Logs not available via API in v1' });
+});
+
 const server = Bun.serve({
   fetch: app.fetch,
   websocket,
@@ -80,4 +96,4 @@ process.on('SIGINT', () => {
   server.stop();
 });
 
-export { app, server };
+export { app, server, dbEventEmitter };

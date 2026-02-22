@@ -7,6 +7,7 @@ import { runGenerateCrudCommand } from './commands/generate';
 import { runStorageInitCommand, runStorageBucketsListCommand, runStorageUploadCommand } from './commands/storage';
 import { runGenerateGraphqlCommand, runGraphqlPlaygroundCommand } from './commands/graphql';
 import { runRlsCommand } from './commands/rls';
+import { runWebhookCommand } from './commands/webhook';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
@@ -203,6 +204,47 @@ export function createProgram(): Command {
   rls
     .action(async () => {
       await runRlsCommand([]);
+    });
+
+  const webhook = program.command('webhook').description('Webhook management');
+
+  webhook
+    .command('create')
+    .description('Create a new webhook')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runWebhookCommand(['create'], projectRoot);
+    });
+
+  webhook
+    .command('list')
+    .description('List all configured webhooks')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runWebhookCommand(['list'], projectRoot);
+    });
+
+  webhook
+    .command('test')
+    .description('Test a webhook by sending a synthetic payload')
+    .argument('<webhook-id>', 'webhook ID to test')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (webhookId: string, projectRoot: string) => {
+      await runWebhookCommand(['test', webhookId], projectRoot);
+    });
+
+  webhook
+    .command('logs')
+    .description('Show delivery logs for a webhook')
+    .argument('<webhook-id>', 'webhook ID')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (webhookId: string, projectRoot: string) => {
+      await runWebhookCommand(['logs', webhookId], projectRoot);
+    });
+
+  webhook
+    .action(async () => {
+      await runWebhookCommand([], process.cwd());
     });
 
   return program;

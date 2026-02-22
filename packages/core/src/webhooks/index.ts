@@ -1,3 +1,15 @@
-// [stub] This module is implemented in Phase 13.1.
-// Do not implement here — wait for the Phase prompt.
-export {}
+// Webhook types and interfaces
+export type { WebhookConfig, WebhookPayload } from './types'
+export type { WebhookDeliveryLog } from './dispatcher'
+
+// HMAC signing utilities
+export { signPayload, verifySignature } from './signer'
+
+// Webhook dispatcher
+export { WebhookDispatcher } from './dispatcher'
+
+// Integration with realtime layer
+export { connectToRealtime } from './integrator'
+
+// Startup initialization
+export { initializeWebhooks } from './startup'

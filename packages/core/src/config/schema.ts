@@ -36,8 +36,14 @@ export const BetterBaseConfigSchema = z.object({
     id: z.string(),
     table: z.string(),
     events: z.array(z.enum(['INSERT', 'UPDATE', 'DELETE'])),
-    url: z.string(),
-    secret: z.string(),
+    url: z.string().refine(
+      (val) => val.startsWith('process.env.'),
+      { message: 'URL must be an environment variable reference (e.g., process.env.WEBHOOK_URL)' }
+    ),
+    secret: z.string().refine(
+      (val) => val.startsWith('process.env.'),
+      { message: 'Secret must be an environment variable reference (e.g., process.env.WEBHOOK_SECRET)' }
+    ),
     enabled: z.boolean().default(true),
   })).optional(),
   graphql: z.object({
