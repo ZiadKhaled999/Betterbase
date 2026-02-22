@@ -8,6 +8,7 @@ import { runStorageInitCommand, runStorageBucketsListCommand, runStorageUploadCo
 import { runGenerateGraphqlCommand, runGraphqlPlaygroundCommand } from './commands/graphql';
 import { runRlsCommand } from './commands/rls';
 import { runWebhookCommand } from './commands/webhook';
+import { runFunctionCommand } from './commands/function';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
@@ -245,6 +246,63 @@ export function createProgram(): Command {
   webhook
     .action(async () => {
       await runWebhookCommand([], process.cwd());
+    });
+
+  const fn = program.command('function').description('Edge function management');
+
+  fn
+    .command('create')
+    .description('Create a new edge function')
+    .argument('<name>', 'function name')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runFunctionCommand(['create', name], projectRoot);
+    });
+
+  fn
+    .command('dev')
+    .description('Run function locally with hot reload')
+    .argument('<name>', 'function name')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runFunctionCommand(['dev', name], projectRoot);
+    });
+
+  fn
+    .command('build')
+    .description('Bundle function for deployment')
+    .argument('<name>', 'function name')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runFunctionCommand(['build', name], projectRoot);
+    });
+
+  fn
+    .command('list')
+    .description('List all functions')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runFunctionCommand(['list'], projectRoot);
+    });
+
+  fn
+    .command('logs')
+    .description('Show function logs')
+    .argument('<name>', 'function name')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runFunctionCommand(['logs', name], projectRoot);
+    });
+
+  fn
+    .command('deploy')
+    .description('Deploy function to cloud')
+    .argument('<name>', 'function name')
+    .option('--sync-env', 'Sync environment variables from .env')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, options: { syncEnv?: boolean; projectRoot?: string }) => {
+      const projectRoot = options.projectRoot ?? process.cwd();
+      await runFunctionCommand(['deploy', name, options.syncEnv ? '--sync-env' : ''], projectRoot);
     });
 
   return program;
