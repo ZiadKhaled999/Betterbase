@@ -3,6 +3,7 @@ export { QueryBuilder } from './query-builder';
 export { AuthClient } from './auth';
 export { RealtimeClient } from './realtime';
 export { Storage, StorageBucketClient } from './storage';
+export { verifySignature } from '../../core/src/webhooks/signer';
 export { BetterBaseError, NetworkError, AuthError, ValidationError } from './errors';
 
 export type {
