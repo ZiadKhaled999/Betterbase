@@ -1,40 +1,40 @@
 {
-  "name": "@betterbase/core",
-  "version": "0.1.0",
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./config": "./src/config/index.ts",
-    "./providers": "./src/providers/index.ts",
-    "./rls": "./src/rls/index.ts",
-    "./storage": "./src/storage/index.ts",
-    "./webhooks": "./src/webhooks/index.ts",
-    "./graphql": "./src/graphql/index.ts",
-    "./functions": "./src/functions/index.ts",
-    "./middleware": "./src/middleware/index.ts",
-    "./migration": "./src/migration/index.ts"
-  },
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "bun build ./src/index.ts --outdir ./dist"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.995.0",
-    "@aws-sdk/s3-request-presigner": "^3.995.0",
-    "@pothos/core": "^4.0.0",
-    "graphql": "^16.9.0",
-    "graphql-yoga": "^5.10.0",
-    "hono": "^4.6.10",
-    "drizzle-orm": "^0.44.5",
-    "zod": "^3.23.8",
-    "@betterbase/shared": "workspace:*",
-    "@neondatabase/serverless": "latest",
-    "@libsql/client": "latest",
-    "@planetscale/database": "latest",
-    "postgres": "latest"
-  },
-  "devDependencies": {
-    "typescript": "^5.6.0",
-    "@types/bun": "latest"
-  }
+	"name": "@betterbase/core",
+	"version": "2.6.3",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./config": "./src/config/index.ts",
+		"./providers": "./src/providers/index.ts",
+		"./rls": "./src/rls/index.ts",
+		"./storage": "./src/storage/index.ts",
+		"./webhooks": "./src/webhooks/index.ts",
+		"./graphql": "./src/graphql/index.ts",
+		"./functions": "./src/functions/index.ts",
+		"./middleware": "./src/middleware/index.ts",
+		"./migration": "./src/migration/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"build": "bun build ./src/index.ts --outdir ./dist --target node"
+	},
+	"dependencies": {
+		"@aws-sdk/client-s3": "^3.995.0",
+		"@aws-sdk/s3-request-presigner": "^3.995.0",
+		"@pothos/core": "^4.0.0",
+		"graphql": "^16.9.0",
+		"graphql-yoga": "^5.10.0",
+		"hono": "^4.6.10",
+		"drizzle-orm": "^0.44.5",
+		"zod": "^3.23.8",
+		"@betterbase/shared": "workspace:*",
+		"@neondatabase/serverless": "latest",
+		"@libsql/client": "latest",
+		"@planetscale/database": "latest",
+		"postgres": "latest"
+	},
+	"devDependencies": {
+		"typescript": "^5.6.0",
+		"@types/bun": "latest"
+	}
 }

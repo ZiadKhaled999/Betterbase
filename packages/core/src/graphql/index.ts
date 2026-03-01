@@ -1,49 +1,49 @@
 /**
  * GraphQL Module
- * 
+ *
  * Auto-generates GraphQL schema, resolvers, and server from Drizzle ORM schema.
- * 
+ *
  * @example
  * ```typescript
- * import { 
- *   generateGraphQLSchema, 
+ * import {
+ *   generateGraphQLSchema,
  *   generateResolvers,
  *   createGraphQLServer,
- *   exportSDL 
+ *   exportSDL
  * } from '@betterbase/core/graphql';
  * ```
  */
 
 // Schema generator
-export { 
-  generateGraphQLSchema, 
-  GraphQLJSON, 
-  GraphQLDateTime,
-  type GraphQLGenerationConfig 
-} from './schema-generator';
+export {
+	generateGraphQLSchema,
+	GraphQLJSON,
+	GraphQLDateTime,
+	type GraphQLGenerationConfig,
+} from "./schema-generator";
 
 // Resolvers
-export { 
-  generateResolvers, 
-  createGraphQLContext, 
-  requireAuth,
-  type DatabaseConnection, 
-  type GraphQLContext, 
-  type GraphQLResolver, 
-  type Resolvers,
-  type ResolverGenerationConfig
-} from './resolvers';
+export {
+	generateResolvers,
+	createGraphQLContext,
+	requireAuth,
+	type DatabaseConnection,
+	type GraphQLContext,
+	type GraphQLResolver,
+	type Resolvers,
+	type ResolverGenerationConfig,
+} from "./resolvers";
 
 // Server
-export { 
-  createGraphQLServer, 
-  startGraphQLServer,
-  type GraphQLConfig 
-} from './server';
+export {
+	createGraphQLServer,
+	startGraphQLServer,
+	type GraphQLConfig,
+} from "./server";
 
 // SDL Exporter
-export { 
-  exportSDL, 
-  exportTypeSDL, 
-  saveSDL 
-} from './sdl-exporter';
+export {
+	exportSDL,
+	exportTypeSDL,
+	saveSDL,
+} from "./sdl-exporter";

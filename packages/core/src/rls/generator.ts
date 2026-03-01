@@ -5,12 +5,12 @@
  * Row Level Security policies.
  */
 
-import type { PolicyDefinition } from './types'
+import type { PolicyDefinition } from "./types";
 
 /**
  * SQL operation types supported by RLS policies
  */
-export type PolicyOperation = 'select' | 'insert' | 'update' | 'delete'
+export type PolicyOperation = "select" | "insert" | "update" | "delete";
 
 /**
  * Generates a policy name from table and operation
@@ -19,7 +19,7 @@ export type PolicyOperation = 'select' | 'insert' | 'update' | 'delete'
  * @returns The policy name
  */
 function getPolicyName(table: string, operation: PolicyOperation): string {
-  return `${table}_${operation}_policy`
+	return `${table}_${operation}_policy`;
 }
 
 /**
@@ -28,7 +28,7 @@ function getPolicyName(table: string, operation: PolicyOperation): string {
  * @returns SQL statement to enable RLS
  */
 function enableRLS(table: string): string {
-  return `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;`
+	return `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;`;
 }
 
 /**
@@ -38,49 +38,49 @@ function enableRLS(table: string): string {
  * @returns SQL statement for the policy, or null if not defined
  */
 function generatePolicyStatement(
-  policy: PolicyDefinition,
-  operation: PolicyOperation,
+	policy: PolicyDefinition,
+	operation: PolicyOperation,
 ): string | null {
-  const policyName = getPolicyName(policy.table, operation)
-  const tableName = policy.table
+	const policyName = getPolicyName(policy.table, operation);
+	const tableName = policy.table;
 
-  // Determine the USING clause
-  // Priority: explicit using > operation-specific > fallback
-  let usingClause = ''
-  if (operation === 'select' || operation === 'update' || operation === 'delete') {
-    if (policy.using) {
-      usingClause = ` USING (${policy.using})`
-    } else if (policy[operation]) {
-      usingClause = ` USING (${policy[operation]})`
-    }
-  }
+	// Determine the USING clause
+	// Priority: explicit using > operation-specific > fallback
+	let usingClause = "";
+	if (operation === "select" || operation === "update" || operation === "delete") {
+		if (policy.using) {
+			usingClause = ` USING (${policy.using})`;
+		} else if (policy[operation]) {
+			usingClause = ` USING (${policy[operation]})`;
+		}
+	}
 
-  // Determine the WITH CHECK clause
-  // Priority: explicit withCheck > operation-specific > fallback
-  let withCheckClause = ''
-  if (operation === 'insert' || operation === 'update') {
-    if (policy.withCheck) {
-      withCheckClause = ` WITH CHECK (${policy.withCheck})`
-    } else if (policy[operation]) {
-      withCheckClause = ` WITH CHECK (${policy[operation]})`
-    }
-  }
+	// Determine the WITH CHECK clause
+	// Priority: explicit withCheck > operation-specific > fallback
+	let withCheckClause = "";
+	if (operation === "insert" || operation === "update") {
+		if (policy.withCheck) {
+			withCheckClause = ` WITH CHECK (${policy.withCheck})`;
+		} else if (policy[operation]) {
+			withCheckClause = ` WITH CHECK (${policy[operation]})`;
+		}
+	}
 
-  // If no condition is defined, skip this operation
-  const hasCondition =
-    (operation === 'select' && (policy.select || policy.using)) ||
-    (operation === 'insert' && (policy.insert || policy.withCheck)) ||
-    (operation === 'update' && (policy.update || policy.using || policy.withCheck)) ||
-    (operation === 'delete' && (policy.delete || policy.using))
+	// If no condition is defined, skip this operation
+	const hasCondition =
+		(operation === "select" && (policy.select || policy.using)) ||
+		(operation === "insert" && (policy.insert || policy.withCheck)) ||
+		(operation === "update" && (policy.update || policy.using || policy.withCheck)) ||
+		(operation === "delete" && (policy.delete || policy.using));
 
-  if (!hasCondition) {
-    return null
-  }
+	if (!hasCondition) {
+		return null;
+	}
 
-  // Build the CREATE POLICY statement
-  const sql = `CREATE POLICY ${policyName} ON ${tableName} FOR ${operation.toUpperCase()}${usingClause}${withCheckClause};`
+	// Build the CREATE POLICY statement
+	const sql = `CREATE POLICY ${policyName} ON ${tableName} FOR ${operation.toUpperCase()}${usingClause}${withCheckClause};`;
 
-  return sql
+	return sql;
 }
 
 /**
@@ -107,22 +107,22 @@ function generatePolicyStatement(
  * ```
  */
 export function policyToSQL(policy: PolicyDefinition): string[] {
-  const statements: string[] = []
+	const statements: string[] = [];
 
-  // First, enable RLS on the table
-  statements.push(enableRLS(policy.table))
+	// First, enable RLS on the table
+	statements.push(enableRLS(policy.table));
 
-  // Generate policy for each operation that has a condition
-  const operations: PolicyOperation[] = ['select', 'insert', 'update', 'delete']
+	// Generate policy for each operation that has a condition
+	const operations: PolicyOperation[] = ["select", "insert", "update", "delete"];
 
-  for (const operation of operations) {
-    const statement = generatePolicyStatement(policy, operation)
-    if (statement) {
-      statements.push(statement)
-    }
-  }
+	for (const operation of operations) {
+		const statement = generatePolicyStatement(policy, operation);
+		if (statement) {
+			statements.push(statement);
+		}
+	}
 
-  return statements
+	return statements;
 }
 
 /**
@@ -142,18 +142,18 @@ export function policyToSQL(policy: PolicyDefinition): string[] {
  * ```
  */
 export function dropPolicySQL(policy: PolicyDefinition): string[] {
-  const statements: string[] = []
-  const operations: PolicyOperation[] = ['select', 'insert', 'update', 'delete']
+	const statements: string[] = [];
+	const operations: PolicyOperation[] = ["select", "insert", "update", "delete"];
 
-  for (const operation of operations) {
-    const policyName = getPolicyName(policy.table, operation)
-    statements.push(`DROP POLICY IF EXISTS ${policyName} ON ${policy.table};`)
-  }
+	for (const operation of operations) {
+		const policyName = getPolicyName(policy.table, operation);
+		statements.push(`DROP POLICY IF EXISTS ${policyName} ON ${policy.table};`);
+	}
 
-  // Also disable RLS on the table
-  statements.push(`ALTER TABLE ${policy.table} DISABLE ROW LEVEL SECURITY;`)
+	// Also disable RLS on the table
+	statements.push(`ALTER TABLE ${policy.table} DISABLE ROW LEVEL SECURITY;`);
 
-  return statements
+	return statements;
 }
 
 /**
@@ -163,8 +163,8 @@ export function dropPolicySQL(policy: PolicyDefinition): string[] {
  * @returns DROP POLICY statement
  */
 export function dropPolicyByName(table: string, operation: PolicyOperation): string {
-  const policyName = getPolicyName(table, operation)
-  return `DROP POLICY IF EXISTS ${policyName} ON ${table};`
+	const policyName = getPolicyName(table, operation);
+	return `DROP POLICY IF EXISTS ${policyName} ON ${table};`;
 }
 
 /**
@@ -173,7 +173,7 @@ export function dropPolicyByName(table: string, operation: PolicyOperation): str
  * @returns ALTER TABLE statement
  */
 export function disableRLS(table: string): string {
-  return `ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY;`
+	return `ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY;`;
 }
 
 /**
@@ -182,14 +182,14 @@ export function disableRLS(table: string): string {
  * @returns true if the policy has at least one condition
  */
 export function hasPolicyConditions(policy: PolicyDefinition): boolean {
-  return !!(
-    policy.select ||
-    policy.insert ||
-    policy.update ||
-    policy.delete ||
-    policy.using ||
-    policy.withCheck
-  )
+	return !!(
+		policy.select ||
+		policy.insert ||
+		policy.update ||
+		policy.delete ||
+		policy.using ||
+		policy.withCheck
+	);
 }
 
 /**
@@ -198,7 +198,7 @@ export function hasPolicyConditions(policy: PolicyDefinition): boolean {
  * @returns Combined array of SQL statements
  */
 export function policiesToSQL(policies: PolicyDefinition[]): string[] {
-  return policies.flatMap((policy) => policyToSQL(policy))
+	return policies.flatMap((policy) => policyToSQL(policy));
 }
 
 /**
@@ -207,5 +207,5 @@ export function policiesToSQL(policies: PolicyDefinition[]): string[] {
  * @returns Combined array of DROP statements
  */
 export function dropPoliciesSQL(policies: PolicyDefinition[]): string[] {
-  return policies.flatMap((policy) => dropPolicySQL(policy))
+	return policies.flatMap((policy) => dropPolicySQL(policy));
 }

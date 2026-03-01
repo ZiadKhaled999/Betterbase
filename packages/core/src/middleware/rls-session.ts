@@ -8,26 +8,26 @@
  * The actual database session variable is set when executing queries.
  */
 
-import type { Context, Next } from 'hono'
+import type { Context, Next } from "hono";
 
 // Context key for storing the RLS user ID
-export const RLS_USER_ID_KEY = 'rls_user_id'
-export const RLS_SESSION_SET_KEY = 'rls_session_set'
+export const RLS_USER_ID_KEY = "rls_user_id";
+export const RLS_SESSION_SET_KEY = "rls_session_set";
 
 /**
  * Extended context type with RLS support
  */
 export interface RLSCContext {
-  user?: {
-    id: string
-    email?: string
-    name?: string
-    image?: string
-  }
-  session?: unknown
-  // RLS-specific context
-  rlsUserId?: string
-  rlsSessionSet?: boolean
+	user?: {
+		id: string;
+		email?: string;
+		name?: string;
+		image?: string;
+	};
+	session?: unknown;
+	// RLS-specific context
+	rlsUserId?: string;
+	rlsSessionSet?: boolean;
 }
 
 /**
@@ -35,20 +35,20 @@ export interface RLSCContext {
  * Falls back to checking for user.id directly
  */
 function getUserIdFromContext(c: Context): string | undefined {
-  // First check if auth middleware already set user
-  const user = c.get('user') as { id: string } | undefined
+	// First check if auth middleware already set user
+	const user = c.get("user") as { id: string } | undefined;
 
-  if (user?.id) {
-    return user.id
-  }
+	if (user?.id) {
+		return user.id;
+	}
 
-  // Check if RLS user ID was already set (idempotent)
-  const existingRlsUserId = c.get(RLS_USER_ID_KEY) as string | undefined
-  if (existingRlsUserId) {
-    return existingRlsUserId
-  }
+	// Check if RLS user ID was already set (idempotent)
+	const existingRlsUserId = c.get(RLS_USER_ID_KEY) as string | undefined;
+	if (existingRlsUserId) {
+		return existingRlsUserId;
+	}
 
-  return undefined
+	return undefined;
 }
 
 /**
@@ -79,30 +79,30 @@ function getUserIdFromContext(c: Context): string | undefined {
  * ```
  */
 export function rlsSession() {
-  return async (c: Context, next: Next): Promise<void> => {
-    // Check if RLS session is already set (idempotent)
-    const alreadySet = c.get(RLS_SESSION_SET_KEY) as boolean | undefined
+	return async (c: Context, next: Next): Promise<void> => {
+		// Check if RLS session is already set (idempotent)
+		const alreadySet = c.get(RLS_SESSION_SET_KEY) as boolean | undefined;
 
-    if (alreadySet) {
-      // RLS already set up for this request, skip
-      await next()
-      return
-    }
+		if (alreadySet) {
+			// RLS already set up for this request, skip
+			await next();
+			return;
+		}
 
-    // Get user ID from context
-    const userId = getUserIdFromContext(c)
+		// Get user ID from context
+		const userId = getUserIdFromContext(c);
 
-    if (userId) {
-      // Set RLS user ID in context
-      c.set(RLS_USER_ID_KEY, userId)
-      c.set(RLS_SESSION_SET_KEY, true)
+		if (userId) {
+			// Set RLS user ID in context
+			c.set(RLS_USER_ID_KEY, userId);
+			c.set(RLS_SESSION_SET_KEY, true);
 
-      // Note: The RLS context is available via c.get(RLS_USER_ID_KEY) and c.get(RLS_SESSION_SET_KEY)
-      // This approach avoids unsafe type assertions and works with Hono's context system
-    }
+			// Note: The RLS context is available via c.get(RLS_USER_ID_KEY) and c.get(RLS_SESSION_SET_KEY)
+			// This approach avoids unsafe type assertions and works with Hono's context system
+		}
 
-    await next()
-  }
+		await next();
+	};
 }
 
 /**
@@ -111,7 +111,7 @@ export function rlsSession() {
  * @returns The user ID if set, undefined otherwise
  */
 export function getRLSUserId(c: Context): string | undefined {
-  return c.get(RLS_USER_ID_KEY) as string | undefined
+	return c.get(RLS_USER_ID_KEY) as string | undefined;
 }
 
 /**
@@ -120,7 +120,7 @@ export function getRLSUserId(c: Context): string | undefined {
  * @returns true if RLS session is active
  */
 export function isRLSSessionSet(c: Context): boolean {
-  return (c.get(RLS_SESSION_SET_KEY) as boolean) ?? false
+	return (c.get(RLS_SESSION_SET_KEY) as boolean) ?? false;
 }
 
 /**
@@ -136,19 +136,16 @@ export function isRLSSessionSet(c: Context): boolean {
  * ```
  */
 export function requireRLS() {
-  return async (c: Context, next: Next): Promise<void> => {
-    const userId = getUserIdFromContext(c)
+	return async (c: Context, next: Next): Promise<void> => {
+		const userId = getUserIdFromContext(c);
 
-    if (!userId) {
-      await c.json(
-        { data: null, error: 'RLS requires authentication' },
-        401,
-      )
-      return
-    }
+		if (!userId) {
+			await c.json({ data: null, error: "RLS requires authentication" }, 401);
+			return;
+		}
 
-    await next()
-  }
+		await next();
+	};
 }
 
 /**
@@ -162,10 +159,10 @@ export function requireRLS() {
  * ```
  */
 export function clearRLS() {
-  return async (c: Context, next: Next): Promise<void> => {
-    c.set(RLS_USER_ID_KEY, undefined)
-    c.set(RLS_SESSION_SET_KEY, false)
+	return async (c: Context, next: Next): Promise<void> => {
+		c.set(RLS_USER_ID_KEY, undefined);
+		c.set(RLS_SESSION_SET_KEY, false);
 
-    await next()
-  }
+		await next();
+	};
 }

@@ -6,30 +6,33 @@
  * a default PolicyDefinition.
  */
 
-import { access, readdir, readFile } from 'node:fs/promises'
-import path from 'node:path'
+import { access, readFile, readdir } from "node:fs/promises";
+import path from "node:path";
 
-import type { PolicyDefinition } from './types'
-import { isPolicyDefinition } from './types'
+import type { PolicyDefinition } from "./types";
+import { isPolicyDefinition } from "./types";
 
-const POLICY_FILE_PATTERN = /\.policy\.ts$/
+const POLICY_FILE_PATTERN = /\.policy\.ts$/;
 
 /**
  * Error thrown when scanning or loading policies fails
  */
 export class PolicyScanError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
-    super(message)
-    this.name = 'PolicyScanError'
-  }
+	constructor(
+		message: string,
+		public readonly cause?: unknown,
+	) {
+		super(message);
+		this.name = "PolicyScanError";
+	}
 }
 
 /**
  * Result of scanning for policies
  */
 export interface ScanResult {
-  policies: PolicyDefinition[]
-  errors: PolicyScanError[]
+	policies: PolicyDefinition[];
+	errors: PolicyScanError[];
 }
 
 /**
@@ -38,7 +41,7 @@ export interface ScanResult {
  * @returns true if the file matches the policy pattern
  */
 function isPolicyFile(filename: string): boolean {
-  return POLICY_FILE_PATTERN.test(filename)
+	return POLICY_FILE_PATTERN.test(filename);
 }
 
 /**
@@ -47,7 +50,7 @@ function isPolicyFile(filename: string): boolean {
  * @returns The table name (e.g., "users")
  */
 function extractTableName(filename: string): string {
-  return filename.replace(POLICY_FILE_PATTERN, '')
+	return filename.replace(POLICY_FILE_PATTERN, "");
 }
 
 /**
@@ -56,29 +59,29 @@ function extractTableName(filename: string): string {
  * @returns Array of policy file paths
  */
 async function findPolicyFiles(dir: string): Promise<string[]> {
-  const policyFiles: string[] = []
+	const policyFiles: string[] = [];
 
-  try {
-    const entries = await readdir(dir, { withFileTypes: true })
+	try {
+		const entries = await readdir(dir, { withFileTypes: true });
 
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name)
+		for (const entry of entries) {
+			const fullPath = path.join(dir, entry.name);
 
-      if (entry.isDirectory()) {
-        // Recursively search subdirectories
-        const subFiles = await findPolicyFiles(fullPath)
-        policyFiles.push(...subFiles)
-      } else if (entry.isFile() && isPolicyFile(entry.name)) {
-        policyFiles.push(fullPath)
-      }
-    }
-  } catch (error) {
-    // Directory doesn't exist or is not accessible
-    // Return empty array in this case
-    console.warn(`Could not read directory: ${dir}`, error)
-  }
+			if (entry.isDirectory()) {
+				// Recursively search subdirectories
+				const subFiles = await findPolicyFiles(fullPath);
+				policyFiles.push(...subFiles);
+			} else if (entry.isFile() && isPolicyFile(entry.name)) {
+				policyFiles.push(fullPath);
+			}
+		}
+	} catch (error) {
+		// Directory doesn't exist or is not accessible
+		// Return empty array in this case
+		console.warn(`Could not read directory: ${dir}`, error);
+	}
 
-  return policyFiles
+	return policyFiles;
 }
 
 /**
@@ -87,56 +90,48 @@ async function findPolicyFiles(dir: string): Promise<string[]> {
  * @returns The loaded PolicyDefinition
  */
 async function loadPolicyFromFile(filePath: string): Promise<PolicyDefinition> {
-  try {
-    const content = await readFile(filePath, 'utf-8')
+	try {
+		const content = await readFile(filePath, "utf-8");
 
-    // Check if file exports a default policy
-    const hasDefaultExport = /export\s+default\s+/.test(content) ||
-                            /export\s+\{\s*default\s*\}/.test(content) ||
-                            /export\s+default\s+definePolicy/.test(content)
+		// Check if file exports a default policy
+		const hasDefaultExport =
+			/export\s+default\s+/.test(content) ||
+			/export\s+\{\s*default\s*\}/.test(content) ||
+			/export\s+default\s+definePolicy/.test(content);
 
-    if (!hasDefaultExport) {
-      throw new PolicyScanError(
-        `Policy file ${filePath} does not export a default policy`,
-      )
-    }
+		if (!hasDefaultExport) {
+			throw new PolicyScanError(`Policy file ${filePath} does not export a default policy`);
+		}
 
-    // Try dynamic import first (works in Bun or with compiled .js files)
-    // Fall back to regex parsing for .ts files in Node.js without transpilation
-    let policy: PolicyDefinition | undefined
-    try {
-      const module = await import(filePath)
-      if (module.default) {
-        policy = module.default as PolicyDefinition
-      }
-    } catch {
-      // Dynamic import failed - try regex-based fallback parsing
-      console.warn(`Dynamic import failed for ${filePath}, using regex fallback`)
-      policy = parsePolicyFromContent(content, filePath)
-    }
+		// Try dynamic import first (works in Bun or with compiled .js files)
+		// Fall back to regex parsing for .ts files in Node.js without transpilation
+		let policy: PolicyDefinition | undefined;
+		try {
+			const module = await import(filePath);
+			if (module.default) {
+				policy = module.default as PolicyDefinition;
+			}
+		} catch {
+			// Dynamic import failed - try regex-based fallback parsing
+			console.warn(`Dynamic import failed for ${filePath}, using regex fallback`);
+			policy = parsePolicyFromContent(content, filePath);
+		}
 
-    if (!policy) {
-      throw new PolicyScanError(
-        `Policy file ${filePath} does not have a default export`,
-      )
-    }
+		if (!policy) {
+			throw new PolicyScanError(`Policy file ${filePath} does not have a default export`);
+		}
 
-    if (!isPolicyDefinition(policy)) {
-      throw new PolicyScanError(
-        `Policy file ${filePath} does not export a valid PolicyDefinition`,
-      )
-    }
+		if (!isPolicyDefinition(policy)) {
+			throw new PolicyScanError(`Policy file ${filePath} does not export a valid PolicyDefinition`);
+		}
 
-    return policy
-  } catch (error) {
-    if (error instanceof PolicyScanError) {
-      throw error
-    }
-    throw new PolicyScanError(
-      `Failed to load policy from ${filePath}`,
-      error,
-    )
-  }
+		return policy;
+	} catch (error) {
+		if (error instanceof PolicyScanError) {
+			throw error;
+		}
+		throw new PolicyScanError(`Failed to load policy from ${filePath}`, error);
+	}
 }
 
 /**
@@ -147,41 +142,41 @@ async function loadPolicyFromFile(filePath: string): Promise<PolicyDefinition> {
  * @returns Parsed PolicyDefinition or undefined
  */
 function parsePolicyFromContent(content: string, filePath: string): PolicyDefinition | undefined {
-  // Extract table name from definePolicy call
-  const tableMatch = content.match(/definePolicy\s*\(\s*['"]([^'"]+)['"]/)
-  if (!tableMatch) {
-    return undefined
-  }
-  const table = tableMatch[1]
+	// Extract table name from definePolicy call
+	const tableMatch = content.match(/definePolicy\s*\(\s*['"]([^'"]+)['"]/);
+	if (!tableMatch) {
+		return undefined;
+	}
+	const table = tableMatch[1];
 
-  // Extract policy conditions using regex
-  const policy: PolicyDefinition = { table }
+	// Extract policy conditions using regex
+	const policy: PolicyDefinition = { table };
 
-  // Match select condition
-  const selectMatch = content.match(/select:\s*["']([^"']+)["']/)
-  if (selectMatch) policy.select = selectMatch[1]
+	// Match select condition
+	const selectMatch = content.match(/select:\s*["']([^"']+)["']/);
+	if (selectMatch) policy.select = selectMatch[1];
 
-  // Match insert condition
-  const insertMatch = content.match(/insert:\s*["']([^"']+)["']/)
-  if (insertMatch) policy.insert = insertMatch[1]
+	// Match insert condition
+	const insertMatch = content.match(/insert:\s*["']([^"']+)["']/);
+	if (insertMatch) policy.insert = insertMatch[1];
 
-  // Match update condition
-  const updateMatch = content.match(/update:\s*["']([^"']+)["']/)
-  if (updateMatch) policy.update = updateMatch[1]
+	// Match update condition
+	const updateMatch = content.match(/update:\s*["']([^"']+)["']/);
+	if (updateMatch) policy.update = updateMatch[1];
 
-  // Match delete condition
-  const deleteMatch = content.match(/delete:\s*["']([^"']+)["']/)
-  if (deleteMatch) policy.delete = deleteMatch[1]
+	// Match delete condition
+	const deleteMatch = content.match(/delete:\s*["']([^"']+)["']/);
+	if (deleteMatch) policy.delete = deleteMatch[1];
 
-  // Match using clause
-  const usingMatch = content.match(/using:\s*["']([^"']+)["']/)
-  if (usingMatch) policy.using = usingMatch[1]
+	// Match using clause
+	const usingMatch = content.match(/using:\s*["']([^"']+)["']/);
+	if (usingMatch) policy.using = usingMatch[1];
 
-  // Match withCheck clause
-  const withCheckMatch = content.match(/withCheck:\s*["']([^"']+)["']/)
-  if (withCheckMatch) policy.withCheck = withCheckMatch[1]
+	// Match withCheck clause
+	const withCheckMatch = content.match(/withCheck:\s*["']([^"']+)["']/);
+	if (withCheckMatch) policy.withCheck = withCheckMatch[1];
 
-  return policy
+	return policy;
 }
 
 /**
@@ -208,49 +203,46 @@ function parsePolicyFromContent(content: string, filePath: string): PolicyDefini
  * ```
  */
 export async function scanPolicies(projectRoot: string): Promise<ScanResult> {
-  const policies: PolicyDefinition[] = []
-  const errors: PolicyScanError[] = []
+	const policies: PolicyDefinition[] = [];
+	const errors: PolicyScanError[] = [];
 
-  // Check for common policy directory locations
-  const possiblePaths = [
-    path.join(projectRoot, 'src/db/policies'),
-    path.join(projectRoot, 'db/policies'),
-    path.join(projectRoot, 'policies'),
-  ]
+	// Check for common policy directory locations
+	const possiblePaths = [
+		path.join(projectRoot, "src/db/policies"),
+		path.join(projectRoot, "db/policies"),
+		path.join(projectRoot, "policies"),
+	];
 
-  for (const policiesPath of possiblePaths) {
-    try {
-      await access(policiesPath)
-    } catch {
-      // Directory doesn't exist, try next path
-      continue
-    }
+	for (const policiesPath of possiblePaths) {
+		try {
+			await access(policiesPath);
+		} catch {
+			// Directory doesn't exist, try next path
+			continue;
+		}
 
-    const policyFiles = await findPolicyFiles(policiesPath)
+		const policyFiles = await findPolicyFiles(policiesPath);
 
-    for (const filePath of policyFiles) {
-      try {
-        const policy = await loadPolicyFromFile(filePath)
-        policies.push(policy)
-      } catch (error) {
-        if (error instanceof PolicyScanError) {
-          errors.push(error)
-        } else {
-          errors.push(new PolicyScanError(
-            `Unexpected error loading ${filePath}`,
-            error,
-          ))
-        }
-      }
-    }
+		for (const filePath of policyFiles) {
+			try {
+				const policy = await loadPolicyFromFile(filePath);
+				policies.push(policy);
+			} catch (error) {
+				if (error instanceof PolicyScanError) {
+					errors.push(error);
+				} else {
+					errors.push(new PolicyScanError(`Unexpected error loading ${filePath}`, error));
+				}
+			}
+		}
 
-    // If we found policies in one location, don't check others
-    if (policies.length > 0 || errors.length > 0) {
-      break
-    }
-  }
+		// If we found policies in one location, don't check others
+		if (policies.length > 0 || errors.length > 0) {
+			break;
+		}
+	}
 
-  return { policies, errors }
+	return { policies, errors };
 }
 
 /**
@@ -260,16 +252,16 @@ export async function scanPolicies(projectRoot: string): Promise<ScanResult> {
  * @throws PolicyScanError if any policies fail to load
  */
 export async function scanPoliciesStrict(projectRoot: string): Promise<PolicyDefinition[]> {
-  const result = await scanPolicies(projectRoot)
+	const result = await scanPolicies(projectRoot);
 
-  if (result.errors.length > 0) {
-    const errorMessages = result.errors.map((e) => e.message).join('\n')
-    throw new PolicyScanError(
-      `Failed to load ${result.errors.length} policy(s):\n${errorMessages}`,
-    )
-  }
+	if (result.errors.length > 0) {
+		const errorMessages = result.errors.map((e) => e.message).join("\n");
+		throw new PolicyScanError(
+			`Failed to load ${result.errors.length} policy(s):\n${errorMessages}`,
+		);
+	}
 
-  return result.policies
+	return result.policies;
 }
 
 /**
@@ -278,23 +270,23 @@ export async function scanPoliciesStrict(projectRoot: string): Promise<PolicyDef
  * @returns Array of policy file paths
  */
 export async function listPolicyFiles(projectRoot: string): Promise<string[]> {
-  const possiblePaths = [
-    path.join(projectRoot, 'src/db/policies'),
-    path.join(projectRoot, 'db/policies'),
-    path.join(projectRoot, 'policies'),
-  ]
+	const possiblePaths = [
+		path.join(projectRoot, "src/db/policies"),
+		path.join(projectRoot, "db/policies"),
+		path.join(projectRoot, "policies"),
+	];
 
-  for (const policiesPath of possiblePaths) {
-    try {
-      await access(policiesPath)
-    } catch {
-      continue
-    }
+	for (const policiesPath of possiblePaths) {
+		try {
+			await access(policiesPath);
+		} catch {
+			continue;
+		}
 
-    return await findPolicyFiles(policiesPath)
-  }
+		return await findPolicyFiles(policiesPath);
+	}
 
-  return []
+	return [];
 }
 
 /**
@@ -303,9 +295,9 @@ export async function listPolicyFiles(projectRoot: string): Promise<string[]> {
  * @returns Array of policy file info
  */
 export interface PolicyFileInfo {
-  path: string
-  filename: string
-  table: string
+	path: string;
+	filename: string;
+	table: string;
 }
 
 /**
@@ -314,16 +306,16 @@ export interface PolicyFileInfo {
  * @returns Array of PolicyFileInfo
  */
 export async function getPolicyFileInfo(projectRoot: string): Promise<PolicyFileInfo[]> {
-  const files = await listPolicyFiles(projectRoot)
+	const files = await listPolicyFiles(projectRoot);
 
-  return files.map((filePath) => {
-    const filename = path.basename(filePath)
-    const table = extractTableName(filename)
+	return files.map((filePath) => {
+		const filename = path.basename(filePath);
+		const table = extractTableName(filename);
 
-    return {
-      path: filePath,
-      filename,
-      table,
-    }
-  })
+		return {
+			path: filePath,
+			filename,
+			table,
+		};
+	});
 }

@@ -1,429 +1,429 @@
-import { createAuthClient } from "better-auth/client"
-import type { BetterBaseConfig, BetterBaseResponse } from "./types"
-import { AuthError, NetworkError } from "./errors"
+import { createAuthClient } from "better-auth/client";
+import { AuthError, NetworkError } from "./errors";
+import type { BetterBaseConfig, BetterBaseResponse } from "./types";
 
 // Infer the auth client type from createAuthClient return type
-type BetterAuthClient = ReturnType<typeof createAuthClient>
+type BetterAuthClient = ReturnType<typeof createAuthClient>;
 
 export interface BetterBaseClientConfig extends BetterBaseConfig {}
 
 export interface User {
-  id: string
-  name: string
-  email: string
-  emailVerified: boolean
-  image: string | null
-  createdAt: Date
-  updatedAt: Date
+	id: string;
+	name: string;
+	email: string;
+	emailVerified: boolean;
+	image: string | null;
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 export interface Session {
-  id: string
-  expiresAt: Date
-  token: string
-  createdAt: Date
-  updatedAt: Date
-  ipAddress: string | null
-  userAgent: string | null
-  userId: string
+	id: string;
+	expiresAt: Date;
+	token: string;
+	createdAt: Date;
+	updatedAt: Date;
+	ipAddress: string | null;
+	userAgent: string | null;
+	userId: string;
 }
 
 interface StorageAdapter {
-  getItem(key: string): string | null
-  setItem(key: string, value: string): void
-  removeItem(key: string): void
+	getItem(key: string): string | null;
+	setItem(key: string, value: string): void;
+	removeItem(key: string): void;
 }
 
 function getStorage(): Storage | null {
-  try {
-    if (typeof globalThis === "undefined") {
-      return null
-    }
-    const storage = globalThis.localStorage
-    return storage ?? null
-  } catch {
-    return null
-  }
+	try {
+		if (typeof globalThis === "undefined") {
+			return null;
+		}
+		const storage = globalThis.localStorage;
+		return storage ?? null;
+	} catch {
+		return null;
+	}
 }
 
 export class AuthClient {
-  private authClient: BetterAuthClient
-  private storage: StorageAdapter | null
-  private onAuthStateChange?: (token: string | null) => void
-  private fetchImpl: typeof fetch
+	private authClient: BetterAuthClient;
+	private storage: StorageAdapter | null;
+	private onAuthStateChange?: (token: string | null) => void;
+	private fetchImpl: typeof fetch;
 
-  constructor(
-    private url: string,
-    private headers: Record<string, string>,
-    onAuthStateChange?: (token: string | null) => void,
-    fetchImpl: typeof fetch = fetch,
-    storage?: StorageAdapter | null
-  ) {
-    this.fetchImpl = fetchImpl
-    this.storage = storage ?? getStorage()
-    this.onAuthStateChange = onAuthStateChange
+	constructor(
+		private url: string,
+		private headers: Record<string, string>,
+		onAuthStateChange?: (token: string | null) => void,
+		fetchImpl: typeof fetch = fetch,
+		storage?: StorageAdapter | null,
+	) {
+		this.fetchImpl = fetchImpl;
+		this.storage = storage ?? getStorage();
+		this.onAuthStateChange = onAuthStateChange;
 
-    this.authClient = createAuthClient({
-      baseURL: this.url,
-      fetch: fetchImpl,
-    })
-  }
+		this.authClient = createAuthClient({
+			baseURL: this.url,
+			fetch: fetchImpl,
+		});
+	}
 
-  async signUp(
-    email: string,
-    password: string,
-    name: string
-  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
-    try {
-      const result = await this.authClient.signUp.email({
-        email,
-        password,
-        name,
-      })
+	async signUp(
+		email: string,
+		password: string,
+		name: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			const result = await this.authClient.signUp.email({
+				email,
+				password,
+				name,
+			});
 
-      if (result.error) {
-        return {
-          data: null,
-          error: new AuthError(result.error.message ?? "Sign up failed", result.error),
-        }
-      }
+			if (result.error) {
+				return {
+					data: null,
+					error: new AuthError(result.error.message ?? "Sign up failed", result.error),
+				};
+			}
 
-      if (result.data) {
-        // better-auth returns token directly on the data object
-        const sessionToken = result.data.token
-        if (sessionToken) {
-          this.storage?.setItem("betterbase_session", sessionToken)
-          this.onAuthStateChange?.(sessionToken)
-        }
-      }
+			if (result.data) {
+				// better-auth returns token directly on the data object
+				const sessionToken = result.data.token;
+				if (sessionToken) {
+					this.storage?.setItem("betterbase_session", sessionToken);
+					this.onAuthStateChange?.(sessionToken);
+				}
+			}
 
-      // Map better-auth response to our expected format
-      const session: Session = {
-        id: "",
-        expiresAt: new Date(),
-        token: result.data?.token ?? "",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        ipAddress: null,
-        userAgent: null,
-        userId: result.data?.user?.id ?? "",
-      }
-      const user: User = {
-        id: result.data?.user?.id ?? "",
-        name: result.data?.user?.name ?? "",
-        email: result.data?.user?.email ?? "",
-        emailVerified: result.data?.user?.emailVerified ?? false,
-        image: result.data?.user?.image ?? null,
-        createdAt: result.data?.user?.createdAt ?? new Date(),
-        updatedAt: result.data?.user?.updatedAt ?? new Date(),
-      }
+			// Map better-auth response to our expected format
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: result.data?.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: result.data?.user?.id ?? "",
+			};
+			const user: User = {
+				id: result.data?.user?.id ?? "",
+				name: result.data?.user?.name ?? "",
+				email: result.data?.user?.email ?? "",
+				emailVerified: result.data?.user?.emailVerified ?? false,
+				image: result.data?.user?.image ?? null,
+				createdAt: result.data?.user?.createdAt ?? new Date(),
+				updatedAt: result.data?.user?.updatedAt ?? new Date(),
+			};
 
-      return {
-        data: { user, session },
-        error: null,
-      }
-    } catch (error) {
-      return {
-        data: null,
-        error: new NetworkError(
-          error instanceof Error ? error.message : "Network request failed",
-          error
-        ),
-      }
-    }
-  }
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
 
-  async signIn(
-    email: string,
-    password: string
-  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
-    try {
-      const result = await this.authClient.signIn.email({
-        email,
-        password,
-      })
+	async signIn(
+		email: string,
+		password: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			const result = await this.authClient.signIn.email({
+				email,
+				password,
+			});
 
-      if (result.error) {
-        return {
-          data: null,
-          error: new AuthError(result.error.message ?? "Sign in failed", result.error),
-        }
-      }
+			if (result.error) {
+				return {
+					data: null,
+					error: new AuthError(result.error.message ?? "Sign in failed", result.error),
+				};
+			}
 
-      if (result.data) {
-        // better-auth returns token directly on the data object
-        const sessionToken = result.data.token
-        if (sessionToken) {
-          this.storage?.setItem("betterbase_session", sessionToken)
-          this.onAuthStateChange?.(sessionToken)
-        }
-      }
+			if (result.data) {
+				// better-auth returns token directly on the data object
+				const sessionToken = result.data.token;
+				if (sessionToken) {
+					this.storage?.setItem("betterbase_session", sessionToken);
+					this.onAuthStateChange?.(sessionToken);
+				}
+			}
 
-      // Map better-auth response to our expected format
-      const session: Session = {
-        id: "",
-        expiresAt: new Date(),
-        token: result.data?.token ?? "",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        ipAddress: null,
-        userAgent: null,
-        userId: result.data?.user?.id ?? "",
-      }
-      const user: User = {
-        id: result.data?.user?.id ?? "",
-        name: result.data?.user?.name ?? "",
-        email: result.data?.user?.email ?? "",
-        emailVerified: result.data?.user?.emailVerified ?? false,
-        image: result.data?.user?.image ?? null,
-        createdAt: result.data?.user?.createdAt ?? new Date(),
-        updatedAt: result.data?.user?.updatedAt ?? new Date(),
-      }
+			// Map better-auth response to our expected format
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: result.data?.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: result.data?.user?.id ?? "",
+			};
+			const user: User = {
+				id: result.data?.user?.id ?? "",
+				name: result.data?.user?.name ?? "",
+				email: result.data?.user?.email ?? "",
+				emailVerified: result.data?.user?.emailVerified ?? false,
+				image: result.data?.user?.image ?? null,
+				createdAt: result.data?.user?.createdAt ?? new Date(),
+				updatedAt: result.data?.user?.updatedAt ?? new Date(),
+			};
 
-      return {
-        data: { user, session },
-        error: null,
-      }
-    } catch (error) {
-      return {
-        data: null,
-        error: new NetworkError(
-          error instanceof Error ? error.message : "Network request failed",
-          error
-        ),
-      }
-    }
-  }
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
 
-  async signOut(): Promise<BetterBaseResponse<null>> {
-    try {
-      const result = await this.authClient.signOut()
+	async signOut(): Promise<BetterBaseResponse<null>> {
+		try {
+			const result = await this.authClient.signOut();
 
-      this.storage?.removeItem("betterbase_session")
-      this.onAuthStateChange?.(null)
+			this.storage?.removeItem("betterbase_session");
+			this.onAuthStateChange?.(null);
 
-      if (result.error) {
-        return {
-          data: null,
-          error: new AuthError(result.error.message ?? "Sign out failed", result.error),
-        }
-      }
+			if (result.error) {
+				return {
+					data: null,
+					error: new AuthError(result.error.message ?? "Sign out failed", result.error),
+				};
+			}
 
-      return { data: null, error: null }
-    } catch (error) {
-      this.storage?.removeItem("betterbase_session")
-      this.onAuthStateChange?.(null)
-      return {
-        data: null,
-        error: new NetworkError(
-          error instanceof Error ? error.message : "Network request failed",
-          error
-        ),
-      }
-    }
-  }
+			return { data: null, error: null };
+		} catch (error) {
+			this.storage?.removeItem("betterbase_session");
+			this.onAuthStateChange?.(null);
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
 
-  async getSession(): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
-    try {
-      const result = await this.authClient.getSession()
+	async getSession(): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			const result = await this.authClient.getSession();
 
-      if (result.error) {
-        return {
-          data: null,
-          error: new AuthError(result.error.message ?? "Failed to get session", result.error),
-        }
-      }
+			if (result.error) {
+				return {
+					data: null,
+					error: new AuthError(result.error.message ?? "Failed to get session", result.error),
+				};
+			}
 
-      if (!result.data) {
-        return { data: null, error: null }
-      }
+			if (!result.data) {
+				return { data: null, error: null };
+			}
 
-      // Map better-auth response to our expected format
-      const session: Session = {
-        id: result.data.session?.id ?? "",
-        expiresAt: result.data.session?.expiresAt ?? new Date(),
-        token: result.data.session?.token ?? "",
-        createdAt: result.data.session?.createdAt ?? new Date(),
-        updatedAt: result.data.session?.updatedAt ?? new Date(),
-        ipAddress: result.data.session?.ipAddress ?? null,
-        userAgent: result.data.session?.userAgent ?? null,
-        userId: result.data.session?.userId ?? "",
-      }
-      const user: User = {
-        id: result.data.user?.id ?? "",
-        name: result.data.user?.name ?? "",
-        email: result.data.user?.email ?? "",
-        emailVerified: result.data.user?.emailVerified ?? false,
-        image: result.data.user?.image ?? null,
-        createdAt: result.data.user?.createdAt ?? new Date(),
-        updatedAt: result.data.user?.updatedAt ?? new Date(),
-      }
+			// Map better-auth response to our expected format
+			const session: Session = {
+				id: result.data.session?.id ?? "",
+				expiresAt: result.data.session?.expiresAt ?? new Date(),
+				token: result.data.session?.token ?? "",
+				createdAt: result.data.session?.createdAt ?? new Date(),
+				updatedAt: result.data.session?.updatedAt ?? new Date(),
+				ipAddress: result.data.session?.ipAddress ?? null,
+				userAgent: result.data.session?.userAgent ?? null,
+				userId: result.data.session?.userId ?? "",
+			};
+			const user: User = {
+				id: result.data.user?.id ?? "",
+				name: result.data.user?.name ?? "",
+				email: result.data.user?.email ?? "",
+				emailVerified: result.data.user?.emailVerified ?? false,
+				image: result.data.user?.image ?? null,
+				createdAt: result.data.user?.createdAt ?? new Date(),
+				updatedAt: result.data.user?.updatedAt ?? new Date(),
+			};
 
-      return {
-        data: { user, session },
-        error: null,
-      }
-    } catch (error) {
-      return {
-        data: null,
-        error: new NetworkError(
-          error instanceof Error ? error.message : "Network request failed",
-          error
-        ),
-      }
-    }
-  }
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
 
-  getToken(): string | null {
-    return this.storage?.getItem("betterbase_session") ?? null
-  }
+	getToken(): string | null {
+		return this.storage?.getItem("betterbase_session") ?? null;
+	}
 
-  setToken(token: string | null): void {
-    if (token) {
-      this.storage?.setItem("betterbase_session", token)
-    } else {
-      this.storage?.removeItem("betterbase_session")
-    }
-    this.onAuthStateChange?.(token)
-  }
+	setToken(token: string | null): void {
+		if (token) {
+			this.storage?.setItem("betterbase_session", token);
+		} else {
+			this.storage?.removeItem("betterbase_session");
+		}
+		this.onAuthStateChange?.(token);
+	}
 }
 
 export function createAuthClientInstance(config: BetterBaseClientConfig): BetterAuthClient {
-  return createAuthClient({
-    baseURL: config.url,
-    fetch: config.fetch,
-  })
+	return createAuthClient({
+		baseURL: config.url,
+		fetch: config.fetch,
+	});
 }
 
 export const authClient = {
-  signUp: async (
-    url: string,
-    email: string,
-    password: string,
-    name: string
-  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
-    const client = createAuthClient({ baseURL: url })
-    const result = await client.signUp.email({ email, password, name })
-    
-    if (result.error) {
-      return {
-        data: null,
-        error: new AuthError(result.error.message ?? "Sign up failed", result.error),
-      }
-    }
-    
-    const session: Session = {
-      id: "",
-      expiresAt: new Date(),
-      token: result.data?.token ?? "",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      ipAddress: null,
-      userAgent: null,
-      userId: result.data?.user?.id ?? "",
-    }
-    const user: User = {
-      id: result.data?.user?.id ?? "",
-      name: result.data?.user?.name ?? "",
-      email: result.data?.user?.email ?? "",
-      emailVerified: result.data?.user?.emailVerified ?? false,
-      image: result.data?.user?.image ?? null,
-      createdAt: result.data?.user?.createdAt ?? new Date(),
-      updatedAt: result.data?.user?.updatedAt ?? new Date(),
-    }
-    
-    return { data: { user, session }, error: null }
-  },
+	signUp: async (
+		url: string,
+		email: string,
+		password: string,
+		name: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
+		const client = createAuthClient({ baseURL: url });
+		const result = await client.signUp.email({ email, password, name });
 
-  signIn: async (
-    url: string,
-    email: string,
-    password: string
-  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
-    const client = createAuthClient({ baseURL: url })
-    const result = await client.signIn.email({ email, password })
-    
-    if (result.error) {
-      return {
-        data: null,
-        error: new AuthError(result.error.message ?? "Sign in failed", result.error),
-      }
-    }
-    
-    const session: Session = {
-      id: "",
-      expiresAt: new Date(),
-      token: result.data?.token ?? "",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      ipAddress: null,
-      userAgent: null,
-      userId: result.data?.user?.id ?? "",
-    }
-    const user: User = {
-      id: result.data?.user?.id ?? "",
-      name: result.data?.user?.name ?? "",
-      email: result.data?.user?.email ?? "",
-      emailVerified: result.data?.user?.emailVerified ?? false,
-      image: result.data?.user?.image ?? null,
-      createdAt: result.data?.user?.createdAt ?? new Date(),
-      updatedAt: result.data?.user?.updatedAt ?? new Date(),
-    }
-    
-    return { data: { user, session }, error: null }
-  },
+		if (result.error) {
+			return {
+				data: null,
+				error: new AuthError(result.error.message ?? "Sign up failed", result.error),
+			};
+		}
 
-  signOut: async (url: string): Promise<BetterBaseResponse<null>> => {
-    const client = createAuthClient({ baseURL: url })
-    const result = await client.signOut()
-    
-    if (result.error) {
-      return {
-        data: null,
-        error: new AuthError(result.error.message ?? "Sign out failed", result.error),
-      }
-    }
-    
-    return { data: null, error: null }
-  },
+		const session: Session = {
+			id: "",
+			expiresAt: new Date(),
+			token: result.data?.token ?? "",
+			createdAt: new Date(),
+			updatedAt: new Date(),
+			ipAddress: null,
+			userAgent: null,
+			userId: result.data?.user?.id ?? "",
+		};
+		const user: User = {
+			id: result.data?.user?.id ?? "",
+			name: result.data?.user?.name ?? "",
+			email: result.data?.user?.email ?? "",
+			emailVerified: result.data?.user?.emailVerified ?? false,
+			image: result.data?.user?.image ?? null,
+			createdAt: result.data?.user?.createdAt ?? new Date(),
+			updatedAt: result.data?.user?.updatedAt ?? new Date(),
+		};
 
-  getSession: async (
-    url: string
-  ): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
-    const client = createAuthClient({ baseURL: url })
-    const result = await client.getSession()
-    
-    if (result.error) {
-      return {
-        data: null,
-        error: new AuthError(result.error.message ?? "Failed to get session", result.error),
-      }
-    }
-    
-    if (!result.data) {
-      return { data: null, error: null }
-    }
-    
-    const session: Session = {
-      id: result.data.session?.id ?? "",
-      expiresAt: result.data.session?.expiresAt ?? new Date(),
-      token: result.data.session?.token ?? "",
-      createdAt: result.data.session?.createdAt ?? new Date(),
-      updatedAt: result.data.session?.updatedAt ?? new Date(),
-      ipAddress: result.data.session?.ipAddress ?? null,
-      userAgent: result.data.session?.userAgent ?? null,
-      userId: result.data.session?.userId ?? "",
-    }
-    const user: User = {
-      id: result.data.user?.id ?? "",
-      name: result.data.user?.name ?? "",
-      email: result.data.user?.email ?? "",
-      emailVerified: result.data.user?.emailVerified ?? false,
-      image: result.data.user?.image ?? null,
-      createdAt: result.data.user?.createdAt ?? new Date(),
-      updatedAt: result.data.user?.updatedAt ?? new Date(),
-    }
-    
-    return { data: { user, session }, error: null }
-  },
-}
+		return { data: { user, session }, error: null };
+	},
+
+	signIn: async (
+		url: string,
+		email: string,
+		password: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
+		const client = createAuthClient({ baseURL: url });
+		const result = await client.signIn.email({ email, password });
+
+		if (result.error) {
+			return {
+				data: null,
+				error: new AuthError(result.error.message ?? "Sign in failed", result.error),
+			};
+		}
+
+		const session: Session = {
+			id: "",
+			expiresAt: new Date(),
+			token: result.data?.token ?? "",
+			createdAt: new Date(),
+			updatedAt: new Date(),
+			ipAddress: null,
+			userAgent: null,
+			userId: result.data?.user?.id ?? "",
+		};
+		const user: User = {
+			id: result.data?.user?.id ?? "",
+			name: result.data?.user?.name ?? "",
+			email: result.data?.user?.email ?? "",
+			emailVerified: result.data?.user?.emailVerified ?? false,
+			image: result.data?.user?.image ?? null,
+			createdAt: result.data?.user?.createdAt ?? new Date(),
+			updatedAt: result.data?.user?.updatedAt ?? new Date(),
+		};
+
+		return { data: { user, session }, error: null };
+	},
+
+	signOut: async (url: string): Promise<BetterBaseResponse<null>> => {
+		const client = createAuthClient({ baseURL: url });
+		const result = await client.signOut();
+
+		if (result.error) {
+			return {
+				data: null,
+				error: new AuthError(result.error.message ?? "Sign out failed", result.error),
+			};
+		}
+
+		return { data: null, error: null };
+	},
+
+	getSession: async (
+		url: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> => {
+		const client = createAuthClient({ baseURL: url });
+		const result = await client.getSession();
+
+		if (result.error) {
+			return {
+				data: null,
+				error: new AuthError(result.error.message ?? "Failed to get session", result.error),
+			};
+		}
+
+		if (!result.data) {
+			return { data: null, error: null };
+		}
+
+		const session: Session = {
+			id: result.data.session?.id ?? "",
+			expiresAt: result.data.session?.expiresAt ?? new Date(),
+			token: result.data.session?.token ?? "",
+			createdAt: result.data.session?.createdAt ?? new Date(),
+			updatedAt: result.data.session?.updatedAt ?? new Date(),
+			ipAddress: result.data.session?.ipAddress ?? null,
+			userAgent: result.data.session?.userAgent ?? null,
+			userId: result.data.session?.userId ?? "",
+		};
+		const user: User = {
+			id: result.data.user?.id ?? "",
+			name: result.data.user?.name ?? "",
+			email: result.data.user?.email ?? "",
+			emailVerified: result.data.user?.emailVerified ?? false,
+			image: result.data.user?.image ?? null,
+			createdAt: result.data.user?.createdAt ?? new Date(),
+			updatedAt: result.data.user?.updatedAt ?? new Date(),
+		};
+
+		return { data: { user, session }, error: null };
+	},
+};
