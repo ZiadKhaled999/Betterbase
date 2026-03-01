@@ -15,56 +15,52 @@
  * ```
  */
 
+import { createS3Adapter } from "./s3-adapter";
 import type {
-  StorageAdapter,
-  StorageConfig,
-  StorageProvider,
-  UploadOptions,
-  SignedUrlOptions,
-  UploadResult,
-  StorageObject,
-} from './types';
-import { createS3Adapter } from './s3-adapter';
+	SignedUrlOptions,
+	StorageAdapter,
+	StorageConfig,
+	StorageObject,
+	StorageProvider,
+	UploadOptions,
+	UploadResult,
+} from "./types";
 
 // Re-export all types for external consumers
 export type {
-  StorageAdapter,
-  StorageConfig,
-  StorageProvider,
-  UploadOptions,
-  SignedUrlOptions,
-  UploadResult,
-  StorageObject,
-} from './types';
-export { createS3Adapter } from './s3-adapter';
+	StorageAdapter,
+	StorageConfig,
+	StorageProvider,
+	UploadOptions,
+	SignedUrlOptions,
+	UploadResult,
+	StorageObject,
+} from "./types";
+export { createS3Adapter } from "./s3-adapter";
 
 /**
  * Fluent API client bound to a specific bucket.
  * All async methods return `{ data, error }` for consistency with @betterbase/client.
  */
 export interface BucketClient {
-  upload(
-    path: string,
-    body: Buffer | ReadableStream,
-    options?: UploadOptions
-  ): Promise<{ data: UploadResult | null; error: Error | null }>;
+	upload(
+		path: string,
+		body: Buffer | ReadableStream,
+		options?: UploadOptions,
+	): Promise<{ data: UploadResult | null; error: Error | null }>;
 
-  download(path: string): Promise<{ data: Buffer | null; error: Error | null }>;
+	download(path: string): Promise<{ data: Buffer | null; error: Error | null }>;
 
-  remove(
-    paths: string[]
-  ): Promise<{ data: { message: string } | null; error: Error | null }>;
+	remove(paths: string[]): Promise<{ data: { message: string } | null; error: Error | null }>;
 
-  getPublicUrl(path: string): string;
+	getPublicUrl(path: string): string;
 
-  createSignedUrl(
-    path: string,
-    options?: SignedUrlOptions
-  ): Promise<{ data: { signedUrl: string } | null; error: Error | null }>;
+	createSignedUrl(
+		path: string,
+		options?: SignedUrlOptions,
+	): Promise<{ data: { signedUrl: string } | null; error: Error | null }>;
 
-  list(
-    prefix?: string
-  ): Promise<{ data: StorageObject[] | null; error: Error | null }>;
+	list(prefix?: string): Promise<{ data: StorageObject[] | null; error: Error | null }>;
 }
 
 /**
@@ -72,7 +68,7 @@ export interface BucketClient {
  * Use `from(bucket)` to get a BucketClient scoped to a specific bucket.
  */
 export interface StorageFactory {
-  from(bucket: string): BucketClient;
+	from(bucket: string): BucketClient;
 }
 
 /**
@@ -83,14 +79,14 @@ export interface StorageFactory {
  * @throws Error if provider is 'managed' (not yet available)
  */
 export function resolveStorageAdapter(config: StorageConfig): StorageAdapter {
-  if (config.provider === 'managed') {
-    throw new Error(
-      'Managed storage provider is coming soon. Please use s3, r2, backblaze, or minio.'
-    );
-  }
+	if (config.provider === "managed") {
+		throw new Error(
+			"Managed storage provider is coming soon. Please use s3, r2, backblaze, or minio.",
+		);
+	}
 
-  // All non-managed providers use the S3-compatible adapter
-  return createS3Adapter(config);
+	// All non-managed providers use the S3-compatible adapter
+	return createS3Adapter(config);
 }
 
 /**
@@ -98,72 +94,86 @@ export function resolveStorageAdapter(config: StorageConfig): StorageAdapter {
  * and binds all operations to a specific bucket name.
  */
 class BucketClientImpl implements BucketClient {
-  constructor(
-    private readonly adapter: StorageAdapter,
-    private readonly bucket: string
-  ) {}
+	constructor(
+		private readonly adapter: StorageAdapter,
+		private readonly bucket: string,
+	) {}
 
-  async upload(
-    path: string,
-    body: Buffer | ReadableStream,
-    options?: UploadOptions
-  ): Promise<{ data: UploadResult | null; error: Error | null }> {
-    try {
-      const result = await this.adapter.upload(this.bucket, path, body, options);
-      return { data: result, error: null };
-    } catch (err) {
-      return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
-    }
-  }
+	async upload(
+		path: string,
+		body: Buffer | ReadableStream,
+		options?: UploadOptions,
+	): Promise<{ data: UploadResult | null; error: Error | null }> {
+		try {
+			const result = await this.adapter.upload(this.bucket, path, body, options);
+			return { data: result, error: null };
+		} catch (err) {
+			return {
+				data: null,
+				error: err instanceof Error ? err : new Error(String(err)),
+			};
+		}
+	}
 
-  async download(
-    path: string
-  ): Promise<{ data: Buffer | null; error: Error | null }> {
-    try {
-      const result = await this.adapter.download(this.bucket, path);
-      return { data: result, error: null };
-    } catch (err) {
-      return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
-    }
-  }
+	async download(path: string): Promise<{ data: Buffer | null; error: Error | null }> {
+		try {
+			const result = await this.adapter.download(this.bucket, path);
+			return { data: result, error: null };
+		} catch (err) {
+			return {
+				data: null,
+				error: err instanceof Error ? err : new Error(String(err)),
+			};
+		}
+	}
 
-  async remove(
-    paths: string[]
-  ): Promise<{ data: { message: string } | null; error: Error | null }> {
-    try {
-      await this.adapter.delete(this.bucket, paths);
-      return { data: { message: `Successfully removed ${paths.length} file(s)` }, error: null };
-    } catch (err) {
-      return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
-    }
-  }
+	async remove(
+		paths: string[],
+	): Promise<{ data: { message: string } | null; error: Error | null }> {
+		try {
+			await this.adapter.delete(this.bucket, paths);
+			return {
+				data: { message: `Successfully removed ${paths.length} file(s)` },
+				error: null,
+			};
+		} catch (err) {
+			return {
+				data: null,
+				error: err instanceof Error ? err : new Error(String(err)),
+			};
+		}
+	}
 
-  getPublicUrl(path: string): string {
-    return this.adapter.getPublicUrl(this.bucket, path);
-  }
+	getPublicUrl(path: string): string {
+		return this.adapter.getPublicUrl(this.bucket, path);
+	}
 
-  async createSignedUrl(
-    path: string,
-    options?: SignedUrlOptions
-  ): Promise<{ data: { signedUrl: string } | null; error: Error | null }> {
-    try {
-      const signedUrl = await this.adapter.createSignedUrl(this.bucket, path, options);
-      return { data: { signedUrl }, error: null };
-    } catch (err) {
-      return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
-    }
-  }
+	async createSignedUrl(
+		path: string,
+		options?: SignedUrlOptions,
+	): Promise<{ data: { signedUrl: string } | null; error: Error | null }> {
+		try {
+			const signedUrl = await this.adapter.createSignedUrl(this.bucket, path, options);
+			return { data: { signedUrl }, error: null };
+		} catch (err) {
+			return {
+				data: null,
+				error: err instanceof Error ? err : new Error(String(err)),
+			};
+		}
+	}
 
-  async list(
-    prefix?: string
-  ): Promise<{ data: StorageObject[] | null; error: Error | null }> {
-    try {
-      const objects = await this.adapter.listObjects(this.bucket, prefix);
-      return { data: objects, error: null };
-    } catch (err) {
-      return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
-    }
-  }
+	async list(prefix?: string): Promise<{ data: StorageObject[] | null; error: Error | null }> {
+		try {
+			const objects = await this.adapter.listObjects(this.bucket, prefix);
+			return { data: objects, error: null };
+		} catch (err) {
+			return {
+				data: null,
+				error: err instanceof Error ? err : new Error(String(err)),
+			};
+		}
+	}
 }
 
 /**
@@ -171,17 +181,17 @@ class BucketClientImpl implements BucketClient {
  * Wraps a StorageAdapter and provides fluent bucket access via `from()`.
  */
 export class Storage implements StorageFactory {
-  constructor(private readonly adapter: StorageAdapter) {}
+	constructor(private readonly adapter: StorageAdapter) {}
 
-  /**
-   * Get a BucketClient scoped to the specified bucket.
-   *
-   * @param bucket - The bucket name to scope operations to
-   * @returns A BucketClient bound to the given bucket
-   */
-  from(bucket: string): BucketClient {
-    return new BucketClientImpl(this.adapter, bucket);
-  }
+	/**
+	 * Get a BucketClient scoped to the specified bucket.
+	 *
+	 * @param bucket - The bucket name to scope operations to
+	 * @returns A BucketClient bound to the given bucket
+	 */
+	from(bucket: string): BucketClient {
+		return new BucketClientImpl(this.adapter, bucket);
+	}
 }
 
 /**
@@ -209,10 +219,10 @@ export class Storage implements StorageFactory {
  * ```
  */
 export function createStorage(config: StorageConfig | null | undefined): StorageFactory | null {
-  if (!config) {
-    return null;
-  }
+	if (!config) {
+		return null;
+	}
 
-  const adapter = resolveStorageAdapter(config);
-  return new Storage(adapter);
+	const adapter = resolveStorageAdapter(config);
+	return new Storage(adapter);
 }

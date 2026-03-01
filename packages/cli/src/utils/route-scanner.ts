@@ -1,171 +1,190 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import path from 'node:path';
-import * as ts from 'typescript';
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+import * as ts from "typescript";
 
 export interface RouteInfo {
-  method: string;
-  path: string;
-  requiresAuth: boolean;
-  inputSchema?: string;
-  outputSchema?: string;
+	method: string;
+	path: string;
+	requiresAuth: boolean;
+	inputSchema?: string;
+	outputSchema?: string;
 }
 
 function getStringLiteral(node: ts.Node | undefined): string {
-  if (!node) return '';
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    return node.text;
-  }
-  return node.getText();
+	if (!node) return "";
+	if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+		return node.text;
+	}
+	return node.getText();
 }
 
 function isAuthLikeName(value: string): boolean {
-  return /\bauth\b/i.test(value) || /^auth/i.test(value) || /^(authMiddleware|requireAuth)$/i.test(value);
+	return (
+		/\bauth\b/i.test(value) || /^auth/i.test(value) || /^(authMiddleware|requireAuth)$/i.test(value)
+	);
 }
 
-const httpMethods = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head']);
+const httpMethods = new Set(["get", "post", "put", "patch", "delete", "options", "head"]);
 
 function collectTsFiles(dir: string): string[] {
-  const files: string[] = [];
+	const files: string[] = [];
 
-  const walk = (current: string): void => {
-    let entries: Array<{ isDirectory: () => boolean; isFile: () => boolean; name: string }>;
-    try {
-      const rawEntries = readdirSync(current, { withFileTypes: true });
-      entries = rawEntries.map(e => ({
-        isDirectory: () => e.isDirectory(),
-        isFile: () => e.isFile(),
-        name: e.name.toString()
-      }));
-    } catch {
-      return;
-    }
+	const walk = (current: string): void => {
+		let entries: Array<{
+			isDirectory: () => boolean;
+			isFile: () => boolean;
+			name: string;
+		}>;
+		try {
+			const rawEntries = readdirSync(current, { withFileTypes: true });
+			entries = rawEntries.map((e) => ({
+				isDirectory: () => e.isDirectory(),
+				isFile: () => e.isFile(),
+				name: e.name.toString(),
+			}));
+		} catch {
+			return;
+		}
 
-    for (const entry of entries) {
-      const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(fullPath);
-        continue;
-      }
+		for (const entry of entries) {
+			const fullPath = path.join(current, entry.name);
+			if (entry.isDirectory()) {
+				walk(fullPath);
+				continue;
+			}
 
-      if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
-        files.push(fullPath);
-      }
-    }
-  };
+			if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts")) {
+				files.push(fullPath);
+			}
+		}
+	};
 
-  walk(dir);
-  return files;
+	walk(dir);
+	return files;
 }
 
 export class RouteScanner {
-  scan(routesDir: string): Record<string, RouteInfo[]> {
-    const files = collectTsFiles(routesDir);
-    const routes: Record<string, RouteInfo[]> = {};
+	scan(routesDir: string): Record<string, RouteInfo[]> {
+		const files = collectTsFiles(routesDir);
+		const routes: Record<string, RouteInfo[]> = {};
 
-    for (const file of files) {
-      const fileRoutes = this.scanFile(file);
-      for (const [routePath, entries] of Object.entries(fileRoutes)) {
-        routes[routePath] = [...(routes[routePath] ?? []), ...entries];
-      }
-    }
+		for (const file of files) {
+			const fileRoutes = this.scanFile(file);
+			for (const [routePath, entries] of Object.entries(fileRoutes)) {
+				routes[routePath] = [...(routes[routePath] ?? []), ...entries];
+			}
+		}
 
-    return routes;
-  }
+		return routes;
+	}
 
-  private scanFile(filePath: string): Record<string, RouteInfo[]> {
-    const sourceCode = readFileSync(filePath, 'utf-8');
-    const sourceFile = ts.createSourceFile(filePath, sourceCode, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+	private scanFile(filePath: string): Record<string, RouteInfo[]> {
+		const sourceCode = readFileSync(filePath, "utf-8");
+		const sourceFile = ts.createSourceFile(
+			filePath,
+			sourceCode,
+			ts.ScriptTarget.Latest,
+			true,
+			ts.ScriptKind.TS,
+		);
 
-    const routes: Record<string, RouteInfo[]> = {};
-    const authIdentifiers = new Set<string>();
+		const routes: Record<string, RouteInfo[]> = {};
+		const authIdentifiers = new Set<string>();
 
-    const isAuthMiddlewareExpression = (expr: ts.Expression): boolean => {
-      if (ts.isIdentifier(expr)) {
-        return authIdentifiers.has(expr.text) || isAuthLikeName(expr.text);
-      }
+		const isAuthMiddlewareExpression = (expr: ts.Expression): boolean => {
+			if (ts.isIdentifier(expr)) {
+				return authIdentifiers.has(expr.text) || isAuthLikeName(expr.text);
+			}
 
-      if (ts.isPropertyAccessExpression(expr)) {
-        const text = expr.getText(sourceFile);
-        return isAuthLikeName(text);
-      }
+			if (ts.isPropertyAccessExpression(expr)) {
+				const text = expr.getText(sourceFile);
+				return isAuthLikeName(text);
+			}
 
-      return false;
-    };
+			return false;
+		};
 
-    const collectAuthIdentifiers = (node: ts.Node): void => {
-      if (!ts.isVariableStatement(node)) return;
+		const collectAuthIdentifiers = (node: ts.Node): void => {
+			if (!ts.isVariableStatement(node)) return;
 
-      for (const declaration of node.declarationList.declarations) {
-        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
-        const initializer = declaration.initializer;
-        if (ts.isCallExpression(initializer) && ts.isIdentifier(initializer.expression)) {
-          if (initializer.expression.text === 'createMiddleware' || initializer.expression.text === 'requireAuth') {
-            authIdentifiers.add(declaration.name.text);
-          }
-        }
+			for (const declaration of node.declarationList.declarations) {
+				if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+				const initializer = declaration.initializer;
+				if (ts.isCallExpression(initializer) && ts.isIdentifier(initializer.expression)) {
+					if (
+						initializer.expression.text === "createMiddleware" ||
+						initializer.expression.text === "requireAuth"
+					) {
+						authIdentifiers.add(declaration.name.text);
+					}
+				}
 
-        if (isAuthLikeName(declaration.name.text)) {
-          authIdentifiers.add(declaration.name.text);
-        }
-      }
-    };
+				if (isAuthLikeName(declaration.name.text)) {
+					authIdentifiers.add(declaration.name.text);
+				}
+			}
+		};
 
-    ts.forEachChild(sourceFile, collectAuthIdentifiers);
+		ts.forEachChild(sourceFile, collectAuthIdentifiers);
 
-    const visit = (node: ts.Node): void => {
-      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-        const method = node.expression.name.text.toLowerCase();
+		const visit = (node: ts.Node): void => {
+			if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+				const method = node.expression.name.text.toLowerCase();
 
-        if (httpMethods.has(method)) {
-          const [pathArg, ...handlerArgs] = node.arguments;
-          const routePath = getStringLiteral(pathArg);
+				if (httpMethods.has(method)) {
+					const [pathArg, ...handlerArgs] = node.arguments;
+					const routePath = getStringLiteral(pathArg);
 
-          let requiresAuth = false;
-          for (const arg of handlerArgs) {
-            if (isAuthMiddlewareExpression(arg)) {
-              requiresAuth = true;
-              break;
-            }
-          }
+					let requiresAuth = false;
+					for (const arg of handlerArgs) {
+						if (isAuthMiddlewareExpression(arg)) {
+							requiresAuth = true;
+							break;
+						}
+					}
 
-          const route: RouteInfo = {
-            method: method.toUpperCase(),
-            path: routePath,
-            requiresAuth,
-            inputSchema: this.findSchemaUsage(sourceFile, handlerArgs, 'input'),
-            outputSchema: this.findSchemaUsage(sourceFile, handlerArgs, 'output'),
-          };
+					const route: RouteInfo = {
+						method: method.toUpperCase(),
+						path: routePath,
+						requiresAuth,
+						inputSchema: this.findSchemaUsage(sourceFile, handlerArgs, "input"),
+						outputSchema: this.findSchemaUsage(sourceFile, handlerArgs, "output"),
+					};
 
-          if (!routes[routePath]) {
-            routes[routePath] = [];
-          }
+					if (!routes[routePath]) {
+						routes[routePath] = [];
+					}
 
-          routes[routePath].push(route);
-        }
-      }
+					routes[routePath].push(route);
+				}
+			}
 
-      ts.forEachChild(node, visit);
-    };
+			ts.forEachChild(node, visit);
+		};
 
-    visit(sourceFile);
-    return routes;
-  }
+		visit(sourceFile);
+		return routes;
+	}
 
-  private findSchemaUsage(sourceFile: ts.SourceFile, args: readonly ts.Expression[], mode: 'input' | 'output'): string | undefined {
-    const text = args.map((arg) => arg.getText(sourceFile)).join('\n');
+	private findSchemaUsage(
+		sourceFile: ts.SourceFile,
+		args: readonly ts.Expression[],
+		mode: "input" | "output",
+	): string | undefined {
+		const text = args.map((arg) => arg.getText(sourceFile)).join("\n");
 
-    if (mode === 'input') {
-      const parseMatch = text.match(/([A-Za-z0-9_]+Schema)\.(safeParse|parse)\(/);
-      if (parseMatch) return parseMatch[1];
-      const middlewareMatch = text.match(/parseBody\(([^,]+),/);
-      if (middlewareMatch) return middlewareMatch[1].trim();
-    }
+		if (mode === "input") {
+			const parseMatch = text.match(/([A-Za-z0-9_]+Schema)\.(safeParse|parse)\(/);
+			if (parseMatch) return parseMatch[1];
+			const middlewareMatch = text.match(/parseBody\(([^,]+),/);
+			if (middlewareMatch) return middlewareMatch[1].trim();
+		}
 
-    if (mode === 'output') {
-      const outputMatch = text.match(/([A-Za-z0-9_]+Schema)\.(parse|safeParse)\([^)]*c\.json/);
-      if (outputMatch) return outputMatch[1];
-    }
+		if (mode === "output") {
+			const outputMatch = text.match(/([A-Za-z0-9_]+Schema)\.(parse|safeParse)\([^)]*c\.json/);
+			if (outputMatch) return outputMatch[1];
+		}
 
-    return undefined;
-  }
+		return undefined;
+	}
 }

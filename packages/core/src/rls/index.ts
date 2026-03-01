@@ -25,54 +25,52 @@
 
 // Types
 export type {
-  PolicyDefinition,
-  PolicyConfig,
-} from './types'
+	PolicyDefinition,
+	PolicyConfig,
+} from "./types";
 
 export {
-  definePolicy,
-  isPolicyDefinition,
-  mergePolicies,
-} from './types'
+	definePolicy,
+	isPolicyDefinition,
+	mergePolicies,
+} from "./types";
 
 // Generator
-export type {
-  PolicyOperation,
-} from './generator'
+export type { PolicyOperation } from "./generator";
 
 export {
-  policyToSQL,
-  dropPolicySQL,
-  dropPolicyByName,
-  disableRLS,
-  hasPolicyConditions,
-  policiesToSQL,
-  dropPoliciesSQL,
-} from './generator'
+	policyToSQL,
+	dropPolicySQL,
+	dropPolicyByName,
+	disableRLS,
+	hasPolicyConditions,
+	policiesToSQL,
+	dropPoliciesSQL,
+} from "./generator";
 
 // Scanner
 export type {
-  ScanResult,
-  PolicyFileInfo,
-} from './scanner'
+	ScanResult,
+	PolicyFileInfo,
+} from "./scanner";
 
 export {
-  scanPolicies,
-  scanPoliciesStrict,
-  listPolicyFiles,
-  getPolicyFileInfo,
-  PolicyScanError,
-} from './scanner'
+	scanPolicies,
+	scanPoliciesStrict,
+	listPolicyFiles,
+	getPolicyFileInfo,
+	PolicyScanError,
+} from "./scanner";
 
 // Auth Bridge
 export {
-  generateAuthFunction,
-  generateAuthFunctionWithSetting,
-  dropAuthFunction,
-  setCurrentUserId,
-  clearCurrentUserId,
-  generateIsAuthenticatedCheck,
-  dropIsAuthenticatedCheck,
-  generateAllAuthFunctions,
-  dropAllAuthFunctions,
-} from './auth-bridge'
+	generateAuthFunction,
+	generateAuthFunctionWithSetting,
+	dropAuthFunction,
+	setCurrentUserId,
+	clearCurrentUserId,
+	generateIsAuthenticatedCheck,
+	dropIsAuthenticatedCheck,
+	generateAllAuthFunctions,
+	dropAllAuthFunctions,
+} from "./auth-bridge";

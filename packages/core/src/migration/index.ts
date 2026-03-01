@@ -4,20 +4,16 @@
  * Handles database migrations including schema changes and RLS policies.
  */
 
-import type { DatabaseConnection, ProviderAdapter } from '../providers/types'
-import { scanPolicies } from '../rls/scanner'
-import {
-  applyPolicies,
-  applyAuthFunction,
-  applyRLSMigration,
-} from './rls-migrator'
+import type { DatabaseConnection, ProviderAdapter } from "../providers/types";
+import { scanPolicies } from "../rls/scanner";
+import { applyAuthFunction, applyPolicies, applyRLSMigration } from "./rls-migrator";
 
 // Re-export RLS migrator functions
 export {
-  applyPolicies,
-  applyAuthFunction,
-  applyRLSMigration,
-} from './rls-migrator'
+	applyPolicies,
+	applyAuthFunction,
+	applyRLSMigration,
+} from "./rls-migrator";
 
 /**
  * Run migration for a project
@@ -39,40 +35,41 @@ export {
  * ```
  */
 export async function runMigration(
-  projectRoot: string,
-  db: DatabaseConnection,
-  provider: ProviderAdapter,
+	projectRoot: string,
+	db: DatabaseConnection,
+	provider: ProviderAdapter,
 ): Promise<void> {
-  // Check if provider supports RLS
-  const supportsRLS = provider.supportsRLS()
+	// Check if provider supports RLS
+	const supportsRLS = provider.supportsRLS();
 
-  if (!supportsRLS) {
-    console.warn(
-      '⚠️  Provider does not support Row Level Security. Skipping RLS migration.',
-    )
-    return
-  }
+	if (!supportsRLS) {
+		console.warn("⚠️  Provider does not support Row Level Security. Skipping RLS migration.");
+		return;
+	}
 
-  // Scan for policies in the project
-  const { policies, errors } = await scanPolicies(projectRoot)
+	// Scan for policies in the project
+	const { policies, errors } = await scanPolicies(projectRoot);
 
-  if (errors.length > 0) {
-    console.warn('⚠️  Some policies failed to load:', errors.map((e) => e.message))
-  }
+	if (errors.length > 0) {
+		console.warn(
+			"⚠️  Some policies failed to load:",
+			errors.map((e) => e.message),
+		);
+	}
 
-  if (policies.length === 0) {
-    console.log('ℹ️  No RLS policies found to apply.')
-    return
-  }
+	if (policies.length === 0) {
+		console.log("ℹ️  No RLS policies found to apply.");
+		return;
+	}
 
-  // Log the tables being processed
-  const tables = [...new Set(policies.map((p) => p.table))]
-  console.log(`Applying RLS policies: ${tables.join(', ')} (${policies.length} policies)`)
+	// Log the tables being processed
+	const tables = [...new Set(policies.map((p) => p.table))];
+	console.log(`Applying RLS policies: ${tables.join(", ")} (${policies.length} policies)`);
 
-  // Apply RLS migration
-  await applyRLSMigration(policies, db)
+	// Apply RLS migration
+	await applyRLSMigration(policies, db);
 
-  console.log('✅ RLS policies applied successfully.')
+	console.log("✅ RLS policies applied successfully.");
 }
 
 /**
@@ -81,5 +78,5 @@ export async function runMigration(
  * @returns true if RLS is supported
  */
 export function isRLSSupported(provider: ProviderAdapter): boolean {
-  return provider.supportsRLS()
+	return provider.supportsRLS();
 }

@@ -1,37 +1,39 @@
-import path from 'node:path';
+import path from "node:path";
 
 /**
  * Build the CLI as a standalone bundled executable output.
  */
 export async function buildStandaloneCli(): Promise<void> {
-  const moduleDir = import.meta.dir;
-  const entrypoint = path.resolve(moduleDir, 'index.ts');
-  const outdir = path.resolve(moduleDir, '../dist');
+	const moduleDir = import.meta.dir;
+	const entrypoint = path.resolve(moduleDir, "index.ts");
+	const outdir = path.resolve(moduleDir, "../dist");
 
-  const result = await Bun.build({
-    entrypoints: [entrypoint],
-    outdir,
-    target: 'bun',
-    format: 'esm',
-    minify: false,
-    sourcemap: 'external',
-    naming: 'index.js',
-    banner: '#!/usr/bin/env bun\n',
-  });
+	const result = await Bun.build({
+		entrypoints: [entrypoint],
+		outdir,
+		target: "bun",
+		format: "esm",
+		minify: false,
+		sourcemap: "external",
+		naming: "index.js",
+		banner: "#!/usr/bin/env bun\n",
+	});
 
-  if (!result.success) {
-    const diagnostics = result.logs.map((log) => (typeof log === 'string' ? log : JSON.stringify(log))).join('\n');
-    throw new Error(`Build failed with ${result.logs.length} error(s).\n${diagnostics}`);
-  }
+	if (!result.success) {
+		const diagnostics = result.logs
+			.map((log) => (typeof log === "string" ? log : JSON.stringify(log)))
+			.join("\n");
+		throw new Error(`Build failed with ${result.logs.length} error(s).\n${diagnostics}`);
+	}
 }
 
 async function main(): Promise<void> {
-  await buildStandaloneCli();
+	await buildStandaloneCli();
 }
 
 if (import.meta.main) {
-  main().catch((error) => {
-    console.error('Build failed:', error);
-    process.exit(1);
-  });
+	main().catch((error) => {
+		console.error("Build failed:", error);
+		process.exit(1);
+	});
 }

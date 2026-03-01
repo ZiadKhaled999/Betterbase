@@ -1,168 +1,174 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { z } from 'zod';
-import * as logger from '../utils/logger';
-import * as prompts from '../utils/prompts';
-import { promptForProvider, generateEnvContent } from '../utils/provider-prompts';
-import { generateDrizzleConfig } from '@betterbase/core/config';
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { generateDrizzleConfig } from "@betterbase/core/config";
+import { z } from "zod";
+import * as logger from "../utils/logger";
+import * as prompts from "../utils/prompts";
+import { generateEnvContent, promptForProvider } from "../utils/provider-prompts";
 
 const projectNameSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .regex(/^[a-zA-Z0-9-_]+$/, 'Project name can only contain letters, numbers, hyphens, and underscores.');
+	.string()
+	.trim()
+	.min(1)
+	.regex(
+		/^[a-zA-Z0-9-_]+$/,
+		"Project name can only contain letters, numbers, hyphens, and underscores.",
+	);
 
 const initOptionsSchema = z.object({
-  projectName: projectNameSchema.optional(),
+	projectName: projectNameSchema.optional(),
 });
 
-import type { ProviderType } from '@betterbase/shared';
+import type { ProviderType } from "@betterbase/shared";
 
-const providerTypeSchema = z.enum(['neon', 'turso', 'planetscale', 'supabase', 'postgres', 'managed']);
+const providerTypeSchema = z.enum([
+	"neon",
+	"turso",
+	"planetscale",
+	"supabase",
+	"postgres",
+	"managed",
+]);
 
 export type InitCommandOptions = z.infer<typeof initOptionsSchema>;
 
-type StorageProvider = 's3' | 'r2' | 'backblaze' | 'minio';
+type StorageProvider = "s3" | "r2" | "backblaze" | "minio";
 
 interface DatabaseCredentials {
-  DATABASE_URL?: string;
-  TURSO_URL?: string;
-  TURSO_AUTH_TOKEN?: string;
+	DATABASE_URL?: string;
+	TURSO_URL?: string;
+	TURSO_AUTH_TOKEN?: string;
 }
 
 interface StorageCredentials {
-  STORAGE_ACCESS_KEY?: string;
-  STORAGE_SECRET_KEY?: string;
-  STORAGE_BUCKET?: string;
-  STORAGE_REGION?: string;
-  STORAGE_ENDPOINT?: string;
+	STORAGE_ACCESS_KEY?: string;
+	STORAGE_SECRET_KEY?: string;
+	STORAGE_BUCKET?: string;
+	STORAGE_REGION?: string;
+	STORAGE_ENDPOINT?: string;
 }
 
 function getDatabaseLabel(provider: ProviderType): string {
-  const labels: Record<ProviderType, string> = {
-    neon: 'Neon (serverless Postgres)',
-    turso: 'Turso (edge SQLite)',
-    planetscale: 'PlanetScale (MySQL-compatible)',
-    supabase: 'Supabase (Postgres)',
-    postgres: 'Raw Postgres',
-    managed: 'Managed by BetterBase (coming soon)',
-  };
-  return labels[provider];
+	const labels: Record<ProviderType, string> = {
+		neon: "Neon (serverless Postgres)",
+		turso: "Turso (edge SQLite)",
+		planetscale: "PlanetScale (MySQL-compatible)",
+		supabase: "Supabase (Postgres)",
+		postgres: "Raw Postgres",
+		managed: "Managed by BetterBase (coming soon)",
+	};
+	return labels[provider];
 }
 
-function getAuthDialect(provider: ProviderType): 'sqlite' | 'pg' | 'mysql' {
-  if (provider === 'turso') {
-    return 'sqlite';
-  }
-  if (provider === 'planetscale') {
-    return 'mysql';
-  }
-  return 'pg';
+function getAuthDialect(provider: ProviderType): "sqlite" | "pg" | "mysql" {
+	if (provider === "turso") {
+		return "sqlite";
+	}
+	if (provider === "planetscale") {
+		return "mysql";
+	}
+	return "pg";
 }
 
 async function installDependencies(projectPath: string): Promise<void> {
-  const installProcess = Bun.spawn(['bun', 'install'], {
-    cwd: projectPath,
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
+	const installProcess = Bun.spawn(["bun", "install"], {
+		cwd: projectPath,
+		stdout: "inherit",
+		stderr: "inherit",
+	});
 
-  const exitCode = await installProcess.exited;
+	const exitCode = await installProcess.exited;
 
-  if (exitCode !== 0) {
-    throw new Error('Dependency installation failed. Please run `bun install` manually.');
-  }
+	if (exitCode !== 0) {
+		throw new Error("Dependency installation failed. Please run `bun install` manually.");
+	}
 }
 
 async function initializeGitRepository(projectPath: string): Promise<void> {
-  const gitProcess = Bun.spawn(['git', 'init'], {
-    cwd: projectPath,
-    stdout: 'ignore',
-    stderr: 'ignore',
-  });
+	const gitProcess = Bun.spawn(["git", "init"], {
+		cwd: projectPath,
+		stdout: "ignore",
+		stderr: "ignore",
+	});
 
-  const exitCode = await gitProcess.exited;
+	const exitCode = await gitProcess.exited;
 
-  if (exitCode !== 0) {
-    logger.warn('Git initialization failed. You can run `git init` manually.');
-  }
+	if (exitCode !== 0) {
+		logger.warn("Git initialization failed. You can run `git init` manually.");
+	}
 }
 
-function buildPackageJson(
-  projectName: string,
-  provider: ProviderType,
-  useAuth: boolean,
-): string {
-  const dependencies: Record<string, string> = {
-    hono: '^4.11.9',
-    'drizzle-orm': '^0.45.1',
-    zod: '^4.3.6',
-  };
+function buildPackageJson(projectName: string, provider: ProviderType, useAuth: boolean): string {
+	const dependencies: Record<string, string> = {
+		hono: "^4.11.9",
+		"drizzle-orm": "^0.45.1",
+		zod: "^4.3.6",
+	};
 
-  if (provider === 'neon') {
-    dependencies['@neondatabase/serverless'] = '^1.0.0';
-  }
+	if (provider === "neon") {
+		dependencies["@neondatabase/serverless"] = "^1.0.0";
+	}
 
-  if (provider === 'turso') {
-    dependencies['@libsql/client'] = '^0.14.0';
-  }
+	if (provider === "turso") {
+		dependencies["@libsql/client"] = "^0.14.0";
+	}
 
-  if (provider === 'postgres' || provider === 'supabase') {
-    dependencies.pg = '^8.13.1';
-  }
+	if (provider === "postgres" || provider === "supabase") {
+		dependencies.pg = "^8.13.1";
+	}
 
-  if (provider === 'planetscale') {
-    dependencies['@planetscale/database'] = '^1.22.0';
-  }
+	if (provider === "planetscale") {
+		dependencies["@planetscale/database"] = "^1.22.0";
+	}
 
-  if (useAuth) {
-    dependencies['better-auth'] = '^1.1.15';
-  }
+	if (useAuth) {
+		dependencies["better-auth"] = "^1.1.15";
+	}
 
-  const json = {
-    name: projectName,
-    private: true,
-    type: 'module',
-    scripts: {
-      dev: 'bun run src/index.ts',
-      build: 'bun build src/index.ts --outfile dist/index.js --target bun',
-      start: 'bun run dist/index.js',
-      'db:generate': 'drizzle-kit generate',
-      'db:push': 'bun run src/db/migrate.ts',
-    },
-    dependencies,
-    devDependencies: {
-      '@types/bun': '^1.3.9',
-      'drizzle-kit': '^0.31.4',
-      typescript: '^5.9.3',
-    },
-  };
+	const json = {
+		name: projectName,
+		private: true,
+		type: "module",
+		scripts: {
+			dev: "bun run src/index.ts",
+			build: "bun build src/index.ts --outfile dist/index.js --target bun",
+			start: "bun run dist/index.js",
+			"db:generate": "drizzle-kit generate",
+			"db:push": "bun run src/db/migrate.ts",
+		},
+		dependencies,
+		devDependencies: {
+			"@types/bun": "^1.3.9",
+			"drizzle-kit": "^0.31.4",
+			typescript: "^5.9.3",
+		},
+	};
 
-  return `${JSON.stringify(json, null, 2)}\n`;
+	return `${JSON.stringify(json, null, 2)}\n`;
 }
 
 function buildDrizzleConfig(provider: ProviderType): string {
-  // Use the generateDrizzleConfig from @betterbase/core
-  return generateDrizzleConfig(provider);
+	// Use the generateDrizzleConfig from @betterbase/core
+	return generateDrizzleConfig(provider);
 }
 
 function buildBetterbaseConfig(projectName: string, provider: ProviderType): string {
-  let providerBlock = `type: "${provider}",`;
+	let providerBlock = `type: "${provider}",`;
 
-  if (provider === 'turso') {
-    providerBlock += `
+	if (provider === "turso") {
+		providerBlock += `
     url: process.env.TURSO_URL,
     authToken: process.env.TURSO_AUTH_TOKEN,`;
-  } else if (provider === 'managed') {
-    // Managed provider - no connection string needed for now
-    providerBlock += `
+	} else if (provider === "managed") {
+		// Managed provider - no connection string needed for now
+		providerBlock += `
     connectionString: process.env.DATABASE_URL,`;
-  } else {
-    providerBlock += `
+	} else {
+		providerBlock += `
     connectionString: process.env.DATABASE_URL,`;
-  }
+	}
 
-  return `import { defineConfig } from "@betterbase/core";
+	return `import { defineConfig } from "@betterbase/core";
 
 export default defineConfig({
   project: {
@@ -176,8 +182,8 @@ export default defineConfig({
 }
 
 async function buildSchema(provider: ProviderType): Promise<string> {
-  if (provider === 'neon' || provider === 'postgres' || provider === 'supabase') {
-    return `import { integer, pgTable, timestamp, varchar } from 'drizzle-orm/pg-core';
+	if (provider === "neon" || provider === "postgres" || provider === "supabase") {
+		return `import { integer, pgTable, timestamp, varchar } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
@@ -186,10 +192,10 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 `;
-  }
+	}
 
-  if (provider === 'planetscale') {
-    return `import { bigint, mysqlTable, timestamp, varchar } from 'drizzle-orm/mysql-core';
+	if (provider === "planetscale") {
+		return `import { bigint, mysqlTable, timestamp, varchar } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
   id: bigint('id', { mode: 'number', unsigned: true }).generatedAlwaysAsIdentity().primaryKey(),
@@ -198,9 +204,9 @@ export const users = mysqlTable('users', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 `;
-  }
+	}
 
-  return `import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+	return `import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 /**
  * Adds created_at and updated_at timestamp columns.
@@ -265,8 +271,8 @@ export const posts = sqliteTable('posts', {
 }
 
 function buildMigrateScript(provider: ProviderType): string {
-  if (provider === 'neon' || provider === 'postgres' || provider === 'supabase') {
-    return `import { migrate } from 'drizzle-orm/node-postgres/migrator';
+	if (provider === "neon" || provider === "postgres" || provider === "supabase") {
+		return `import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 
@@ -287,10 +293,10 @@ try {
   await pool.end();
 }
 `;
-  }
+	}
 
-  if (provider === 'turso') {
-    return `import { createClient } from '@libsql/client';
+	if (provider === "turso") {
+		return `import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 
@@ -310,10 +316,10 @@ try {
   process.exit(1);
 }
 `;
-  }
+	}
 
-  if (provider === 'planetscale') {
-    return `import { connect } from '@planetscale/database';
+	if (provider === "planetscale") {
+		return `import { connect } from '@planetscale/database';
 import { drizzle } from 'drizzle-orm/planetscale-serverless';
 import { migrate } from 'drizzle-orm/planetscale-serverless/migrator';
 
@@ -332,9 +338,9 @@ try {
   process.exit(1);
 }
 `;
-  }
+	}
 
-  return `import { Database } from 'bun:sqlite';
+	return `import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { env } from '../lib/env';
@@ -354,8 +360,8 @@ try {
 }
 
 function buildDbIndex(provider: ProviderType): string {
-  if (provider === 'neon' || provider === 'postgres' || provider === 'supabase') {
-    return `import { drizzle } from 'drizzle-orm/node-postgres';
+	if (provider === "neon" || provider === "postgres" || provider === "supabase") {
+		return `import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
 
@@ -365,10 +371,10 @@ const pool = new Pool({
 
 export const db = drizzle(pool, { schema });
 `;
-  }
+	}
 
-  if (provider === 'turso') {
-    return `import { createClient } from '@libsql/client';
+	if (provider === "turso") {
+		return `import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import * as schema from './schema';
 
@@ -379,10 +385,10 @@ const client = createClient({
 
 export const db = drizzle(client, { schema });
 `;
-  }
+	}
 
-  if (provider === 'planetscale') {
-    return `import { connect } from '@planetscale/database';
+	if (provider === "planetscale") {
+		return `import { connect } from '@planetscale/database';
 import { drizzle } from 'drizzle-orm/planetscale-serverless';
 import * as schema from './schema';
 
@@ -392,9 +398,9 @@ const client = connect({
 
 export const db = drizzle(client, { schema });
 `;
-  }
+	}
 
-  return `import { Database } from 'bun:sqlite';
+	return `import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { env } from '../lib/env';
 import * as schema from './schema';
@@ -406,7 +412,7 @@ export const db = drizzle(client, { schema });
 }
 
 function buildAuthMiddleware(): string {
-  return `import { createMiddleware } from 'hono/factory';
+	return `import { createMiddleware } from 'hono/factory';
 
 export const authMiddleware = createMiddleware(async (_c, next) => {
   // TODO: wire BetterAuth session validation.
@@ -415,9 +421,9 @@ export const authMiddleware = createMiddleware(async (_c, next) => {
 `;
 }
 
-function buildAuthInstanceFile(dialect: 'sqlite' | 'pg' | 'mysql'): string {
-  const provider = dialect === 'sqlite' ? 'sqlite' : dialect === 'mysql' ? 'mysql' : 'pg';
-  return `import { betterAuth } from "better-auth"
+function buildAuthInstanceFile(dialect: "sqlite" | "pg" | "mysql"): string {
+	const provider = dialect === "sqlite" ? "sqlite" : dialect === "mysql" ? "mysql" : "pg";
+	return `import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { db } from "../db"
 import * as schema from "../db/auth-schema"
@@ -447,7 +453,7 @@ export type Auth = typeof auth
 }
 
 function buildAuthTypesFile(): string {
-  return `import type { auth } from "./index"
+	return `import type { auth } from "./index"
 
 export type Session = typeof auth.$Infer.Session.session
 export type User = typeof auth.$Infer.Session.user
@@ -460,7 +466,7 @@ export type AuthVariables = {
 }
 
 function buildAuthMiddlewareFile(): string {
-  return `import { auth } from "../auth"
+	return `import { auth } from "../auth"
 import type { Context, Next } from "hono"
 
 export async function requireAuth(c: Context, next: Next) {
@@ -493,7 +499,7 @@ export function getAuthUser(c: Context) {
 }
 
 function buildAuthSchemaSqlite(): string {
-  return `import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+	return `import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -544,7 +550,7 @@ export const verification = sqliteTable("verification", {
 }
 
 function buildAuthSchemaPg(): string {
-  return `import { pgTable, text, timestamp, boolean } from 'drizzle-orm/pg-core'
+	return `import { pgTable, text, timestamp, boolean } from 'drizzle-orm/pg-core'
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -595,7 +601,7 @@ export const verification = pgTable("verification", {
 }
 
 function buildAuthSchemaMysql(): string {
-  return `import { bigint, boolean, datetime, mysqlTable, text } from 'drizzle-orm/mysql-core'
+	return `import { bigint, boolean, datetime, mysqlTable, text } from 'drizzle-orm/mysql-core'
 
 export const user = mysqlTable("user", {
   id: text("id").primaryKey(),
@@ -645,16 +651,21 @@ export const verification = mysqlTable("verification", {
 `;
 }
 
-function buildReadme(projectName: string, provider: ProviderType, authEnabled: boolean, storageEnabled: boolean): string {
-  return `# ${projectName}
+function buildReadme(
+	projectName: string,
+	provider: ProviderType,
+	authEnabled: boolean,
+	storageEnabled: boolean,
+): string {
+	return `# ${projectName}
 
 Generated with BetterBase CLI.
 
 ## Configuration
 
 - **Database**: ${getDatabaseLabel(provider)}
-- **Auth**: ${authEnabled ? 'BetterAuth enabled' : 'Not configured'}
-- **Storage**: ${storageEnabled ? 'S3-compatible storage enabled' : 'Not configured'}
+- **Auth**: ${authEnabled ? "BetterAuth enabled" : "Not configured"}
+- **Storage**: ${storageEnabled ? "S3-compatible storage enabled" : "Not configured"}
 
 ## Scripts
 
@@ -665,7 +676,7 @@ Generated with BetterBase CLI.
 }
 
 function buildRoutesIndex(): string {
-  return `import { Hono } from 'hono';
+	return `import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { HTTPException } from 'hono/http-exception';
@@ -698,86 +709,86 @@ export function registerRoutes(app: Hono): void {
 }
 
 async function writeProjectFiles(
-  projectPath: string,
-  projectName: string,
-  provider: ProviderType,
-  useAuth: boolean,
-  storageProvider: StorageProvider | null,
-  dbCredentials: DatabaseCredentials,
-  storageCredentials: StorageCredentials,
+	projectPath: string,
+	projectName: string,
+	provider: ProviderType,
+	useAuth: boolean,
+	storageProvider: StorageProvider | null,
+	dbCredentials: DatabaseCredentials,
+	storageCredentials: StorageCredentials,
 ): Promise<void> {
-  await mkdir(path.join(projectPath, 'src/db'), { recursive: true });
-  await mkdir(path.join(projectPath, 'src/routes'), { recursive: true });
-  await mkdir(path.join(projectPath, 'src/middleware'), { recursive: true });
-  await mkdir(path.join(projectPath, 'src/lib'), { recursive: true });
+	await mkdir(path.join(projectPath, "src/db"), { recursive: true });
+	await mkdir(path.join(projectPath, "src/routes"), { recursive: true });
+	await mkdir(path.join(projectPath, "src/middleware"), { recursive: true });
+	await mkdir(path.join(projectPath, "src/lib"), { recursive: true });
 
-  // Build .env content based on provider and credentials
-  // Use the generateEnvContent from provider-prompts for better comments
-  let envContent = generateEnvContent(provider, dbCredentials as Record<string, string>);
+	// Build .env content based on provider and credentials
+	// Use the generateEnvContent from provider-prompts for better comments
+	let envContent = generateEnvContent(provider, dbCredentials as Record<string, string>);
 
-  // Add NODE_ENV and PORT to all configs
-  envContent = `NODE_ENV=development\nPORT=3000\n` + envContent;
+	// Add NODE_ENV and PORT to all configs
+	envContent = `NODE_ENV=development\nPORT=3000\n${envContent}`;
 
-  if (useAuth) {
-    const authSecret = crypto.randomUUID().replace(/-/g, '').slice(0, 32);
-    envContent += `\nAUTH_SECRET=${authSecret}
+	if (useAuth) {
+		const authSecret = crypto.randomUUID().replace(/-/g, "").slice(0, 32);
+		envContent += `\nAUTH_SECRET=${authSecret}
 AUTH_URL=http://localhost:3000
 `;
-  }
+	}
 
-  if (storageProvider) {
-    envContent += `\n# Storage (${storageProvider})
+	if (storageProvider) {
+		envContent += `\n# Storage (${storageProvider})
 STORAGE_PROVIDER=${storageProvider}
-STORAGE_ACCESS_KEY=${storageCredentials.STORAGE_ACCESS_KEY || ''}
-STORAGE_SECRET_KEY=${storageCredentials.STORAGE_SECRET_KEY || ''}
-STORAGE_BUCKET=${storageCredentials.STORAGE_BUCKET || ''}
+STORAGE_ACCESS_KEY=${storageCredentials.STORAGE_ACCESS_KEY || ""}
+STORAGE_SECRET_KEY=${storageCredentials.STORAGE_SECRET_KEY || ""}
+STORAGE_BUCKET=${storageCredentials.STORAGE_BUCKET || ""}
 `;
-    if (storageProvider === 's3') {
-      envContent += `STORAGE_REGION=${storageCredentials.STORAGE_REGION || 'us-east-1'}\n`;
-    } else {
-      envContent += `STORAGE_ENDPOINT=${storageCredentials.STORAGE_ENDPOINT || ''}\n`;
-    }
-  }
+		if (storageProvider === "s3") {
+			envContent += `STORAGE_REGION=${storageCredentials.STORAGE_REGION || "us-east-1"}\n`;
+		} else {
+			envContent += `STORAGE_ENDPOINT=${storageCredentials.STORAGE_ENDPOINT || ""}\n`;
+		}
+	}
 
-  await writeFile(path.join(projectPath, '.env'), envContent);
+	await writeFile(path.join(projectPath, ".env"), envContent);
 
-  // .env.example without secrets
-  let envExampleContent = `NODE_ENV=development
+	// .env.example without secrets
+	let envExampleContent = `NODE_ENV=development
 PORT=3000
 `;
-  if (provider === 'turso') {
-    envExampleContent += `TURSO_URL=
+	if (provider === "turso") {
+		envExampleContent += `TURSO_URL=
 TURSO_AUTH_TOKEN=
 `;
-  } else {
-    envExampleContent += `DATABASE_URL=
+	} else {
+		envExampleContent += `DATABASE_URL=
 `;
-  }
+	}
 
-  if (useAuth) {
-    envExampleContent += `\nAUTH_SECRET=your-secret-key-change-in-production
+	if (useAuth) {
+		envExampleContent += `\nAUTH_SECRET=your-secret-key-change-in-production
 AUTH_URL=http://localhost:3000
 `;
-  }
+	}
 
-  if (storageProvider) {
-    envExampleContent += `\n# Storage (${storageProvider})
+	if (storageProvider) {
+		envExampleContent += `\n# Storage (${storageProvider})
 STORAGE_PROVIDER=${storageProvider}
 STORAGE_ACCESS_KEY=
 STORAGE_SECRET_KEY=
 STORAGE_BUCKET=
 `;
-    if (storageProvider === 's3') {
-      envExampleContent += `STORAGE_REGION=us-east-1\n`;
-    } else {
-      envExampleContent += `STORAGE_ENDPOINT=\n`;
-    }
-  }
+		if (storageProvider === "s3") {
+			envExampleContent += "STORAGE_REGION=us-east-1\n";
+		} else {
+			envExampleContent += "STORAGE_ENDPOINT=\n";
+		}
+	}
 
-  await writeFile(path.join(projectPath, '.env.example'), envExampleContent);
+	await writeFile(path.join(projectPath, ".env.example"), envExampleContent);
 
-  // env.ts with appropriate schema
-  let envSchemaContent = `import { z } from 'zod';
+	// env.ts with appropriate schema
+	let envSchemaContent = `import { z } from 'zod';
 
 export const DEFAULT_DB_PATH = 'local.db';
 
@@ -787,30 +798,30 @@ const envSchema = z.object({
   DB_PATH: z.string().min(1).default(DEFAULT_DB_PATH),
 });
 `;
-  // All providers except managed need DATABASE_URL or Turso-specific env vars
-  if (provider === 'turso') {
-    envSchemaContent += `
+	// All providers except managed need DATABASE_URL or Turso-specific env vars
+	if (provider === "turso") {
+		envSchemaContent += `
 envSchema = envSchema.extend({
   TURSO_URL: z.string().url(),
   TURSO_AUTH_TOKEN: z.string().min(1),
 });`;
-  } else if (provider !== 'managed') {
-    envSchemaContent += `
+	} else if (provider !== "managed") {
+		envSchemaContent += `
 envSchema = envSchema.extend({
   DATABASE_URL: z.string().url(),
 });`;
-  }
+	}
 
-  if (useAuth) {
-    envSchemaContent += `
+	if (useAuth) {
+		envSchemaContent += `
 envSchema = envSchema.extend({
   AUTH_SECRET: z.string().min(32),
   AUTH_URL: z.string().url().default('http://localhost:3000'),
 });`;
-  }
+	}
 
-  if (storageProvider) {
-    envSchemaContent += `
+	if (storageProvider) {
+		envSchemaContent += `
 envSchema = envSchema.extend({
   STORAGE_PROVIDER: z.enum(['s3', 'r2', 'backblaze', 'minio']),
   STORAGE_ACCESS_KEY: z.string().min(1),
@@ -819,19 +830,25 @@ envSchema = envSchema.extend({
   STORAGE_REGION: z.string().optional(),
   STORAGE_ENDPOINT: z.string().optional(),
 });`;
-  }
+	}
 
-  envSchemaContent += `\n\nexport const env = envSchema.parse(process.env);\n`;
+	envSchemaContent += "\n\nexport const env = envSchema.parse(process.env);\n";
 
-  await writeFile(path.join(projectPath, 'src/lib/env.ts'), envSchemaContent);
+	await writeFile(path.join(projectPath, "src/lib/env.ts"), envSchemaContent);
 
-  await writeFile(path.join(projectPath, 'betterbase.config.ts'), buildBetterbaseConfig(projectName, provider));
-  await writeFile(path.join(projectPath, 'drizzle.config.ts'), buildDrizzleConfig(provider));
-  await writeFile(path.join(projectPath, 'package.json'), buildPackageJson(projectName, provider, useAuth));
+	await writeFile(
+		path.join(projectPath, "betterbase.config.ts"),
+		buildBetterbaseConfig(projectName, provider),
+	);
+	await writeFile(path.join(projectPath, "drizzle.config.ts"), buildDrizzleConfig(provider));
+	await writeFile(
+		path.join(projectPath, "package.json"),
+		buildPackageJson(projectName, provider, useAuth),
+	);
 
-  await writeFile(
-    path.join(projectPath, 'tsconfig.json'),
-    `{
+	await writeFile(
+		path.join(projectPath, "tsconfig.json"),
+		`{
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -844,9 +861,9 @@ envSchema = envSchema.extend({
   "include": ["src/**/*.ts", "drizzle.config.ts", "betterbase.config.ts"]
 }
 `,
-  );
+	);
 
-  let gitignoreContent = `node_modules
+	let gitignoreContent = `node_modules
 bun.lockb
 .env
 .env.*
@@ -855,22 +872,25 @@ local.db
 drizzle
 `;
 
-  if (storageProvider) {
-    gitignoreContent += `\n# Storage uploads
+	if (storageProvider) {
+		gitignoreContent += `\n# Storage uploads
 uploads/
 `;
-  }
+	}
 
-  await writeFile(path.join(projectPath, '.gitignore'), gitignoreContent);
+	await writeFile(path.join(projectPath, ".gitignore"), gitignoreContent);
 
-  await writeFile(path.join(projectPath, 'README.md'), buildReadme(projectName, provider, useAuth, !!storageProvider));
-  await writeFile(path.join(projectPath, 'src/db/schema.ts'), await buildSchema(provider));
-  await writeFile(path.join(projectPath, 'src/db/index.ts'), buildDbIndex(provider));
-  await writeFile(path.join(projectPath, 'src/db/migrate.ts'), buildMigrateScript(provider));
+	await writeFile(
+		path.join(projectPath, "README.md"),
+		buildReadme(projectName, provider, useAuth, !!storageProvider),
+	);
+	await writeFile(path.join(projectPath, "src/db/schema.ts"), await buildSchema(provider));
+	await writeFile(path.join(projectPath, "src/db/index.ts"), buildDbIndex(provider));
+	await writeFile(path.join(projectPath, "src/db/migrate.ts"), buildMigrateScript(provider));
 
-  await writeFile(
-    path.join(projectPath, 'src/routes/health.ts'),
-    `import { sql } from 'drizzle-orm';
+	await writeFile(
+		path.join(projectPath, "src/routes/health.ts"),
+		`import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { db } from '../db';
 
@@ -897,11 +917,11 @@ healthRoute.get('/', async (c) => {
   }
 });
 `,
-  );
+	);
 
-  await writeFile(
-    path.join(projectPath, 'src/middleware/validation.ts'),
-    `import { HTTPException } from 'hono/http-exception';
+	await writeFile(
+		path.join(projectPath, "src/middleware/validation.ts"),
+		`import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 
 export function parseBody<S extends z.ZodType>(schema: S, body: unknown): z.output<S> {
@@ -923,11 +943,11 @@ export function parseBody<S extends z.ZodType>(schema: S, body: unknown): z.outp
   return result.data;
 }
 `,
-  );
+	);
 
-  await writeFile(
-    path.join(projectPath, 'src/routes/users.ts'),
-    `import { Hono } from 'hono';
+	await writeFile(
+		path.join(projectPath, "src/routes/users.ts"),
+		`import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 import { db } from '../db';
@@ -1023,12 +1043,12 @@ usersRoute.post('/', async (c) => {
   }
 });
 `,
-  );
+	);
 
-  await writeFile(path.join(projectPath, 'src/routes/index.ts'), buildRoutesIndex());
+	await writeFile(path.join(projectPath, "src/routes/index.ts"), buildRoutesIndex());
 
-  // Build index.ts with optional auth mounting
-  let indexContent = `import { Hono } from 'hono';
+	// Build index.ts with optional auth mounting
+	let indexContent = `import { Hono } from 'hono';
 import { env } from './lib/env';
 import { registerRoutes } from './routes';
 
@@ -1036,15 +1056,15 @@ const app = new Hono();
 registerRoutes(app);
 `;
 
-  if (useAuth) {
-    indexContent += `
+	if (useAuth) {
+		indexContent += `
 import { auth } from './auth';
 
 app.on(["POST", "GET"], "/api/auth/**", (c) => auth.handler(c.req.raw));
 `;
-  }
+	}
 
-  indexContent += `
+	indexContent += `
 const server = Bun.serve({
   fetch: app.fetch,
   port: env.PORT,
@@ -1067,173 +1087,182 @@ process.on('SIGINT', () => {
 export default server;
 `;
 
-  await writeFile(path.join(projectPath, 'src/index.ts'), indexContent);
+	await writeFile(path.join(projectPath, "src/index.ts"), indexContent);
 
-  await writeFile(
-    path.join(projectPath, 'src/lib/utils.ts'),
-    `export function notImplemented(feature: string): never {
+	await writeFile(
+		path.join(projectPath, "src/lib/utils.ts"),
+		`export function notImplemented(feature: string): never {
   throw new Error(\`\${feature} is not implemented yet.\`);
 }
 `,
-  );
+	);
 
-  // Write auth files if enabled
-  if (useAuth) {
-    const dialect = getAuthDialect(provider);
-    
-    // Warn about PlanetScale RLS
-    if (provider === 'planetscale') {
-      logger.warn('Note: PlanetScale does not support Row Level Security (RLS).');
-    }
+	// Write auth files if enabled
+	if (useAuth) {
+		const dialect = getAuthDialect(provider);
 
-    await mkdir(path.join(projectPath, 'src/auth'), { recursive: true });
+		// Warn about PlanetScale RLS
+		if (provider === "planetscale") {
+			logger.warn("Note: PlanetScale does not support Row Level Security (RLS).");
+		}
 
-    await writeFile(path.join(projectPath, 'src/auth/index.ts'), buildAuthInstanceFile(dialect));
-    await writeFile(path.join(projectPath, 'src/auth/types.ts'), buildAuthTypesFile());
-    await writeFile(path.join(projectPath, 'src/middleware/auth.ts'), buildAuthMiddlewareFile());
+		await mkdir(path.join(projectPath, "src/auth"), { recursive: true });
 
-    // Write auth schema based on dialect
-    if (dialect === 'sqlite') {
-      await writeFile(path.join(projectPath, 'src/db/auth-schema.ts'), buildAuthSchemaSqlite());
-    } else if (dialect === 'mysql') {
-      await writeFile(path.join(projectPath, 'src/db/auth-schema.ts'), buildAuthSchemaMysql());
-    } else {
-      await writeFile(path.join(projectPath, 'src/db/auth-schema.ts'), buildAuthSchemaPg());
-    }
+		await writeFile(path.join(projectPath, "src/auth/index.ts"), buildAuthInstanceFile(dialect));
+		await writeFile(path.join(projectPath, "src/auth/types.ts"), buildAuthTypesFile());
+		await writeFile(path.join(projectPath, "src/middleware/auth.ts"), buildAuthMiddlewareFile());
 
-    // Update db/index.ts to export auth-schema
-    const dbIndexContent = buildDbIndex(provider);
-    await writeFile(
-      path.join(projectPath, 'src/db/index.ts'),
-      dbIndexContent + '\nexport * from "./auth-schema";\n'
-    );
-  }
+		// Write auth schema based on dialect
+		if (dialect === "sqlite") {
+			await writeFile(path.join(projectPath, "src/db/auth-schema.ts"), buildAuthSchemaSqlite());
+		} else if (dialect === "mysql") {
+			await writeFile(path.join(projectPath, "src/db/auth-schema.ts"), buildAuthSchemaMysql());
+		} else {
+			await writeFile(path.join(projectPath, "src/db/auth-schema.ts"), buildAuthSchemaPg());
+		}
+
+		// Update db/index.ts to export auth-schema
+		const dbIndexContent = buildDbIndex(provider);
+		await writeFile(
+			path.join(projectPath, "src/db/index.ts"),
+			`${dbIndexContent}\nexport * from "./auth-schema";\n`,
+		);
+	}
 }
 
 /**
  * Run the `bb init` command.
  */
 export async function runInitCommand(rawOptions: InitCommandOptions): Promise<void> {
-  const options = initOptionsSchema.parse(rawOptions);
+	const options = initOptionsSchema.parse(rawOptions);
 
-  const projectNameInput =
-    options.projectName ??
-    (await prompts.text({
-      message: 'What is your project name?',
-      initial: 'my-betterbase-app',
-    }));
+	const projectNameInput =
+		options.projectName ??
+		(await prompts.text({
+			message: "What is your project name?",
+			initial: "my-betterbase-app",
+		}));
 
-  const projectName = projectNameSchema.parse(projectNameInput);
-  const projectPath = path.resolve(process.cwd(), projectName);
+	const projectName = projectNameSchema.parse(projectNameInput);
+	const projectPath = path.resolve(process.cwd(), projectName);
 
-  // PROMPT 1 — Database Provider Selection using the new provider-prompts module
-  const { providerType, envVars } = await promptForProvider();
-  const provider: ProviderType = providerType;
-  const dbCredentials: DatabaseCredentials = envVars as DatabaseCredentials;
+	// PROMPT 1 — Database Provider Selection using the new provider-prompts module
+	const { providerType, envVars } = await promptForProvider();
+	const provider: ProviderType = providerType;
+	const dbCredentials: DatabaseCredentials = envVars as DatabaseCredentials;
 
-  // PROMPT 4 — BetterAuth Setup Option
-  const authEnabled = await prompts.confirm({
-    message: 'Set up authentication now?',
-    default: true,
-  });
+	// PROMPT 4 — BetterAuth Setup Option
+	const authEnabled = await prompts.confirm({
+		message: "Set up authentication now?",
+		default: true,
+	});
 
-  let storageEnabled = false;
-  let storageProvider: StorageProvider | null = null;
-  const storageCredentials: StorageCredentials = {};
+	let storageEnabled = false;
+	let storageProvider: StorageProvider | null = null;
+	const storageCredentials: StorageCredentials = {};
 
-  if (authEnabled) {
-    logger.info('You can run bb auth setup later to add authentication.');
-  } else {
-    logger.info('You can run bb auth setup later to add authentication.');
-  }
+	if (authEnabled) {
+		logger.info("You can run bb auth setup later to add authentication.");
+	} else {
+		logger.info("You can run bb auth setup later to add authentication.");
+	}
 
-  // PROMPT 5 — Storage Setup Option (placeholder - Phase 14)
-  const storageChoice = await prompts.select({
-    message: 'Set up S3-compatible storage now?',
-    options: [
-      { value: 'yes', label: 'Yes' },
-      { value: 'skip', label: 'Skip' },
-    ],
-    default: 'skip',
-  });
+	// PROMPT 5 — Storage Setup Option (placeholder - Phase 14)
+	const storageChoice = await prompts.select({
+		message: "Set up S3-compatible storage now?",
+		options: [
+			{ value: "yes", label: "Yes" },
+			{ value: "skip", label: "Skip" },
+		],
+		default: "skip",
+	});
 
-  if (storageChoice === 'yes') {
-    logger.info('Storage setup coming in Phase 14');
-  }
+	if (storageChoice === "yes") {
+		logger.info("Storage setup coming in Phase 14");
+	}
 
-  // Storage is disabled for now - placeholder only
-  storageEnabled = false;
-  storageProvider = null;
+	// Storage is disabled for now - placeholder only
+	storageEnabled = false;
+	storageProvider = null;
 
-  // PROMPT 6 — FINAL SUMMARY AND CONFIRMATION
-  logger.info(`Creating project: ${projectName}`);
-  logger.info(`Provider: ${provider}`);
-  logger.info(`Auth: ${authEnabled ? 'BetterAuth' : 'skipped'}`);
-  logger.info(`Storage: ${storageProvider ?? 'skipped'}`);
+	// PROMPT 6 — FINAL SUMMARY AND CONFIRMATION
+	logger.info(`Creating project: ${projectName}`);
+	logger.info(`Provider: ${provider}`);
+	logger.info(`Auth: ${authEnabled ? "BetterAuth" : "skipped"}`);
+	logger.info(`Storage: ${storageProvider ?? "skipped"}`);
 
-  const proceed = await prompts.confirm({
-    message: 'Proceed?',
-    default: true,
-  });
+	const proceed = await prompts.confirm({
+		message: "Proceed?",
+		default: true,
+	});
 
-  if (!proceed) {
-    process.exit(0);
-  }
+	if (!proceed) {
+		process.exit(0);
+	}
 
-  let createdProjectDir = false;
+	let createdProjectDir = false;
 
-  try {
-    await mkdir(projectPath);
-    createdProjectDir = true;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException | undefined)?.code;
-    if (code === 'EEXIST') {
-      throw new Error(`Directory \`${projectName}\` already exists. Choose another project name.`);
-    }
+	try {
+		await mkdir(projectPath);
+		createdProjectDir = true;
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException | undefined)?.code;
+		if (code === "EEXIST") {
+			throw new Error(`Directory \`${projectName}\` already exists. Choose another project name.`);
+		}
 
-    const message = error instanceof Error ? error.message : 'Unknown directory creation error';
-    throw new Error(`Failed to create project directory: ${message}`);
-  }
+		const message = error instanceof Error ? error.message : "Unknown directory creation error";
+		throw new Error(`Failed to create project directory: ${message}`);
+	}
 
-  try {
-    logger.info('Creating project files...');
-    await writeProjectFiles(projectPath, projectName, provider, authEnabled, storageProvider, dbCredentials, storageCredentials);
+	try {
+		logger.info("Creating project files...");
+		await writeProjectFiles(
+			projectPath,
+			projectName,
+			provider,
+			authEnabled,
+			storageProvider,
+			dbCredentials,
+			storageCredentials,
+		);
 
-    logger.info('Installing dependencies with bun...');
-    await installDependencies(projectPath);
+		logger.info("Installing dependencies with bun...");
+		await installDependencies(projectPath);
 
-    const useGit = await prompts.confirm({
-      message: 'Initialize git repository?',
-      default: true,
-    });
+		const useGit = await prompts.confirm({
+			message: "Initialize git repository?",
+			default: true,
+		});
 
-    if (useGit) {
-      logger.info('Initializing git repository...');
-      await initializeGitRepository(projectPath);
-    }
+		if (useGit) {
+			logger.info("Initializing git repository...");
+			await initializeGitRepository(projectPath);
+		}
 
-    logger.success('BetterBase project created successfully!');
-    console.log('');
-    console.log(`📁 Project: ${projectName}`);
-    console.log(`🗄️  Database: ${getDatabaseLabel(provider)}`);
-    console.log(`🔐 Auth: ${authEnabled ? 'Enabled' : 'Disabled'}`);
-    console.log(`📦 Storage: ${storageProvider ?? 'Disabled'}`);
-    console.log('');
-    console.log('Next steps:');
-    console.log(`  cd ${projectName}`);
-    console.log('  bun run dev');
-    console.log('');
-    console.log('Your backend is running at http://localhost:3000');
-  } catch (error) {
-    if (createdProjectDir) {
-      try {
-        await rm(projectPath, { recursive: true, force: true });
-      } catch (cleanupError) {
-        const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
-        logger.warn(`Failed to cleanup \`${projectName}\`: ${cleanupMessage}`);
-      }
-    }
+		logger.success("BetterBase project created successfully!");
+		console.log("");
+		console.log(`📁 Project: ${projectName}`);
+		console.log(`🗄️  Database: ${getDatabaseLabel(provider)}`);
+		console.log(`🔐 Auth: ${authEnabled ? "Enabled" : "Disabled"}`);
+		console.log(`📦 Storage: ${storageProvider ?? "Disabled"}`);
+		console.log("");
+		console.log("Next steps:");
+		console.log(`  cd ${projectName}`);
+		console.log("  bun run dev");
+		console.log("");
+		console.log("Your backend is running at http://localhost:3000");
+	} catch (error) {
+		if (createdProjectDir) {
+			try {
+				await rm(projectPath, { recursive: true, force: true });
+			} catch (cleanupError) {
+				const cleanupMessage =
+					cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+				logger.warn(`Failed to cleanup \`${projectName}\`: ${cleanupMessage}`);
+			}
+		}
 
-    throw error;
-  }
+		throw error;
+	}
 }

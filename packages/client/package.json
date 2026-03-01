@@ -1,55 +1,44 @@
 {
-  "name": "@betterbase/client",
-  "version": "0.1.0",
-  "description": "TypeScript client for BetterBase backends",
-  "license": "MIT",
-  "author": "BetterBase",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/weroperking/Betterbase.git"
-  },
-  "engines": {
-    "node": ">=18",
-    "bun": ">=1.0.0"
-  },
-  "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    }
-  },
-  "scripts": {
-    "build": "bun run src/build.ts",
-    "dev": "bun --watch run src/build.ts",
-    "test": "bun test",
-    "typecheck": "tsc --noEmit --project tsconfig.json",
-    "lint": "biome check src test",
-    "typecheck:test": "tsc --noEmit --project tsconfig.test.json"
-  },
-  "keywords": [
-    "betterbase",
-    "baas",
-    "backend",
-    "database",
-    "realtime",
-    "auth",
-    "better-auth"
-  ],
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "dependencies": {
-    "better-auth": "^1.0.0"
-  },
-  "devDependencies": {
-    "@types/bun": "^1.3.8",
-    "typescript": "^5.9.3",
-    "@biomejs/biome": "^1.9.4"
-  }
+	"name": "@betterbase/client",
+	"version": "0.1.0",
+	"description": "TypeScript client for BetterBase backends",
+	"license": "MIT",
+	"author": "BetterBase",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/weroperking/Betterbase.git"
+	},
+	"engines": {
+		"node": ">=18",
+		"bun": ">=1.0.0"
+	},
+	"type": "module",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.cjs"
+		}
+	},
+	"scripts": {
+		"build": "bun run src/build.ts",
+		"dev": "bun --watch run src/build.ts",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit --project tsconfig.json",
+		"lint": "biome check src test",
+		"typecheck:test": "tsc --noEmit --project tsconfig.test.json"
+	},
+	"keywords": ["betterbase", "baas", "backend", "database", "realtime", "auth", "better-auth"],
+	"files": ["dist", "README.md"],
+	"dependencies": {
+		"better-auth": "^1.0.0"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.8",
+		"typescript": "^5.9.3",
+		"@biomejs/biome": "^1.9.4"
+	}
 }

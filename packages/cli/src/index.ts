@@ -327,25 +327,28 @@ export function createProgram(): Command {
  * Execute the CLI with process arguments.
  */
 export async function runCli(argv: string[] = process.argv): Promise<void> {
-  const program = createProgram();
+	const program = createProgram();
 
-  try {
-    await program.parseAsync(argv);
-  } catch (err) {
-    if (err instanceof CommanderError && (err.code === 'commander.helpDisplayed' || err.code === 'commander.version')) {
-      return;
-    }
+	try {
+		await program.parseAsync(argv);
+	} catch (err) {
+		if (
+			err instanceof CommanderError &&
+			(err.code === "commander.helpDisplayed" || err.code === "commander.version")
+		) {
+			return;
+		}
 
-    throw err;
-  }
+		throw err;
+	}
 }
 
 if (import.meta.main) {
-  try {
-    await runCli();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown CLI error';
-    logger.error(message);
-    process.exitCode = 1;
-  }
+	try {
+		await runCli();
+	} catch (err) {
+		const message = err instanceof Error ? err.message : "Unknown CLI error";
+		logger.error(message);
+		process.exitCode = 1;
+	}
 }

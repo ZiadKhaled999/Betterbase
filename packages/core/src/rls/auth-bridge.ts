@@ -25,10 +25,10 @@
  * ```
  */
 export function generateAuthFunction(): string {
-  return `CREATE OR REPLACE FUNCTION auth.uid()
+	return `CREATE OR REPLACE FUNCTION auth.uid()
 RETURNS uuid AS $$
   SELECT current_setting('app.current_user_id', true)::uuid
-$$ LANGUAGE sql STABLE;`
+$$ LANGUAGE sql STABLE;`;
 }
 
 /**
@@ -38,15 +38,17 @@ $$ LANGUAGE sql STABLE;`
  * @throws Error if settingName contains invalid characters
  */
 export function generateAuthFunctionWithSetting(settingName: string): string {
-  // Validate setting name to prevent SQL injection
-  // Only allow alphanumeric characters, underscores, and dots
-  if (!/^[a-zA-Z0-9_.]+$/.test(settingName)) {
-    throw new Error(`Invalid setting name: '${settingName}'. Only alphanumeric characters, underscores, and dots are allowed.`)
-  }
-  return `CREATE OR REPLACE FUNCTION auth.uid()
+	// Validate setting name to prevent SQL injection
+	// Only allow alphanumeric characters, underscores, and dots
+	if (!/^[a-zA-Z0-9_.]+$/.test(settingName)) {
+		throw new Error(
+			`Invalid setting name: '${settingName}'. Only alphanumeric characters, underscores, and dots are allowed.`,
+		);
+	}
+	return `CREATE OR REPLACE FUNCTION auth.uid()
 RETURNS uuid AS $
   SELECT current_setting('${settingName}', true)::uuid
-$ LANGUAGE sql STABLE;`
+$ LANGUAGE sql STABLE;`;
 }
 
 /**
@@ -54,7 +56,7 @@ $ LANGUAGE sql STABLE;`
  * @returns SQL statement to drop the function
  */
 export function dropAuthFunction(): string {
-  return 'DROP FUNCTION IF EXISTS auth.uid();'
+	return "DROP FUNCTION IF EXISTS auth.uid();";
 }
 
 /**
@@ -64,9 +66,9 @@ export function dropAuthFunction(): string {
  * @returns SQL statement to set the session variable
  */
 export function setCurrentUserId(userId: string): string {
-  // Use single quotes escaped as '' for SQL
-  const escapedUserId = userId.replace(/'/g, "''")
-  return `SET LOCAL app.current_user_id = '${escapedUserId}';`
+	// Use single quotes escaped as '' for SQL
+	const escapedUserId = userId.replace(/'/g, "''");
+	return `SET LOCAL app.current_user_id = '${escapedUserId}';`;
 }
 
 /**
@@ -74,7 +76,7 @@ export function setCurrentUserId(userId: string): string {
  * @returns SQL statement to clear the session variable
  */
 export function clearCurrentUserId(): string {
-  return "SET LOCAL app.current_user_id = '';"
+	return "SET LOCAL app.current_user_id = '';";
 }
 
 /**
@@ -82,10 +84,10 @@ export function clearCurrentUserId(): string {
  * @returns SQL that returns true if a valid user ID is set
  */
 export function generateIsAuthenticatedCheck(): string {
-  return `CREATE OR REPLACE FUNCTION auth.authenticated()
+	return `CREATE OR REPLACE FUNCTION auth.authenticated()
 RETURNS boolean AS $$
   SELECT current_setting('app.current_user_id', true) != ''
-$$ LANGUAGE sql STABLE;`
+$$ LANGUAGE sql STABLE;`;
 }
 
 /**
@@ -93,7 +95,7 @@ $$ LANGUAGE sql STABLE;`
  * @returns SQL to drop the function
  */
 export function dropIsAuthenticatedCheck(): string {
-  return 'DROP FUNCTION IF EXISTS auth.authenticated();'
+	return "DROP FUNCTION IF EXISTS auth.authenticated();";
 }
 
 /**
@@ -101,10 +103,7 @@ export function dropIsAuthenticatedCheck(): string {
  * @returns Array of SQL statements
  */
 export function generateAllAuthFunctions(): string[] {
-  return [
-    generateAuthFunction(),
-    generateIsAuthenticatedCheck(),
-  ]
+	return [generateAuthFunction(), generateIsAuthenticatedCheck()];
 }
 
 /**
@@ -112,8 +111,5 @@ export function generateAllAuthFunctions(): string[] {
  * @returns Array of SQL statements
  */
 export function dropAllAuthFunctions(): string[] {
-  return [
-    dropIsAuthenticatedCheck(),
-    dropAuthFunction(),
-  ]
+	return [dropIsAuthenticatedCheck(), dropAuthFunction()];
 }

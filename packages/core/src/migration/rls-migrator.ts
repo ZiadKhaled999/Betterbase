@@ -7,10 +7,10 @@
  * - Idempotent operations (safe to run multiple times)
  */
 
-import type { DatabaseConnection } from '../providers/types'
-import type { PolicyDefinition } from '../rls/types'
-import { policyToSQL, dropPolicySQL } from '../rls/generator'
-import { generateAuthFunction, dropAuthFunction } from '../rls/auth-bridge'
+import type { DatabaseConnection } from "../providers/types";
+import { dropAuthFunction, generateAuthFunction } from "../rls/auth-bridge";
+import { dropPolicySQL, policyToSQL } from "../rls/generator";
+import type { PolicyDefinition } from "../rls/types";
 
 /**
  * Execute SQL statements against the database
@@ -18,28 +18,28 @@ import { generateAuthFunction, dropAuthFunction } from '../rls/auth-bridge'
  * @param statements - SQL statements to execute
  */
 async function executeStatements(db: DatabaseConnection, statements: string[]): Promise<void> {
-  // Cast to any to access execute - the actual implementation depends on the provider
-  const dbAny = db.drizzle as {
-    execute?: (sql: { sql: string }) => Promise<unknown>
-    query?: unknown
-    $connection?: {
-      execute: (sql: string) => Promise<unknown>
-    }
-  }
+	// Cast to any to access execute - the actual implementation depends on the provider
+	const dbAny = db.drizzle as {
+		execute?: (sql: { sql: string }) => Promise<unknown>;
+		query?: unknown;
+		$connection?: {
+			execute: (sql: string) => Promise<unknown>;
+		};
+	};
 
-  // Try different ways to execute raw SQL depending on the DB driver
-  if (dbAny.execute) {
-    for (const stmt of statements) {
-      await dbAny.execute({ sql: stmt })
-    }
-  } else if (dbAny.$connection?.execute) {
-    for (const stmt of statements) {
-      await dbAny.$connection.execute(stmt)
-    }
-  } else {
-    // Fallback: try using raw if available
-    throw new Error('Cannot execute raw SQL: database driver does not support raw queries')
-  }
+	// Try different ways to execute raw SQL depending on the DB driver
+	if (dbAny.execute) {
+		for (const stmt of statements) {
+			await dbAny.execute({ sql: stmt });
+		}
+	} else if (dbAny.$connection?.execute) {
+		for (const stmt of statements) {
+			await dbAny.$connection.execute(stmt);
+		}
+	} else {
+		// Fallback: try using raw if available
+		throw new Error("Cannot execute raw SQL: database driver does not support raw queries");
+	}
 }
 
 /**
@@ -49,36 +49,38 @@ async function executeStatements(db: DatabaseConnection, statements: string[]): 
  * @returns true if the policy exists
  */
 async function policyExists(db: DatabaseConnection, policyName: string): Promise<boolean> {
-  const dbAny = db.drizzle as {
-    query?: {
-      pg_policy?: {
-        findFirst?: (args: { where: (sql: string) => unknown }) => Promise<unknown>
-      }
-    }
-    execute?: (sql: { sql: string }) => Promise<unknown>
-  }
+	const dbAny = db.drizzle as {
+		query?: {
+			pg_policy?: {
+				findFirst?: (args: {
+					where: (sql: string) => unknown;
+				}) => Promise<unknown>;
+			};
+		};
+		execute?: (sql: { sql: string }) => Promise<unknown>;
+	};
 
-  // Try to query pg_policies system catalog
-  if (dbAny.execute) {
-    try {
-      // Validate policy name to prevent SQL injection
-      // Only allow alphanumeric characters and underscores
-      if (!/^[a-zA-Z0-9_]+$/.test(policyName)) {
-        console.warn(`Invalid policy name: '${policyName}'. Skipping check.`)
-        return false
-      }
-      const result = await dbAny.execute({
-        sql: `SELECT 1 FROM pg_policies WHERE policyname = '${policyName}' LIMIT 1`,
-      }) as { rowCount?: number; rows?: unknown[] }
+	// Try to query pg_policies system catalog
+	if (dbAny.execute) {
+		try {
+			// Validate policy name to prevent SQL injection
+			// Only allow alphanumeric characters and underscores
+			if (!/^[a-zA-Z0-9_]+$/.test(policyName)) {
+				console.warn(`Invalid policy name: '${policyName}'. Skipping check.`);
+				return false;
+			}
+			const result = (await dbAny.execute({
+				sql: `SELECT 1 FROM pg_policies WHERE policyname = '${policyName}' LIMIT 1`,
+			})) as { rowCount?: number; rows?: unknown[] };
 
-      return (result.rowCount ?? 0) > 0
-    } catch {
-      // If query fails, assume policy doesn't exist
-      return false
-    }
-  }
+			return (result.rowCount ?? 0) > 0;
+		} catch {
+			// If query fails, assume policy doesn't exist
+			return false;
+		}
+	}
 
-  return false
+	return false;
 }
 
 /**
@@ -96,8 +98,8 @@ async function policyExists(db: DatabaseConnection, policyName: string): Promise
  * ```
  */
 export async function applyAuthFunction(db: DatabaseConnection): Promise<void> {
-  const sql = generateAuthFunction()
-  await executeStatements(db, [sql])
+	const sql = generateAuthFunction();
+	await executeStatements(db, [sql]);
 }
 
 /**
@@ -106,8 +108,8 @@ export async function applyAuthFunction(db: DatabaseConnection): Promise<void> {
  * @returns Promise<void>
  */
 export async function dropAuthFunctionSQL(db: DatabaseConnection): Promise<void> {
-  const sql = dropAuthFunction()
-  await executeStatements(db, [sql])
+	const sql = dropAuthFunction();
+	await executeStatements(db, [sql]);
 }
 
 /**
@@ -132,27 +134,27 @@ export async function dropAuthFunctionSQL(db: DatabaseConnection): Promise<void>
  * ```
  */
 export async function applyPolicies(
-  policies: PolicyDefinition[],
-  db: DatabaseConnection,
+	policies: PolicyDefinition[],
+	db: DatabaseConnection,
 ): Promise<void> {
-  if (policies.length === 0) {
-    return
-  }
+	if (policies.length === 0) {
+		return;
+	}
 
-  // Generate all SQL statements
-  const allStatements: string[] = []
+	// Generate all SQL statements
+	const allStatements: string[] = [];
 
-  for (const policy of policies) {
-    const statements = policyToSQL(policy)
-    allStatements.push(...statements)
-  }
+	for (const policy of policies) {
+		const statements = policyToSQL(policy);
+		allStatements.push(...statements);
+	}
 
-  if (allStatements.length === 0) {
-    return
-  }
+	if (allStatements.length === 0) {
+		return;
+	}
 
-  // Execute all statements
-  await executeStatements(db, allStatements)
+	// Execute all statements
+	await executeStatements(db, allStatements);
 }
 
 /**
@@ -163,27 +165,27 @@ export async function applyPolicies(
  * @returns Promise<void>
  */
 export async function dropPolicies(
-  policies: PolicyDefinition[],
-  db: DatabaseConnection,
+	policies: PolicyDefinition[],
+	db: DatabaseConnection,
 ): Promise<void> {
-  if (policies.length === 0) {
-    return
-  }
+	if (policies.length === 0) {
+		return;
+	}
 
-  // Generate all DROP statements
-  const allStatements: string[] = []
+	// Generate all DROP statements
+	const allStatements: string[] = [];
 
-  for (const policy of policies) {
-    const statements = dropPolicySQL(policy)
-    allStatements.push(...statements)
-  }
+	for (const policy of policies) {
+		const statements = dropPolicySQL(policy);
+		allStatements.push(...statements);
+	}
 
-  if (allStatements.length === 0) {
-    return
-  }
+	if (allStatements.length === 0) {
+		return;
+	}
 
-  // Execute all statements
-  await executeStatements(db, allStatements)
+	// Execute all statements
+	await executeStatements(db, allStatements);
 }
 
 /**
@@ -194,18 +196,18 @@ export async function dropPolicies(
  * @returns Promise<void>
  */
 export async function dropTableRLS(table: string, db: DatabaseConnection): Promise<void> {
-  // Import the drop functions
-  const { dropPolicyByName, disableRLS } = await import('../rls/generator')
+	// Import the drop functions
+	const { dropPolicyByName, disableRLS } = await import("../rls/generator");
 
-  const statements = [
-    dropPolicyByName(table, 'select'),
-    dropPolicyByName(table, 'insert'),
-    dropPolicyByName(table, 'update'),
-    dropPolicyByName(table, 'delete'),
-    disableRLS(table),
-  ]
+	const statements = [
+		dropPolicyByName(table, "select"),
+		dropPolicyByName(table, "insert"),
+		dropPolicyByName(table, "update"),
+		dropPolicyByName(table, "delete"),
+		disableRLS(table),
+	];
 
-  await executeStatements(db, statements)
+	await executeStatements(db, statements);
 }
 
 /**
@@ -216,14 +218,14 @@ export async function dropTableRLS(table: string, db: DatabaseConnection): Promi
  * @returns Promise<void>
  */
 export async function applyRLSMigration(
-  policies: PolicyDefinition[],
-  db: DatabaseConnection,
+	policies: PolicyDefinition[],
+	db: DatabaseConnection,
 ): Promise<void> {
-  // First apply the auth function
-  await applyAuthFunction(db)
+	// First apply the auth function
+	await applyAuthFunction(db);
 
-  // Then apply policies
-  await applyPolicies(policies, db)
+	// Then apply policies
+	await applyPolicies(policies, db);
 }
 
 /**
@@ -232,22 +234,38 @@ export async function applyRLSMigration(
  * @param db - Database connection
  * @returns Array of policy information
  */
-export async function getAppliedPolicies(
-  db: DatabaseConnection,
-): Promise<Array<{ schemaname: string; tablename: string; policyname: string; permissive: string; roles: string; cmd: string }>> {
-  const dbAny = db.drizzle as {
-    execute?: (sql: { sql: string }) => Promise<unknown>
-  }
+export async function getAppliedPolicies(db: DatabaseConnection): Promise<
+	Array<{
+		schemaname: string;
+		tablename: string;
+		policyname: string;
+		permissive: string;
+		roles: string;
+		cmd: string;
+	}>
+> {
+	const dbAny = db.drizzle as {
+		execute?: (sql: { sql: string }) => Promise<unknown>;
+	};
 
-  if (!dbAny.execute) {
-    throw new Error('Cannot query policies: database driver does not support raw queries')
-  }
+	if (!dbAny.execute) {
+		throw new Error("Cannot query policies: database driver does not support raw queries");
+	}
 
-  const result = await dbAny.execute({
-    sql: `SELECT schemaname, tablename, policyname, permissive, roles, cmd
+	const result = (await dbAny.execute({
+		sql: `SELECT schemaname, tablename, policyname, permissive, roles, cmd
           FROM pg_policies
           ORDER BY tablename, policyname`,
-  }) as { rows: Array<{ schemaname: string; tablename: string; policyname: string; permissive: string; roles: string; cmd: string }> }
+	})) as {
+		rows: Array<{
+			schemaname: string;
+			tablename: string;
+			policyname: string;
+			permissive: string;
+			roles: string;
+			cmd: string;
+		}>;
+	};
 
-  return result.rows ?? []
+	return result.rows ?? [];
 }
