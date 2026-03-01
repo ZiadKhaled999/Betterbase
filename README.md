@@ -7,15 +7,20 @@
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Architecture Overview](#architecture-overview)
-3. [Getting Started](#getting-started)
-4. [Core Concepts](#core-concepts)
-5. [CLI Reference](#cli-reference)
-6. [Client SDK](#client-sdk)
-7. [Templates](#templates)
+2. [Features](#features)
+3. [Tech Stack](#tech-stack)
+4. [Architecture](#architecture)
+   - [System Architecture Overview](#system-architecture-overview)
+   - [CLI Workflow](#cli-workflow)
+   - [Client Request Flow](#client-request-flow)
+   - [Authentication Flow](#authentication-flow)
+   - [Realtime Subscription Flow](#realtime-subscription-flow)
+   - [Database Operations Flow](#database-operations-flow)
+5. [Getting Started](#getting-started)
+6. [CLI Reference](#cli-reference)
+7. [Client SDK](#client-sdk)
 8. [API Reference](#api-reference)
 9. [Best Practices](#best-practices)
-10. [Maintenance & Troubleshooting](#maintenance--troubleshooting)
 
 ---
 
@@ -23,7 +28,17 @@
 
 BetterBase is an AI-native Backend-as-a-Service (BaaS) platform that provides developers with a complete backend solution featuring database management, authentication, realtime subscriptions, and serverless API endpoints—all with sub-100ms startup times using Bun's native SQLite driver.
 
-### Key Features
+### Vision
+
+BetterBase aims to be the most developer-friendly BaaS platform by:
+- Providing instant local development without Docker
+- Generating AI-friendly context files for smarter autocomplete
+- Offering full TypeScript type inference
+- Supporting multiple database providers
+
+---
+
+## Features
 
 | Feature | Description |
 |---------|-------------|
@@ -33,8 +48,15 @@ BetterBase is an AI-native Backend-as-a-Service (BaaS) platform that provides de
 | **TypeScript First** | Full type inference and strict mode throughout |
 | **BetterAuth Integration** | Production-ready authentication out of the box |
 | **Realtime Subscriptions** | WebSocket-based live data updates |
+| **Multi-Provider Support** | PostgreSQL, MySQL (Planetscale), SQLite (Turso), Neon, Supabase |
+| **RLS (Row Level Security)** | Built-in policy engine for fine-grained access control |
+| **Serverless Functions** | Deploy custom API functions |
+| **Storage API** | S3-compatible object storage |
+| **Webhooks** | Event-driven architecture with signed payloads |
 
-### Tech Stack
+---
+
+## Tech Stack
 
 - **Runtime**: [Bun](https://bun.sh) — All-in-one JavaScript runtime
 - **Framework**: [Hono](https://hono.dev) — Ultrafast web framework
@@ -45,61 +67,384 @@ BetterBase is an AI-native Backend-as-a-Service (BaaS) platform that provides de
 
 ---
 
-## Architecture Overview
+## Architecture
 
-BetterBase follows a modular monorepo architecture that separates concerns across specialized packages.
+### System Architecture Overview
 
-### System Design
+```mermaid
+flowchart TB
+    subgraph Client["Client Applications"]
+        Web[Web App]
+        Mobile[Mobile App]
+        SPA[Single Page App]
+    end
 
+    subgraph Tools["Development Tools"]
+        CLI[CLI<br/>packages/cli]
+        Dashboard[Dashboard<br/>apps/dashboard]
+    end
+
+    subgraph Templates["Project Templates"]
+        BaseTemp[Base Template<br/>templates/base]
+        AuthTemp[Auth Template<br/>templates/auth]
+    end
+
+    subgraph Packages["Core Packages"]
+        ClientSDK[Client SDK<br/>packages/client]
+        Core[Core Backend<br/>packages/core]
+        Shared[Shared Utils<br/>packages/shared]
+    end
+
+    subgraph Server["BetterBase Server"]
+        API[Hono API Server]
+        
+        subgraph Middleware["Middleware"]
+            Auth[Authentication]
+            RLS[Row Level Security]
+            Validation[Validation]
+        end
+        
+        subgraph Handlers["Handlers"]
+            Routes[API Routes]
+            Functions[Serverless Functions]
+            GraphQL[GraphQL Server]
+            Webhooks[Webhook Dispatcher]
+        end
+        
+        subgraph Services["Services"]
+            DB[Database Service]
+            Realtime[Realtime Service]
+            Storage[Storage Service]
+        end
+    end
+
+    subgraph Database["Database Providers"]
+        SQLite[(SQLite<br/>bun:sqlite)]
+        Postgres[(PostgreSQL)]
+        MySQL[(MySQL)]
+        Neon[(Neon)]
+        Turso[(Turso)]
+    end
+
+    subgraph Storage["Object Storage"]
+        S3[S3 Compatible]
+    end
+
+    Client -->|HTTP/WebSocket| ClientSDK
+    CLI -->|Project Management| Templates
+    CLI -->|Deploy Functions| Core
+    Dashboard -->|Admin| Core
+    BaseTemp -->|Uses| ClientSDK
+    AuthTemp -->|Uses| ClientSDK
+    
+    ClientSDK -->|API Calls| API
+    Templates -->|Local Dev| API
+    
+    API --> Middleware
+    Middleware --> Handlers
+    Handlers --> Services
+    Services --> Database
+    Storage --> S3
+    
+    Auth -.->|Session| Client
+    Realtime -.->|WebSocket| Client
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          BetterBase Platform                         │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐  │
-│  │   Dashboard  │    │     CLI      │    │    Client SDK        │  │
-│  │  (Next.js 15) │    │  (@bb/cli)   │    │  (@betterbase/client)│  │
-│  └──────┬───────┘    └──────┬───────┘    └──────────┬───────────┘  │
-│         │                   │                       │               │
-│         └───────────────────┼───────────────────────┘               │
-│                             │                                        │
-│                      ┌──────▼───────┐                                │
-│                      │   Templates  │                                │
-│                      │  (base/auth) │                                │
-│                      └──────┬───────┘                                │
-│                             │                                        │
-│         ┌───────────────────┼───────────────────┐                   │
-│         │                   │                   │                    │
-│  ┌──────▼───────┐    ┌──────▼───────┐    ┌──────▼───────┐         │
-│  │     Core     │    │    Shared    │    │    Client    │         │
-│  │  (stub)     │    │  (utilities) │    │   (SDK)      │         │
-│  └─────────────┘    └──────────────┘    └──────────────┘         │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                    Hono API Server                          │    │
-│  │  ┌─────────┐  ┌─────────┐  ┌──────────┐  ┌─────────────┐   │    │
-│  │  │ Routes  │  │ Auth    │  │ Database │  │  Realtime   │   │    │
-│  │  └─────────┘  └─────────┘  └──────────┘  └─────────────┘   │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                             │                                        │
-│                      ┌──────▼───────┐                                │
-│                      │    SQLite    │                                │
-│                      │ (bun:sqlite) │                                │
-│                      └──────────────┘                                │
-└─────────────────────────────────────────────────────────────────────┘
+
+### Package Structure
+
+```mermaid
+flowchart LR
+    subgraph Monorepo["BetterBase Monorepo"]
+        direction TB
+        
+        subgraph CLI_Package["packages/cli"]
+            CLI_Commands[Commands<br/>init, dev, migrate<br/>auth, generate, function<br/>graphql, login, rls<br/>storage, webhook]
+        end
+        
+        subgraph Client_Package["packages/client"]
+            Client_Modules[Modules<br/>Client, Auth<br/>Query Builder<br/>Realtime, Storage]
+        end
+        
+        subgraph Core_Package["packages/core"]
+            Core_Modules[Modules<br/>Config, Functions<br/>GraphQL, Middleware<br/>Migration, Providers<br/>RLS, Storage<br/>Webhooks]
+        end
+        
+        subgraph Shared_Package["packages/shared"]
+            Shared_Utils[Utilities<br/>Constants, Errors<br/>Types, Utils]
+        end
+    end
 ```
 
-### Package Overview
+---
 
-| Package | Location | Purpose |
-|---------|----------|---------|
-| `@betterbase/cli` | [`packages/cli`](packages/cli) | Command-line tool for project management |
-| `@betterbase/client` | [`packages/client`](packages/client) | TypeScript SDK for frontend integration |
-| `@betterbase/core` | [`packages/core`](packages/core) | Core backend engine (stub) |
-| `@betterbase/shared` | [`packages/shared`](packages/shared) | Shared utilities and types |
-| Dashboard | [`apps/dashboard`](apps/dashboard) | Next.js 15 admin studio |
-| Base Template | [`templates/base`](templates/base) | Bun + Hono + Drizzle starter |
-| Auth Template | [`templates/auth`](templates/auth) | Template with BetterAuth |
+### CLI Workflow
+
+```mermaid
+flowchart TB
+    Start([User starts CLI]) --> Init{Command type?}
+    
+    Init -->|init| InitCmd[Initialize Project]
+    Init -->|dev| DevCmd[Start Dev Server]
+    Init -->|migrate| MigrateCmd[Run Migrations]
+    Init -->|auth| AuthCmd[Setup Authentication]
+    Init -->|generate| GenerateCmd[Generate Code]
+    Init -->|function| FunctionCmd[Manage Functions]
+    Init -->|graphql| GraphQLCmd[GraphQL Operations]
+    Init -->|login| LoginCmd[User Login]
+    Init -->|rls| RLSCmd[Manage RLS Policies]
+    Init -->|storage| StorageCmd[Storage Operations]
+    Init -->|webhook| WebhookCmd[Webhook Management]
+    
+    InitCmd --> Scan[Scan Project Structure]
+    Scan --> Template{Template?}
+    Template -->|base| CopyBase[Copy Base Template]
+    Template -->|auth| CopyAuth[Copy Auth Template]
+    Template -->|none| Empty[Create Empty Project]
+    
+    CopyBase --> Deps[Install Dependencies]
+    CopyAuth --> Deps
+    Empty --> Deps
+    
+    Deps --> Config[Generate Config]
+    Config --> Context[Create .betterbase-context.json]
+    Context --> InitDone([Project Ready])
+    
+    DevCmd --> Watch[Watch Files]
+    Watch --> Detect{File Changes?}
+    Detect -->|Yes| ScanSchema[Scan Schema]
+    Detect -->|No| Watch
+    ScanSchema --> UpdateContext[Update Context]
+    UpdateContext --> Watch
+    
+    MigrateCmd --> Diff[Generate Migration Diff]
+    Diff --> Backup[Backup Database]
+    Backup --> Apply[Apply Migration]
+    Apply --> MigrateDone([Done])
+    
+    GenerateCmd --> Analyze[Analyze Schema]
+    Analyze --> Scaffold[ Scaffold CRUD Routes]
+    Scaffold --> GenerateDone([Done])
+    
+    AuthCmd --> Install[Install BetterAuth]
+    Install --> ScaffoldAuth[Scaffold Auth Files]
+    ScaffoldAuth --> AuthDone([Done])
+```
+
+---
+
+### Client Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Client as Client App
+    participant SDK as @betterbase/client
+    participant API as Hono API Server
+    participant MW as Middleware Stack
+    participant RLS as RLS Engine
+    participant DB as Database
+    
+    Client->>SDK: makeRequest(endpoint, options)
+    SDK->>SDK: Build HTTP Request
+    SDK->>API: Send HTTP Request
+    
+    API->>MW: Process Request
+    MW->>MW: 1. CORS Headers
+    MW->>MW: 2. Authentication Check
+    MW->>MW: 3. Rate Limiting
+    MW->>MW: 4. Validation
+    
+    alt Authenticated Request
+        MW->>RLS: Check Permissions
+        RLS->>RLS: Load Policies
+        RLS->>RLS: Evaluate Policy
+        RLS-->>API: Allow/Deny
+    else Anonymous Request
+        MW-->>API: Continue
+    end
+    
+    API->>DB: Execute Query
+    DB-->>API: Query Result
+    
+    API->>SDK: Return Response
+    SDK->>Client: Return Result
+    
+    alt Success
+        Client->>Client: Handle Data
+    else Error
+        Client->>Client: Handle Error
+    end
+```
+
+---
+
+### Authentication Flow
+
+```mermaid
+flowchart TB
+    Start([User Authentication]) --> Flow{Auth Type?}
+    
+    Flow -->|Sign Up| SignUp[User Signs Up]
+    Flow -->|Sign In| SignIn[User Signs In]
+    Flow -->|OAuth| OAuth[OAuth Provider]
+    Flow -->|Session| Session[Session Refresh]
+    
+    SignUp --> Validate1[Validate Input]
+    SignIn --> Validate2[Validate Credentials]
+    OAuth --> Redirect[Redirect to Provider]
+    
+    Validate1 --> CreateUser[Create User Record]
+    Validate2 --> CheckPassword[Verify Password]
+    Redirect --> ProviderAuth[Provider Authentication]
+    
+    CreateUser --> HashPassword[Hash Password]
+    CheckPassword --> Verify[Verify Hash]
+    ProviderAuth --> GetProviderToken[Get Provider Token]
+    
+    HashPassword --> CreateSession
+    Verify --> CreateSession
+    GetProviderToken --> CreateSession
+    
+    CreateSession[Create Session] --> GenerateToken[Generate JWT Token]
+    GenerateToken --> StoreSession[Store Session in DB]
+    StoreSession --> SetCookie[Set HTTP-Only Cookie]
+    SetCookie --> ReturnSession[Return Session to Client]
+    
+    ReturnSession --> UserAuth([User Authenticated])
+    
+    Session --> LoadSession[Load Session from Cookie]
+    LoadSession --> VerifySession[Verify Token]
+    VerifySession --> CheckExpiry{Expired?}
+    CheckExpiry -->|Yes| RefreshToken[Refresh Token]
+    CheckExpiry -->|No| Valid[Valid Session]
+    RefreshToken --> GenerateToken
+    
+    Valid --> UserAuth
+```
+
+---
+
+### Realtime Subscription Flow
+
+```mermaid
+sequenceDiagram
+    participant Client as Client App
+    participant SDK as @betterbase/client
+    participant WS as WebSocket Server
+    participant Sub as Subscription Manager
+    participant DB as Database
+    
+    Note over Client, DB: Realtime Subscription Flow
+    
+    Client->>SDK: .from(table).on(event, callback)
+    SDK->>SDK: Create Subscription Object
+    
+    SDK->>WS: Connect WebSocket
+    WS->>Sub: Register Subscription
+    
+    Sub->>DB: Subscribe to Changes
+    DB-->>Sub: Subscription Confirmed
+    
+    WS-->>SDK: Connection Established
+    SDK-->>Client: Subscription Ready
+    
+    Note over DB, Sub: Database Change Detection
+    
+    DB->>Sub: INSERT/UPDATE/DELETE Event
+    Sub->>Sub: Apply RLS Policies
+    Sub->>WS: Filtered Event
+    
+    WS->>SDK: Push Event
+    SDK->>Client: Trigger Callback
+    
+    Client->>Client: Handle Event Data
+    
+    Note over Client, WS: Ongoing until Unsubscribe
+    
+    Client->>SDK: .unsubscribe()
+    SDK->>WS: Close Subscription
+    WS->>Sub: Remove Subscription
+    Sub->>DB: Unsubscribe
+```
+
+---
+
+### Database Operations Flow
+
+```mermaid
+flowchart TB
+    Start([Database Operation]) --> Query{Operation Type?}
+    
+    Query -->|SELECT| SelectFlow[Build SELECT Query]
+    Query -->|INSERT| InsertFlow[Build INSERT Query]
+    Query -->|UPDATE| UpdateFlow[Build UPDATE Query]
+    Query -->|DELETE| DeleteFlow[Build DELETE Query]
+    
+    SelectFlow --> Builder[Query Builder]
+    InsertFlow --> Builder
+    UpdateFlow --> Builder
+    DeleteFlow --> Builder
+    
+    Builder --> Filters[Apply Filters]
+    Filters --> RLS{RLS Enabled?}
+    
+    RLS -->|Yes| LoadPolicies[Load RLS Policies]
+    RLS -->|No| SkipRLS[Skip RLS]
+    
+    LoadPolicies --> Evaluate[Evaluate Policies]
+    Evaluate --> AddPolicy[Add Policy to Query]
+    AddPolicy --> Execute
+    SkipRLS --> Execute
+    
+    Execute --> DB[(Database)]
+    DB --> Result[Return Result]
+    
+    Result --> ErrorCheck{Error?}
+    ErrorCheck -->|Yes| HandleError[Handle Error]
+    ErrorCheck -->|No| Transform[Transform Result]
+    
+    HandleError --> ReturnError([Return Error])
+    Transform --> ReturnData([Return Data])
+```
+
+---
+
+### RLS (Row Level Security) Flow
+
+```mermaid
+flowchart TB
+    Start([RLS Protected Request]) --> Parse[Parse Request]
+    Parse --> LoadUser{User Auth?}
+    
+    LoadUser -->|Authenticated| GetSession[Get Session]
+    LoadUser -->|Anonymous| Anonymous[Anonymous User]
+    
+    GetSession --> LoadPolicies[Load Table Policies]
+    Anonymous --> LoadPolicies
+    
+    LoadPolicies --> Iterate{For Each Policy}
+    Iterate --> CheckType{Policy Type?}
+    
+    CheckType -->|SELECT| SelectCheck[Check SELECT]
+    CheckType -->|INSERT| InsertCheck[Check INSERT]
+    CheckType -->|UPDATE| UpdateCheck[Check UPDATE]
+    CheckType -->|DELETE| DeleteCheck[Check DELETE]
+    
+    SelectCheck --> EvalExpression[Evaluate Expression]
+    InsertCheck --> EvalExpression
+    UpdateCheck --> EvalExpression
+    DeleteCheck --> EvalExpression
+    
+    EvalExpression --> Result{Result?}
+    
+    Result -->|True| Allow[Allow Operation]
+    Result -->|False| Deny[Deny Operation]
+    
+    Allow --> Continue[Continue to Handler]
+    Deny --> Reject[Return 403 Error]
+    
+    Continue --> Complete([Complete Request])
+    Reject --> Complete
+```
 
 ---
 
@@ -168,116 +513,9 @@ Your server is now running at `http://localhost:3000`.
 
 ---
 
-## Core Concepts
-
-### Database
-
-BetterBase uses **Drizzle ORM** with SQLite for local development. The schema is defined in [`src/db/schema.ts`](templates/base/src/db/schema.ts).
-
-#### Schema Helpers
-
-The base template provides utility helpers for common patterns:
-
-```typescript
-import { timestamps, uuid, softDelete, statusEnum, jsonColumn } from './db/schema';
-
-// Timestamps (created_at, updated_at)
-export const posts = sqliteTable('posts', {
-  id: uuid(),           // UUID primary key
-  title: text('title').notNull(),
-  status: statusEnum(), // 'active' | 'inactive' | 'pending'
-  metadata: jsonColumn<{ key: string }>('metadata'),
-  ...timestamps,        // Auto-managed timestamps
-  ...softDelete,        // Soft delete (deleted_at)
-});
-```
-
-#### Database Operations
-
-```typescript
-import { db } from './db';
-import { users } from './db/schema';
-
-// Query with Drizzle
-const allUsers = await db.select().from(users).where(eq(users.status, 'active'));
-
-// Insert
-const [newUser] = await db.insert(users).values({
-  id: crypto.randomUUID(),
-  email: 'user@example.com',
-  name: 'John Doe',
-}).returning();
-
-// Update
-const [updated] = await db.update(users)
-  .set({ name: 'Jane Doe' })
-  .where(eq(users.id, userId))
-  .returning();
-```
-
-### Authentication
-
-BetterBase integrates **BetterAuth** for complete authentication functionality:
-
-- Email/password authentication
-- Session management with cookies
-- OAuth providers (optional)
-- Protected routes middleware
-
-#### Auth Middleware
-
-```typescript
-import { requireAuth } from './middleware/auth';
-
-app.get('/protected', requireAuth, async (c) => {
-  const user = c.get('user');
-  return c.json({ message: `Hello, ${user.name}!` });
-});
-```
-
-### Realtime
-
-WebSocket-based realtime subscriptions for live data updates:
-
-```typescript
-// Subscribe to table changes
-const subscription = client.realtime
-  .from('posts')
-  .on('INSERT', (payload) => {
-    console.log('New post:', payload.data);
-  })
-  .subscribe();
-```
-
-### AI Context (`.betterbase-context.json`)
-
-The CLI automatically generates an AI context file that helps AI assistants understand your schema and API routes:
-
-```json
-{
-  "version": 1,
-  "tables": {
-    "users": {
-      "columns": {
-        "id": "text (uuid)",
-        "email": "text (unique)",
-        "name": "text",
-        "status": "text (enum: active, inactive, pending)"
-      }
-    }
-  },
-  "routes": {
-    "GET /api/users": "List all users",
-    "POST /api/users": "Create user"
-  }
-}
-```
-
----
-
 ## CLI Reference
 
-The BetterBase CLI (`bb`) provides commands for project management:
+The BetterBase CLI (`bb`) provides commands for project management.
 
 ### Global Options
 
@@ -372,6 +610,66 @@ bb generate crud posts ./my-project
 | `POST` | `/api/{table}` | Create new record |
 | `PATCH` | `/api/{table}/:id` | Update record |
 | `DELETE` | `/api/{table}/:id` | Delete record |
+
+#### `bb function`
+
+Manage serverless functions.
+
+```bash
+# Create new function
+bb function create my-function
+
+# Deploy function
+bb function deploy my-function
+
+# List functions
+bb function list
+```
+
+#### `bb rls`
+
+Manage Row Level Security policies.
+
+```bash
+# Generate RLS policies
+bb rls generate
+
+# Apply policies
+bb rls apply
+
+# Test policies
+bb rls test
+```
+
+#### `bb storage`
+
+Manage object storage operations.
+
+```bash
+# Upload file
+bb storage upload ./file.txt
+
+# Download file
+bb storage download path/to/file
+
+# List files
+bb storage ls
+```
+
+#### `bb webhook`
+
+Manage webhooks.
+
+```bash
+# Create webhook
+bb webhook create https://example.com/hook
+
+# List webhooks
+bb webhook list
+
+# Delete webhook
+bb webhook delete webhook-id
+```
 
 ---
 
@@ -498,664 +796,236 @@ const { error } = await client.auth.signOut();
 | `.signIn(email, password)` | `string, string` | Sign in with credentials |
 | `.signOut()` | — | End current session |
 | `.getSession()` | — | Get current session |
-| `.getToken()` | — | Get stored token |
 
 ### Realtime Subscriptions
 
 ```typescript
-// Subscribe to INSERT events
-const insertSub = client.realtime
-  .from('messages')
+// Subscribe to table changes
+const subscription = client.realtime
+  .from('posts')
   .on('INSERT', (payload) => {
-    console.log('New message:', payload.data);
+    console.log('New post:', payload.data);
   })
-  .subscribe();
-
-// Subscribe to UPDATE events
-const updateSub = client.realtime
-  .from('messages')
   .on('UPDATE', (payload) => {
-    console.log('Updated message:', payload.data);
+    console.log('Updated post:', payload.data);
+  })
+  .on('DELETE', (payload) => {
+    console.log('Deleted post:', payload.oldData);
   })
   .subscribe();
 
-// Subscribe to all events
-const allSub = client.realtime
-  .from('messages')
-  .on('*', (payload) => {
-    console.log('Any change:', payload.event, payload.data);
-  })
-  .subscribe();
-
-// Unsubscribe
-insertSub.unsubscribe();
+// Unsubscribe when done
+subscription.unsubscribe();
 ```
 
-### Error Handling
+### Storage
 
 ```typescript
-import { BetterBaseError, NetworkError, AuthError, ValidationError } from '@betterbase/client';
+// Upload file
+const { data, error } = await client.storage.upload(
+  'avatars/user123.png',
+  fileObject
+);
 
-const { data, error } = await client.from('users').execute();
+// Download file
+const { data, error } = await client.storage.download(
+  'avatars/user123.png'
+);
 
-if (error) {
-  if (error instanceof NetworkError) {
-    console.error('Network issue:', error.message);
-  } else if (error instanceof AuthError) {
-    console.error('Auth failed:', error.message);
-  } else if (error instanceof ValidationError) {
-    console.error('Validation error:', error.message);
-  } else if (error instanceof BetterBaseError) {
-    console.error('API error:', error.message, error.code);
-  }
-}
+// Get public URL
+const url = client.storage.getPublicUrl('avatars/user123.png');
+
+// Delete file
+const { error } = await client.storage.delete('avatars/user123.png');
 ```
-
----
-
-## Templates
-
-BetterBase provides starter templates for different use cases.
-
-### Base Template
-
-Location: [`templates/base`](templates/base)
-
-The base template includes:
-
-- **Bun** runtime with TypeScript strict mode
-- **Hono** API server
-- **Drizzle ORM** with SQLite
-- **Zod** for request validation
-- **WebSocket** realtime support
-
-#### Project Structure
-
-```
-templates/base/
-├── src/
-│   ├── db/
-│   │   ├── index.ts      # Database connection
-│   │   ├── schema.ts     # Drizzle schema
-│   │   └── migrate.ts    # Migration utilities
-│   ├── routes/
-│   │   ├── index.ts      # Route registration
-│   │   ├── health.ts     # Health check endpoint
-│   │   └── users.ts      # User CRUD endpoints
-│   ├── middleware/
-│   │   ├── auth.ts       # Auth middleware
-│   │   └── validation.ts # Request validation
-│   ├── lib/
-│   │   ├── env.ts        # Environment validation
-│   │   └── realtime.ts   # WebSocket handler
-│   └── index.ts          # App entry point
-├── betterbase.config.ts  # BetterBase configuration
-├── drizzle.config.ts     # Drizzle configuration
-└── package.json
-```
-
-#### Quick Start
-
-```bash
-# Create from template
-bun create betterbase my-app
-
-cd my-app
-
-# Install dependencies
-bun install
-
-# Start development
-bun run dev
-```
-
-#### Available Scripts
-
-| Script | Description |
-|--------|-------------|
-| `bun run dev` | Start development server |
-| `bun run build` | Build for production |
-| `bun run start` | Start production server |
-| `bun run db:generate` | Generate Drizzle migrations |
-| `bun run db:push` | Push schema to database |
-
-### Auth Template
-
-Location: [`templates/auth`](templates/auth)
-
-The auth template extends the base template with BetterAuth integration:
-
-- Email/password authentication
-- Session management
-- Protected routes
-- TypeScript types for users and sessions
-
-#### Getting Started
-
-```bash
-# Create auth template
-bun create betterbase my-app --template auth
-
-cd my-app
-
-# Install dependencies
-bun install
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your AUTH_SECRET
-
-# Run migrations
-bun run db:push
-
-# Start development
-bun run dev
-```
-
-#### Environment Variables
-
-```bash
-# Required
-AUTH_SECRET=your-secret-key-change-in-production
-AUTH_URL=http://localhost:3000
-
-# Optional (for production)
-DATABASE_URL=your-production-database-url
-```
-
-#### Auth API Endpoints
-
-BetterAuth automatically provides these endpoints:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/auth/signup` | `POST` | Create new account |
-| `/api/auth/signin` | `POST` | Sign in to account |
-| `/api/auth/signout` | `POST` | Sign out |
-| `/api/auth/get-session` | `GET` | Get current session |
-| `/api/auth/verify-email` | `POST` | Verify email address |
-| `/api/auth/forgot-password` | `POST` | Request password reset |
-| `/api/auth/reset-password` | `POST` | Reset password |
 
 ---
 
 ## API Reference
 
-### REST API Patterns
+### REST Endpoints
 
-BetterBase follows RESTful conventions with the following patterns:
+#### Users
 
-#### List Records
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/users` | List all users (paginated) |
+| `GET` | `/api/users/:id` | Get user by ID |
+| `POST` | `/api/users` | Create new user |
+| `PATCH` | `/api/users/:id` | Update user |
+| `DELETE` | `/api/users/:id` | Delete user |
 
-```http
-GET /api/{table}?select=field1,field2&status=active&sort=createdAt:desc&limit=20&offset=0
-```
+#### Authentication
 
-**Query Parameters:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/auth/signup` | Register new user |
+| `POST` | `/api/auth/signin` | Sign in user |
+| `POST` | `/api/auth/signout` | Sign out user |
+| `GET` | `/api/auth/session` | Get current session |
+| `POST` | `/api/auth/refresh` | Refresh session |
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `select` | string | Comma-separated fields to select |
-| `{column}` | string | Filter by column value |
-| `{column}_in` | JSON array | Filter by values in array |
-| `sort` | string | Sort format: `column:direction` |
-| `limit` | number | Results limit (default: 50, max: 100) |
-| `offset` | number | Results offset for pagination |
+#### Storage
 
-**Response:**
-
-```json
-{
-  "users": [
-    { "id": "uuid", "name": "John", "email": "john@example.com" }
-  ],
-  "pagination": {
-    "limit": 50,
-    "offset": 0,
-    "hasMore": false
-  }
-}
-```
-
-#### Get Single Record
-
-```http
-GET /api/{table}/{id}
-```
-
-#### Create Record
-
-```http
-POST /api/{table}
-Content-Type: application/json
-
-{
-  "field1": "value1",
-  "field2": "value2"
-}
-```
-
-#### Update Record
-
-```http
-PATCH /api/{table}/{id}
-Content-Type: application/json
-
-{
-  "field1": "updated value"
-}
-```
-
-#### Delete Record
-
-```http
-DELETE /api/{table}/{id}
-```
-
-### Authentication
-
-#### Anonymous Access
-
-Clients can make requests without authentication for public resources:
-
-```typescript
-const client = createClient({
-  url: 'http://localhost:3000',
-});
-```
-
-#### Authenticated Access
-
-Include the session token in requests:
-
-```typescript
-// After sign in, the client automatically includes the token
-const { data } = await client.auth.signIn('user@example', 'password');
-
-// All subsequent requests include Authorization header
-const { data } = await client.from('posts').execute();
-```
-
-### Rate Limiting
-
-> **Note:** Rate limiting is planned for future implementation.
-
-### WebSocket (Realtime)
-
-Connect to the WebSocket endpoint for realtime updates:
-
-```typescript
-const ws = new WebSocket('ws://localhost:3000/ws?token=<session-token>');
-
-// Subscribe
-ws.send(JSON.stringify({
-  type: 'subscribe',
-  table: 'messages',
-  filter: { status: 'active' }
-}));
-
-// Receive updates
-ws.onmessage = (event) => {
-  const { type, table, event: eventType, data } = JSON.parse(event.data);
-  console.log(`${table}:${eventType}`, data);
-};
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/storage/files` | List files |
+| `POST` | `/api/storage/upload` | Upload file |
+| `GET` | `/api/storage/:path` | Download file |
+| `DELETE` | `/api/storage/:path` | Delete file |
 
 ---
 
 ## Best Practices
 
-### Database Design
+### Database Schema
 
-#### Use UUIDs for IDs
+1. **Use UUIDs for primary keys**: BetterBase provides a `uuid()` helper
 
 ```typescript
-// Always use UUID for primary keys
 import { uuid } from './db/schema';
 
-export const posts = sqliteTable('posts', {
-  id: uuid(), // Generates: crypto.randomUUID()
+export const users = sqliteTable('users', {
+  id: uuid().primaryKey(),
   // ...
 });
 ```
 
-#### Add Timestamps
+2. **Add timestamps to all tables**: Use the `timestamps` helper
 
 ```typescript
 import { timestamps } from './db/schema';
 
 export const posts = sqliteTable('posts', {
-  id: uuid(),
-  // ...
-  ...timestamps, // Adds createdAt and updatedAt
+  id: uuid().primaryKey(),
+  title: text('title').notNull(),
+  ...timestamps,
 });
 ```
 
-#### Use Enums for Status Fields
+3. **Use soft deletes**: Use the `softDelete` helper for data recovery
 
 ```typescript
-import { statusEnum } from './db/schema';
+import { softDelete } from './db/schema';
 
-export const orders = sqliteTable('orders', {
-  id: uuid(),
-  status: statusEnum(), // 'active' | 'inactive' | 'pending'
-  // ...
+export const posts = sqliteTable('posts', {
+  id: uuid().primaryKey(),
+  ...softDelete,
 });
 ```
 
 ### Security
 
-#### Never Expose Secret Keys
+1. **Always enable RLS**: Enable Row Level Security on all tables
 
 ```typescript
-// ✅ GOOD: Server-side only
-import { env } from './lib/env';
-const secretKey = env.AUTH_SECRET;
-
-// ❌ BAD: Client-side exposure
-const client = createClient({
-  url: 'http://localhost:3000',
-  key: 'secret-key', // Never do this!
+// In your schema
+export const users = sqliteTable('users', {
+  id: uuid().primaryKey(),
+  email: text('email').notNull(),
 });
+
+// Enable RLS
+await enableRLS('users');
 ```
 
-#### Validate Input Data
+2. **Create policies for common patterns**:
 
 ```typescript
-import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
+// Users can only see their own data
+createPolicy('users', 'read', 'auth.uid() = user_id');
 
-const createSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1).max(100),
-  age: z.number().int().min(0).optional(),
-});
-
-app.post('/users', zValidator('json', createSchema), async (c) => {
-  const body = c.req.valid('json');
-  // body is now type-safe
-});
+// Only admins can delete
+createPolicy('users', 'delete', 'auth.role() = admin');
 ```
 
-#### Use Protected Routes
+3. **Validate all inputs**: Use the validation middleware
 
 ```typescript
-import { requireAuth } from './middleware/auth';
+import { validate } from './middleware/validation';
 
-// This route requires authentication
-app.get('/profile', requireAuth, async (c) => {
-  const user = c.get('user');
-  return c.json({ profile: user });
+app.post('/api/users', validate(userSchema), async (c) => {
+  // Handler code
 });
 ```
 
 ### Performance
 
-#### Use Pagination
+1. **Use indexes on frequently queried columns**:
 
 ```typescript
-// ✅ GOOD: Paginated queries
-const { data } = await client
+export const posts = sqliteTable('posts', {
+  id: uuid().primaryKey(),
+  authorId: text('author_id').notNull(),
+  status: text('status').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  authorIdx: index('author_idx').on(table.authorId),
+  statusIdx: index('status_idx').on(table.status),
+}));
+```
+
+2. **Limit query results**: Always use `.limit()` for large tables
+
+```typescript
+const posts = await client
   .from('posts')
-  .limit(20)
-  .offset(page * 20)
-  .execute();
-
-// ❌ BAD: No limits
-const { data } = await client.from('posts').execute(); // May return thousands!
-```
-
-#### Select Only Needed Fields
-
-```typescript
-// ✅ GOOD: Specific fields
-const { data } = await client
-  .from('users')
-  .select('id, name')
-  .execute();
-
-// ❌ BAD: All fields
-const { data } = await client
-  .from('users')
-  .select('*')
+  .select()
+  .limit(50)
   .execute();
 ```
 
-#### Unsubscribe from Realtime
+3. **Use pagination for lists**: Implement offset/limit pagination
 
 ```typescript
-// Always unsubscribe when done
-const subscription = client.realtime
-  .from('messages')
-  .on('INSERT', handleMessage)
-  .subscribe();
+const page = 1;
+const limit = 20;
+const offset = (page - 1) * limit;
 
-// Later, when no longer needed
-subscription.unsubscribe();
+const posts = await client
+  .from('posts')
+  .select()
+  .limit(limit)
+  .offset(offset)
+  .execute();
 ```
 
-### Project Structure
+### Development Workflow
 
-#### Organize Routes by Resource
-
-```
-src/routes/
-├── index.ts      # Route registration
-├── users.ts      # User CRUD
-├── posts.ts      # Post CRUD
-├── comments.ts   # Comment CRUD
-└── auth.ts       # Authentication
-```
-
-#### Use Middleware for Cross-Cutting Concerns
-
-```typescript
-// src/middleware/logging.ts
-export const loggingMiddleware = async (c, next) => {
-  const start = Date.now();
-  await next();
-  const duration = Date.now() - start;
-  console.log(`${c.req.method} ${c.req.url} - ${duration}ms`);
-};
-
-// Usage
-app.use('*', loggingMiddleware);
-```
-
----
-
-## Maintenance & Troubleshooting
-
-### Database Migrations
-
-#### Generating Migrations
+1. **Use the dev server for development**: It watches for changes
 
 ```bash
-# After modifying schema.ts, generate migrations
-bun run db:generate
-
-# Or use CLI
-bb migrate
+bb dev
 ```
 
-#### Previewing Migrations
+2. **Generate context before AI coding**: Ensures AI has latest schema
 
 ```bash
-# See what will change without applying
-bb migrate preview
+# Automatically done by dev server
+# Or manually:
+bb dev --generate
 ```
 
-#### Applying Migrations
+3. **Use templates for new projects**: Start with a template
 
 ```bash
-# Local development
-bb migrate
-
-# Production (with confirmation)
-bb migrate production
-```
-
-### Troubleshooting Common Issues
-
-#### "Database locked" Error
-
-This occurs when multiple processes access SQLite simultaneously.
-
-**Solution:**
-```bash
-# Close any other connections to the database
-# Restart the dev server
-bun run dev
-```
-
-#### Migration Conflicts
-
-If migrations fail with conflict errors:
-
-1. Review the migration files in `drizzle/`
-2. Resolve conflicts manually
-3. Re-run migration
-
-```bash
-bb migrate preview
-```
-
-#### TypeScript Errors
-
-If you encounter TypeScript errors:
-
-1. Clear the build cache:
-```bash
-rm -rf node_modules/.cache
-bun run build
-```
-
-2. Verify `tsconfig.json` extends the base config:
-```json
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "strict": true
-  }
-}
-```
-
-#### WebSocket Connection Issues
-
-If realtime subscriptions fail to connect:
-
-1. Verify WebSocket endpoint is enabled
-2. Check firewall settings
-3. Ensure browser supports WebSocket
-
-```typescript
-// Debug WebSocket
-const ws = new WebSocket('ws://localhost:3000/ws');
-ws.onerror = (error) => console.error('WS Error:', error);
-ws.onopen = () => console.log('Connected!');
-```
-
-### Monitoring
-
-#### Health Checks
-
-Always verify server health before deploying:
-
-```bash
-curl http://localhost:3000/api/health
-```
-
-Expected response:
-```json
-{
-  "status": "ok",
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
-#### Logging
-
-Enable debug logging in development:
-
-```typescript
-// In your app
-console.log('[BetterBase] Request:', c.req.method, c.req.url);
-```
-
-### Deployment Checklist
-
-Before deploying to production:
-
-- [ ] Set `NODE_ENV=production`
-- [ ] Configure production database (not SQLite)
-- [ ] Set secure `AUTH_SECRET` (min 32 characters)
-- [ ] Configure `AUTH_URL` to production domain
-- [ ] Run migrations on production database
-- [ ] Set up proper CORS configuration
-- [ ] Enable HTTPS/SSL
-- [ ] Configure rate limiting (future)
-- [ ] Set up monitoring and alerting
-
-### Environment Configuration
-
-#### Development
-
-```bash
-NODE_ENV=development
-PORT=3000
-DB_PATH=local.db
-```
-
-#### Production
-
-```bash
-NODE_ENV=production
-PORT=3000
-AUTH_SECRET=your-secure-secret-min-32-chars
-AUTH_URL=https://your-domain.com
-DATABASE_URL=postgresql://user:pass@host:5432/db
-```
-
----
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
-
-### Development Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/betterbase/betterbase.git
-cd betterbase
-
-# Install dependencies
-bun install
-
-# Build all packages
-bun run build
-
-# Run tests
-bun test
-
-# Start development
-bun run dev
+# Auth template includes:
+# - BetterAuth setup
+# - User table and policies
+# - Session management
+bb init my-app --template auth
 ```
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+Apache 2.0 License - see [LICENSE](LICENSE) for details.
 
 ---
 
 ## Support
 
-- **Documentation**: [docs.betterbase.io](https://docs.betterbase.io)
-- **GitHub Issues**: [github.com/betterbase/betterbase/issues](https://github.com/betterbase/betterbase/issues)
-- **Discord**: [discord.gg/betterbase](https://discord.gg/betterbase)
-
----
-
-*Last updated: February 2026*
+- [Documentation](https://docs.betterbase.dev)
+- [GitHub Issues](https://github.com/betterbase/betterbase/issues)
+- [Discord Community](https://discord.gg/betterbase)

@@ -1,303 +1,326 @@
-import { Command, CommanderError } from "commander";
-import packageJson from "../package.json";
-import { runAuthSetupCommand } from "./commands/auth";
-import { runDevCommand } from "./commands/dev";
-import { runFunctionCommand } from "./commands/function";
-import { runGenerateCrudCommand } from "./commands/generate";
-import { runGenerateGraphqlCommand, runGraphqlPlaygroundCommand } from "./commands/graphql";
-import { runInitCommand } from "./commands/init";
-import { runMigrateCommand } from "./commands/migrate";
-import { runRlsCommand } from "./commands/rls";
-import {
-	runStorageBucketsListCommand,
-	runStorageInitCommand,
-	runStorageUploadCommand,
-} from "./commands/storage";
-import { runWebhookCommand } from "./commands/webhook";
-import * as logger from "./utils/logger";
+import { Command, CommanderError } from 'commander';
+import { runInitCommand } from './commands/init';
+import { runDevCommand } from './commands/dev';
+import { runMigrateCommand } from './commands/migrate';
+import { runAuthSetupCommand } from './commands/auth';
+import { runGenerateCrudCommand } from './commands/generate';
+import { runStorageInitCommand, runStorageBucketsListCommand, runStorageUploadCommand } from './commands/storage';
+import { runGenerateGraphqlCommand, runGraphqlPlaygroundCommand } from './commands/graphql';
+import { runRlsCommand } from './commands/rls';
+import { runWebhookCommand } from './commands/webhook';
+import { runFunctionCommand } from './commands/function';
+// import { runLoginCommand, runLogoutCommand } from './commands/login';
+import * as logger from './utils/logger';
+import packageJson from '../package.json';
 
 /**
  * Create and configure the BetterBase CLI program.
  */
 export function createProgram(): Command {
-	const program = new Command();
+  const program = new Command();
 
-	program
-		.name("bb")
-		.description("BetterBase CLI")
-		.version(packageJson.version, "-v, --version", "display the CLI version")
-		.exitOverride();
+  program
+    .name('bb')
+    .description('BetterBase CLI')
+    .version(packageJson.version, '-v, --version', 'display the CLI version')
+    .exitOverride();
 
-	program
-		.command("init")
-		.description("Initialize a BetterBase project")
-		.argument("[project-name]", "project name")
-		.action(async (projectName?: string) => {
-			await runInitCommand({ projectName });
-		});
+  program
+    .command('init')
+    .description('Initialize a BetterBase project')
+    .argument('[project-name]', 'project name')
+    .action(async (projectName?: string) => {
+      await runInitCommand({ projectName });
+    });
 
-	program
-		.command("dev")
-		.description("Watch schema/routes and regenerate .betterbase-context.json")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (projectRoot: string) => {
-			const cleanup = await runDevCommand(projectRoot);
 
-			let cleanedUp = false;
-			const onExit = (): void => {
-				if (!cleanedUp) {
-					cleanedUp = true;
-					try {
-						cleanup();
-					} catch (err) {
-						const message = err instanceof Error ? err.message : String(err);
-						logger.warn(`Dev cleanup failed: ${message}`);
-					}
-				}
+  program
+    .command('dev')
+    .description('Watch schema/routes and regenerate .betterbase-context.json')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      const cleanup = await runDevCommand(projectRoot);
 
-				process.off("SIGINT", onSigInt);
-				process.off("SIGTERM", onSigTerm);
-				process.off("exit", onProcessExit);
-			};
-			const onSigInt = (): void => {
-				onExit();
-				process.exit(0);
-			};
-			const onSigTerm = (): void => {
-				onExit();
-				process.exit(0);
-			};
-			const onProcessExit = (): void => {
-				onExit();
-			};
+      let cleanedUp = false;
+      const onExit = (): void => {
+        if (!cleanedUp) {
+          cleanedUp = true;
+          try {
+            cleanup();
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.warn(`Dev cleanup failed: ${message}`);
+          }
+        }
 
-			process.on("SIGINT", onSigInt);
-			process.on("SIGTERM", onSigTerm);
-			process.on("exit", onProcessExit);
-		});
+        process.off('SIGINT', onSigInt);
+        process.off('SIGTERM', onSigTerm);
+        process.off('exit', onProcessExit);
+      };
+      const onSigInt = (): void => {
+        onExit();
+        process.exit(0);
+      };
+      const onSigTerm = (): void => {
+        onExit();
+        process.exit(0);
+      };
+      const onProcessExit = (): void => {
+        onExit();
+      };
 
-	const auth = program.command("auth").description("Authentication helpers");
+      process.on('SIGINT', onSigInt);
+      process.on('SIGTERM', onSigTerm);
+      process.on('exit', onProcessExit);
+    });
 
-	auth
-		.command("setup")
-		.description("Install and scaffold BetterAuth integration")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (projectRoot: string) => {
-			await runAuthSetupCommand(projectRoot);
-		});
 
-	const generate = program.command("generate").description("Code generation helpers");
+  const auth = program.command('auth').description('Authentication helpers');
 
-	generate
-		.command("crud")
-		.description("Generate full CRUD routes for a table")
-		.argument("<table-name>", "table name from src/db/schema.ts")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (tableName: string, projectRoot: string) => {
-			await runGenerateCrudCommand(projectRoot, tableName);
-		});
+  auth
+    .command('setup')
+    .description('Install and scaffold BetterAuth integration')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runAuthSetupCommand(projectRoot);
+    });
 
-	const graphql = program.command("graphql").description("GraphQL API management");
 
-	graphql
-		.command("generate")
-		.description("Generate GraphQL schema from database schema")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (projectRoot: string) => {
-			await runGenerateGraphqlCommand(projectRoot);
-		});
+  const generate = program.command('generate').description('Code generation helpers');
 
-	graphql
-		.command("playground")
-		.description("Open GraphQL Playground in browser")
-		.action(async () => {
-			await runGraphqlPlaygroundCommand();
-		});
+  generate
+    .command('crud')
+    .description('Generate full CRUD routes for a table')
+    .argument('<table-name>', 'table name from src/db/schema.ts')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (tableName: string, projectRoot: string) => {
+      await runGenerateCrudCommand(projectRoot, tableName);
+    });
 
-	const migrate = program
-		.command("migrate")
-		.description("Generate and apply migrations for local development");
+  const graphql = program.command('graphql').description('GraphQL API management');
 
-	migrate.action(async () => {
-		await runMigrateCommand({});
-	});
+  graphql
+    .command('generate')
+    .description('Generate GraphQL schema from database schema')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runGenerateGraphqlCommand(projectRoot);
+    });
 
-	migrate
-		.command("preview")
-		.description("Preview migration diff without applying changes")
-		.action(async () => {
-			await runMigrateCommand({ preview: true });
-		});
+  graphql
+    .command('playground')
+    .description('Open GraphQL Playground in browser')
+    .action(async () => {
+      await runGraphqlPlaygroundCommand();
+    });
 
-	migrate
-		.command("production")
-		.description("Apply migrations to production (requires confirmation)")
-		.action(async () => {
-			await runMigrateCommand({ production: true });
-		});
+  const migrate = program.command('migrate').description('Generate and apply migrations for local development');
 
-	const storage = program.command("storage").description("Storage management");
+  migrate
+    .action(async () => {
+      await runMigrateCommand({});
+    });
 
-	storage
-		.command("init")
-		.description("Initialize storage with a provider")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (projectRoot: string) => {
-			await runStorageInitCommand(projectRoot);
-		});
+  migrate
+    .command('preview')
+    .description('Preview migration diff without applying changes')
+    .action(async () => {
+      await runMigrateCommand({ preview: true });
+    });
 
-	storage
-		.command("list")
-		.description("List objects in storage bucket")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (projectRoot: string) => {
-			await runStorageBucketsListCommand(projectRoot);
-		});
+  migrate
+    .command('production')
+    .description('Apply migrations to production (requires confirmation)')
+    .action(async () => {
+      await runMigrateCommand({ production: true });
+    });
 
-	storage
-		.command("buckets")
-		.description("List objects in storage bucket (alias for list)")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (projectRoot: string) => {
-			await runStorageBucketsListCommand(projectRoot);
-		});
 
-	storage
-		.command("upload")
-		.description("Upload a file to storage")
-		.argument("<file>", "file path to upload")
-		.option("-b, --bucket <name>", "bucket name")
-		.option("-p, --path <path>", "remote path")
-		.option("-r, --root <path>", "project root directory", process.cwd())
-		.action(async (file: string, options: { bucket?: string; path?: string; root?: string }) => {
-			await runStorageUploadCommand(file, {
-				bucket: options.bucket,
-				path: options.path,
-				projectRoot: options.root,
-			});
-		});
+  const storage = program.command('storage').description('Storage management');
 
-	const rls = program.command("rls").description("Row Level Security policy management");
+  storage
+    .command('init')
+    .description('Initialize storage with a provider')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runStorageInitCommand(projectRoot);
+    });
 
-	rls
-		.command("create")
-		.description("Create a new RLS policy file for a table")
-		.argument("<table>", "table name")
-		.action(async (table: string) => {
-			await runRlsCommand(["create", table]);
-		});
+  storage
+    .command('list')
+    .description('List objects in storage bucket')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runStorageBucketsListCommand(projectRoot);
+    });
 
-	rls
-		.command("list")
-		.description("List all RLS policy files")
-		.action(async () => {
-			await runRlsCommand(["list"]);
-		});
+  storage
+    .command('buckets')
+    .description('List objects in storage bucket (alias for list)')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runStorageBucketsListCommand(projectRoot);
+    });
 
-	rls
-		.command("disable")
-		.description("Show how to disable RLS for a table")
-		.argument("<table>", "table name")
-		.action(async (table: string) => {
-			await runRlsCommand(["disable", table]);
-		});
+  storage
+    .command('upload')
+    .description('Upload a file to storage')
+    .argument('<file>', 'file path to upload')
+    .option('-b, --bucket <name>', 'bucket name')
+    .option('-p, --path <path>', 'remote path')
+    .option('-r, --root <path>', 'project root directory', process.cwd())
+    .action(async (file: string, options: { bucket?: string; path?: string; root?: string }) => {
+      await runStorageUploadCommand(file, {
+        bucket: options.bucket,
+        path: options.path,
+        projectRoot: options.root,
+      });
+    });
 
-	rls.action(async () => {
-		await runRlsCommand([]);
-	});
 
-	const webhook = program.command("webhook").description("Webhook management");
+  const rls = program.command('rls').description('Row Level Security policy management');
 
-	webhook
-		.command("create")
-		.description("Create a new webhook")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (projectRoot: string) => {
-			await runWebhookCommand(["create"], projectRoot);
-		});
+  rls
+    .command('create')
+    .description('Create a new RLS policy file for a table')
+    .argument('<table>', 'table name')
+    .action(async (table: string) => {
+      await runRlsCommand(['create', table]);
+    });
 
-	webhook
-		.command("list")
-		.description("List all configured webhooks")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (projectRoot: string) => {
-			await runWebhookCommand(["list"], projectRoot);
-		});
+  rls
+    .command('list')
+    .description('List all RLS policy files')
+    .action(async () => {
+      await runRlsCommand(['list']);
+    });
 
-	webhook
-		.command("test")
-		.description("Test a webhook by sending a synthetic payload")
-		.argument("<webhook-id>", "webhook ID to test")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (webhookId: string, projectRoot: string) => {
-			await runWebhookCommand(["test", webhookId], projectRoot);
-		});
+  rls
+    .command('disable')
+    .description('Show how to disable RLS for a table')
+    .argument('<table>', 'table name')
+    .action(async (table: string) => {
+      await runRlsCommand(['disable', table]);
+    });
 
-	webhook
-		.command("logs")
-		.description("Show delivery logs for a webhook")
-		.argument("<webhook-id>", "webhook ID")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (webhookId: string, projectRoot: string) => {
-			await runWebhookCommand(["logs", webhookId], projectRoot);
-		});
+  rls
+    .action(async () => {
+      await runRlsCommand([]);
+    });
 
-	webhook.action(async () => {
-		await runWebhookCommand([], process.cwd());
-	});
+  const webhook = program.command('webhook').description('Webhook management');
 
-	const fn = program.command("function").description("Edge function management");
+  webhook
+    .command('create')
+    .description('Create a new webhook')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runWebhookCommand(['create'], projectRoot);
+    });
 
-	fn.command("create")
-		.description("Create a new edge function")
-		.argument("<name>", "function name")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (name: string, projectRoot: string) => {
-			await runFunctionCommand(["create", name], projectRoot);
-		});
+  webhook
+    .command('list')
+    .description('List all configured webhooks')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runWebhookCommand(['list'], projectRoot);
+    });
 
-	fn.command("dev")
-		.description("Run function locally with hot reload")
-		.argument("<name>", "function name")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (name: string, projectRoot: string) => {
-			await runFunctionCommand(["dev", name], projectRoot);
-		});
+  webhook
+    .command('test')
+    .description('Test a webhook by sending a synthetic payload')
+    .argument('<webhook-id>', 'webhook ID to test')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (webhookId: string, projectRoot: string) => {
+      await runWebhookCommand(['test', webhookId], projectRoot);
+    });
 
-	fn.command("build")
-		.description("Bundle function for deployment")
-		.argument("<name>", "function name")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (name: string, projectRoot: string) => {
-			await runFunctionCommand(["build", name], projectRoot);
-		});
+  webhook
+    .command('logs')
+    .description('Show delivery logs for a webhook')
+    .argument('<webhook-id>', 'webhook ID')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (webhookId: string, projectRoot: string) => {
+      await runWebhookCommand(['logs', webhookId], projectRoot);
+    });
 
-	fn.command("list")
-		.description("List all functions")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (projectRoot: string) => {
-			await runFunctionCommand(["list"], projectRoot);
-		});
+  webhook
+    .action(async () => {
+      await runWebhookCommand([], process.cwd());
+    });
 
-	fn.command("logs")
-		.description("Show function logs")
-		.argument("<name>", "function name")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (name: string, projectRoot: string) => {
-			await runFunctionCommand(["logs", name], projectRoot);
-		});
+  const fn = program.command('function').description('Edge function management');
 
-	fn.command("deploy")
-		.description("Deploy function to cloud")
-		.argument("<name>", "function name")
-		.option("--sync-env", "Sync environment variables from .env")
-		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (name: string, options: { syncEnv?: boolean; projectRoot?: string }) => {
-			const projectRoot = options.projectRoot ?? process.cwd();
-			await runFunctionCommand(["deploy", name, options.syncEnv ? "--sync-env" : ""], projectRoot);
-		});
+  fn
+    .command('create')
+    .description('Create a new edge function')
+    .argument('<name>', 'function name')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runFunctionCommand(['create', name], projectRoot);
+    });
 
-	return program;
+  fn
+    .command('dev')
+    .description('Run function locally with hot reload')
+    .argument('<name>', 'function name')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runFunctionCommand(['dev', name], projectRoot);
+    });
+
+  fn
+    .command('build')
+    .description('Bundle function for deployment')
+    .argument('<name>', 'function name')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runFunctionCommand(['build', name], projectRoot);
+    });
+
+  fn
+    .command('list')
+    .description('List all functions')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runFunctionCommand(['list'], projectRoot);
+    });
+
+  fn
+    .command('logs')
+    .description('Show function logs')
+    .argument('<name>', 'function name')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runFunctionCommand(['logs', name], projectRoot);
+    });
+
+  fn
+    .command('deploy')
+    .description('Deploy function to cloud')
+    .argument('<name>', 'function name')
+    .option('--sync-env', 'Sync environment variables from .env')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, options: { syncEnv?: boolean; projectRoot?: string }) => {
+      const projectRoot = options.projectRoot ?? process.cwd();
+      await runFunctionCommand(['deploy', name, options.syncEnv ? '--sync-env' : ''], projectRoot);
+    });
+
+  // ── bb login — STAGED FOR ACTIVATION ────────────────────────────────────────
+  // This code is complete and tested. Uncomment when app.betterbase.com is live.
+  // See: betterbase_backend_rebuild.md Part 3
+  // ────────────────────────────────────────────────────────────────────────────
+  // program
+  //   .command('login')
+  //   .description('Authenticate the CLI with app.betterbase.com')
+  //   .action(runLoginCommand);
+  //
+  // program
+  //   .command('logout')
+  //   .description('Sign out of app.betterbase.com')
+  //   .action(runLogoutCommand);
+
+  return program;
 }
 
 /**
