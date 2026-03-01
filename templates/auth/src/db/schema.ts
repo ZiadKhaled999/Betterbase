@@ -1,12 +1,12 @@
-import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
  * UUID primary-key helper.
  */
-export const uuid = (name = 'id') =>
-  text(name)
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID());
+export const uuid = (name = "id") =>
+	text(name)
+		.primaryKey()
+		.$defaultFn(() => crypto.randomUUID());
 
 /**
  * Adds created_at and updated_at timestamp columns.
@@ -22,32 +22,34 @@ export const uuid = (name = 'id') =>
  * });
  */
 export const timestamps = {
-  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
-  updatedAt: text('updated_at')
-    .notNull()
-    .$defaultFn(() => new Date().toISOString())
-    .$onUpdate(() => new Date().toISOString()),
+	createdAt: text("created_at")
+		.notNull()
+		.$defaultFn(() => new Date().toISOString()),
+	updatedAt: text("updated_at")
+		.notNull()
+		.$defaultFn(() => new Date().toISOString())
+		.$onUpdate(() => new Date().toISOString()),
 };
 
 /**
  * Shared status enum helper.
  */
-export const statusEnum = (name = 'status') =>
-  text(name, { enum: ['active', 'inactive', 'pending'] }).default('active');
+export const statusEnum = (name = "status") =>
+	text(name, { enum: ["active", "inactive", "pending"] }).default("active");
 
 /**
  * Soft-delete helper.
  */
 export const softDelete = {
-  deletedAt: text('deleted_at'),
+	deletedAt: text("deleted_at"),
 };
 
-export const users = sqliteTable('user', {
-  id: uuid(),
-  email: text('email').notNull().unique(),
-  emailVerified: text('email_verified'),
-  name: text('name'),
-  status: statusEnum(),
-  ...timestamps,
-  ...softDelete,
+export const users = sqliteTable("user", {
+	id: uuid(),
+	email: text("email").notNull().unique(),
+	emailVerified: text("email_verified"),
+	name: text("name"),
+	status: statusEnum(),
+	...timestamps,
+	...softDelete,
 });

@@ -1,22 +1,11 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "./dist",
-    "declaration": true,
-    "lib": [
-      "ES2022",
-      "DOM"
-    ],
-    "types": [
-      "bun"
-    ]
-  },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "test/**/*"
-  ]
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		"declaration": true,
+		"lib": ["ES2022", "DOM"],
+		"types": ["bun"]
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "dist", "test/**/*"]
 }

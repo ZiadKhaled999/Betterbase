@@ -7,46 +7,46 @@
  * - bb rls disable <table> - Drop RLS policies from a table
  */
 
-import chalk from 'chalk'
-import { existsSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs'
-import path from 'node:path'
-import * as logger from '../utils/logger'
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import chalk from "chalk";
+import * as logger from "../utils/logger";
 
-const POLICIES_DIR = 'src/db/policies'
-const POLICY_FILE_PATTERN = /\.policy\.ts$/
+const POLICIES_DIR = "src/db/policies";
+const POLICY_FILE_PATTERN = /\.policy\.ts$/;
 
 /**
  * Ensure the policies directory exists
  */
 function ensurePoliciesDir(projectRoot: string): string {
-  const policiesPath = path.join(projectRoot, POLICIES_DIR)
+	const policiesPath = path.join(projectRoot, POLICIES_DIR);
 
-  if (!existsSync(policiesPath)) {
-    mkdirSync(policiesPath, { recursive: true })
-  }
+	if (!existsSync(policiesPath)) {
+		mkdirSync(policiesPath, { recursive: true });
+	}
 
-  return policiesPath
+	return policiesPath;
 }
 
 /**
  * Find all policy files in the project
  */
 function findPolicyFiles(projectRoot: string): string[] {
-  const policiesPath = path.join(projectRoot, POLICIES_DIR)
-  const files: string[] = []
+	const policiesPath = path.join(projectRoot, POLICIES_DIR);
+	const files: string[] = [];
 
-  if (!existsSync(policiesPath)) {
-    return files
-  }
+	if (!existsSync(policiesPath)) {
+		return files;
+	}
 
-  const entries = readdirSync(policiesPath, { withFileTypes: true })
-  for (const entry of entries) {
-    if (entry.isFile() && POLICY_FILE_PATTERN.test(entry.name)) {
-      files.push(entry.name)
-    }
-  }
+	const entries = readdirSync(policiesPath, { withFileTypes: true });
+	for (const entry of entries) {
+		if (entry.isFile() && POLICY_FILE_PATTERN.test(entry.name)) {
+			files.push(entry.name);
+		}
+	}
 
-  return files
+	return files;
 }
 
 /**
@@ -55,7 +55,7 @@ function findPolicyFiles(projectRoot: string): string[] {
  * @returns Template content
  */
 function generatePolicyTemplate(table: string): string {
-  return `import { definePolicy } from '@betterbase/core/rls'
+	return `import { definePolicy } from '@betterbase/core/rls'
 
 /**
  * RLS policy for ${table} table
@@ -84,7 +84,7 @@ export default definePolicy('${table}', {
   // DELETE - Controls who can delete rows
   delete: "auth.uid() = user_id",
 })
-`
+`;
 }
 
 /**
@@ -92,63 +92,63 @@ export default definePolicy('${table}', {
  * @param table - Table name to create policy for
  */
 export async function runRlsCreate(table: string): Promise<void> {
-  if (!table) {
-    logger.error('Table name is required. Usage: bb rls create <table>')
-    process.exit(1)
-  }
+	if (!table) {
+		logger.error("Table name is required. Usage: bb rls create <table>");
+		process.exit(1);
+	}
 
-  // Sanitize table name
-  const sanitizedTable = table.replace(/[^a-zA-Z0-9_]/g, '_')
+	// Sanitize table name
+	const sanitizedTable = table.replace(/[^a-zA-Z0-9_]/g, "_");
 
-  const projectRoot = process.cwd()
-  const policiesDir = ensurePoliciesDir(projectRoot)
-  const fileName = `${sanitizedTable}.policy.ts`
-  const filePath = path.join(policiesDir, fileName)
+	const projectRoot = process.cwd();
+	const policiesDir = ensurePoliciesDir(projectRoot);
+	const fileName = `${sanitizedTable}.policy.ts`;
+	const filePath = path.join(policiesDir, fileName);
 
-  if (existsSync(filePath)) {
-    logger.warn(`Policy file already exists: ${filePath}`)
-    logger.info('Use bb rls disable first to remove existing policies.')
-    return
-  }
+	if (existsSync(filePath)) {
+		logger.warn(`Policy file already exists: ${filePath}`);
+		logger.info("Use bb rls disable first to remove existing policies.");
+		return;
+	}
 
-  const template = generatePolicyTemplate(sanitizedTable)
-  writeFileSync(filePath, template)
+	const template = generatePolicyTemplate(sanitizedTable);
+	writeFileSync(filePath, template);
 
-  logger.success(`Created policy file: ${filePath}`)
-  console.log(chalk.gray('\nEdit this file to configure your RLS policy.'))
-  console.log(chalk.gray('Then run: bb migrate\n'))
+	logger.success(`Created policy file: ${filePath}`);
+	console.log(chalk.gray("\nEdit this file to configure your RLS policy."));
+	console.log(chalk.gray("Then run: bb migrate\n"));
 }
 
 /**
  * Run the rls list command
  */
 export async function runRlsList(): Promise<void> {
-  const projectRoot = process.cwd()
+	const projectRoot = process.cwd();
 
-  try {
-    const policyFiles = findPolicyFiles(projectRoot)
+	try {
+		const policyFiles = findPolicyFiles(projectRoot);
 
-    if (policyFiles.length === 0) {
-      console.log(chalk.yellow('No RLS policies found.'))
-      console.log(chalk.gray('Create one with: bb rls create <table>\n'))
-      return
-    }
+		if (policyFiles.length === 0) {
+			console.log(chalk.yellow("No RLS policies found."));
+			console.log(chalk.gray("Create one with: bb rls create <table>\n"));
+			return;
+		}
 
-    console.log(chalk.bold('\n📋 RLS Policies\n'))
+		console.log(chalk.bold("\n📋 RLS Policies\n"));
 
-    // Display in table format
-    console.log(chalk.gray('Table'.padEnd(20) + 'File'))
-    console.log(chalk.gray('-'.repeat(50)))
+		// Display in table format
+		console.log(chalk.gray(`${"Table".padEnd(20)}File`));
+		console.log(chalk.gray("-".repeat(50)));
 
-    for (const file of policyFiles) {
-      const table = file.replace('.policy.ts', '')
-      console.log(table.padEnd(20) + file)
-    }
+		for (const file of policyFiles) {
+			const table = file.replace(".policy.ts", "");
+			console.log(table.padEnd(20) + file);
+		}
 
-    console.log(chalk.gray(`\nTotal: ${policyFiles.length} policy file(s)\n`))
-  } catch (error) {
-    logger.error(`Failed to list policies: ${error}`)
-  }
+		console.log(chalk.gray(`\nTotal: ${policyFiles.length} policy file(s)\n`));
+	} catch (error) {
+		logger.error(`Failed to list policies: ${error}`);
+	}
 }
 
 /**
@@ -156,34 +156,34 @@ export async function runRlsList(): Promise<void> {
  * @param table - Table name to disable RLS for
  */
 export async function runRlsDisable(table: string): Promise<void> {
-  if (!table) {
-    logger.error('Table name is required. Usage: bb rls disable <table>')
-    process.exit(1)
-  }
+	if (!table) {
+		logger.error("Table name is required. Usage: bb rls disable <table>");
+		process.exit(1);
+	}
 
-  const projectRoot = process.cwd()
-  const policiesDir = path.join(projectRoot, POLICIES_DIR)
-  const fileName = `${table}.policy.ts`
-  const filePath = path.join(policiesDir, fileName)
+	const projectRoot = process.cwd();
+	const policiesDir = path.join(projectRoot, POLICIES_DIR);
+	const fileName = `${table}.policy.ts`;
+	const filePath = path.join(policiesDir, fileName);
 
-  console.log(chalk.yellow(`\n⚠️  This will remove ALL RLS policies from the "${table}" table!`))
-  console.log(chalk.yellow('This may expose data that was previously protected.\n'))
+	console.log(chalk.yellow(`\n⚠️  This will remove ALL RLS policies from the "${table}" table!`));
+	console.log(chalk.yellow("This may expose data that was previously protected.\n"));
 
-  // Check if policy file exists
-  if (!existsSync(filePath)) {
-    logger.info(`No policy file found for "${table}". The table may not have RLS enabled.`)
-    console.log(chalk.blue('\nTo disable RLS directly in the database, run:'))
-    console.log(chalk.gray(`   psql -c "ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY;"`))
-    return
-  }
+	// Check if policy file exists
+	if (!existsSync(filePath)) {
+		logger.info(`No policy file found for "${table}". The table may not have RLS enabled.`);
+		console.log(chalk.blue("\nTo disable RLS directly in the database, run:"));
+		console.log(chalk.gray(`   psql -c "ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY;"`));
+		return;
+	}
 
-  // Show instructions for removing the policy
-  console.log(chalk.blue('To disable RLS:'))
-  console.log(`1. Delete the policy file: ${filePath}`)
-  console.log('2. Run: bb migrate')
-  console.log('\nOr disable directly in PostgreSQL:')
-  console.log(chalk.gray(`   psql -c "ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY;"`))
-  console.log(chalk.gray(`   psql -c "DROP POLICY IF EXISTS ${table}_* ON ${table};"\n`))
+	// Show instructions for removing the policy
+	console.log(chalk.blue("To disable RLS:"));
+	console.log(`1. Delete the policy file: ${filePath}`);
+	console.log("2. Run: bb migrate");
+	console.log("\nOr disable directly in PostgreSQL:");
+	console.log(chalk.gray(`   psql -c "ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY;"`));
+	console.log(chalk.gray(`   psql -c "DROP POLICY IF EXISTS ${table}_* ON ${table};"\n`));
 }
 
 /**
@@ -191,30 +191,30 @@ export async function runRlsDisable(table: string): Promise<void> {
  * @param args - Command arguments
  */
 export async function runRlsCommand(args: string[]): Promise<void> {
-  const subcommand = args[0]
+	const subcommand = args[0];
 
-  switch (subcommand) {
-    case 'create':
-      await runRlsCreate(args[1])
-      break
-    case 'list':
-      await runRlsList()
-      break
-    case 'disable':
-      await runRlsDisable(args[1])
-      break
-    default:
-      console.log(`
-${chalk.bold('RLS (Row Level Security) Commands')}
+	switch (subcommand) {
+		case "create":
+			await runRlsCreate(args[1]);
+			break;
+		case "list":
+			await runRlsList();
+			break;
+		case "disable":
+			await runRlsDisable(args[1]);
+			break;
+		default:
+			console.log(`
+${chalk.bold("RLS (Row Level Security) Commands")}
 
-${chalk.green('bb rls create <table>')}  Create a new policy file for a table
-${chalk.green('bb rls list')}              List all policy files
-${chalk.green('bb rls disable <table>')}   Show how to disable RLS for a table
+${chalk.green("bb rls create <table>")}  Create a new policy file for a table
+${chalk.green("bb rls list")}              List all policy files
+${chalk.green("bb rls disable <table>")}   Show how to disable RLS for a table
 
-${chalk.gray('Examples:')}
+${chalk.gray("Examples:")}
   bb rls create users
   bb rls list
   bb rls disable users
-`)
-  }
+`);
+	}
 }

@@ -1,7 +1,7 @@
-import { execSync } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import path from "node:path"
-import * as logger from "../utils/logger"
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import * as logger from "../utils/logger";
 
 const AUTH_INSTANCE_FILE = (provider: string) => `import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
@@ -29,7 +29,7 @@ export const auth = betterAuth({
 })
 
 export type Auth = typeof auth
-`
+`;
 
 const AUTH_TYPES_FILE = `import type { auth } from "./index"
 
@@ -40,7 +40,7 @@ export type AuthVariables = {
   user: User
   session: Session
 }
-`
+`;
 
 const AUTH_MIDDLEWARE_FILE = `import { auth } from "../auth"
 import type { Context, Next } from "hono"
@@ -67,7 +67,7 @@ export async function optionalAuth(c: Context, next: Next) {
   }
   await next()
 }
-`
+`;
 
 const AUTH_SCHEMA_SQLITE = `import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
@@ -116,7 +116,7 @@ export const verification = sqliteTable("verification", {
   createdAt: integer("created_at", { mode: "timestamp" }),
   updatedAt: integer("updated_at", { mode: "timestamp" }),
 })
-`
+`;
 
 const AUTH_SCHEMA_PG = `import { pgTable, text, timestamp, boolean, integer } from 'drizzle-orm/pg-core'
 
@@ -165,131 +165,131 @@ export const verification = pgTable("verification", {
   createdAt: timestamp("created_at", { mode: "date" }),
   updatedAt: timestamp("updated_at", { mode: "date" }),
 })
-`
+`;
 
 function ensureDbIndexExports(projectRoot: string): void {
-  const dbIndexPath = path.join(projectRoot, "src/db/index.ts")
-  if (!existsSync(dbIndexPath)) {
-    logger.warn(`Could not find db/index.ts at ${dbIndexPath}`)
-    return
-  }
+	const dbIndexPath = path.join(projectRoot, "src/db/index.ts");
+	if (!existsSync(dbIndexPath)) {
+		logger.warn(`Could not find db/index.ts at ${dbIndexPath}`);
+		return;
+	}
 
-  const current = readFileSync(dbIndexPath, "utf-8")
-  if (current.includes('export * from "./auth-schema"')) {
-    return
-  }
+	const current = readFileSync(dbIndexPath, "utf-8");
+	if (current.includes('export * from "./auth-schema"')) {
+		return;
+	}
 
-  if (current.includes("export * from ")) {
-    const updated = current.replace(
-      'export * from "./schema"',
-      'export * from "./schema"\nexport * from "./auth-schema"'
-    )
-    writeFileSync(dbIndexPath, updated)
-    logger.info("Updated src/db/index.ts to export auth-schema")
-  }
+	if (current.includes("export * from ")) {
+		const updated = current.replace(
+			'export * from "./schema"',
+			'export * from "./schema"\nexport * from "./auth-schema"',
+		);
+		writeFileSync(dbIndexPath, updated);
+		logger.info("Updated src/db/index.ts to export auth-schema");
+	}
 }
 
 function ensureEnvVar(projectRoot: string): void {
-  const envPath = path.join(projectRoot, ".env.example")
-  if (!existsSync(envPath)) return
+	const envPath = path.join(projectRoot, ".env.example");
+	if (!existsSync(envPath)) return;
 
-  const env = readFileSync(envPath, "utf-8")
-  if (env.includes("AUTH_SECRET=")) return
+	const env = readFileSync(envPath, "utf-8");
+	if (env.includes("AUTH_SECRET=")) return;
 
-  writeFileSync(
-    envPath,
-    `${env.trimEnd()}\n\n# Auth\nAUTH_SECRET=your-secret-key-here-change-in-production\nAUTH_URL=http://localhost:3000`
-  )
+	writeFileSync(
+		envPath,
+		`${env.trimEnd()}\n\n# Auth\nAUTH_SECRET=your-secret-key-here-change-in-production\nAUTH_URL=http://localhost:3000`,
+	);
 }
 
 function updateIndexForAuth(projectRoot: string): void {
-  const indexPath = path.join(projectRoot, "src/index.ts")
-  if (!existsSync(indexPath)) {
-    logger.warn(`Could not find src/index.ts at ${indexPath}`)
-    return
-  }
+	const indexPath = path.join(projectRoot, "src/index.ts");
+	if (!existsSync(indexPath)) {
+		logger.warn(`Could not find src/index.ts at ${indexPath}`);
+		return;
+	}
 
-  const current = readFileSync(indexPath, "utf-8")
+	const current = readFileSync(indexPath, "utf-8");
 
-  // Add import for auth if not present
-  if (!current.includes('import { auth } from "./auth"')) {
-    const insertAfter = 'import { registerRoutes } from "./routes";'
-    const importLine = '\nimport { auth } from "./auth";'
-    const updated = current.replace(insertAfter, insertAfter + importLine)
-    writeFileSync(indexPath, updated)
-  }
+	// Add import for auth if not present
+	if (!current.includes('import { auth } from "./auth"')) {
+		const insertAfter = 'import { registerRoutes } from "./routes";';
+		const importLine = '\nimport { auth } from "./auth";';
+		const updated = current.replace(insertAfter, insertAfter + importLine);
+		writeFileSync(indexPath, updated);
+	}
 
-  // Add the auth handler mount if not present
-  const updatedWithMount = readFileSync(indexPath, "utf-8")
-  if (!updatedWithMount.includes('/api/auth/**')) {
-    const insertAfter = "registerRoutes(app);"
-    const mountCode = `\n\napp.on(["POST", "GET"], "/api/auth/**", (c) => {\n  return auth.handler(c.req.raw)\n})`
-    const final = updatedWithMount.replace(insertAfter, insertAfter + mountCode)
-    writeFileSync(indexPath, final)
-    logger.info("Updated src/index.ts with BetterAuth handler mount")
-  }
+	// Add the auth handler mount if not present
+	const updatedWithMount = readFileSync(indexPath, "utf-8");
+	if (!updatedWithMount.includes("/api/auth/**")) {
+		const insertAfter = "registerRoutes(app);";
+		const mountCode = `\n\napp.on(["POST", "GET"], "/api/auth/**", (c) => {\n  return auth.handler(c.req.raw)\n})`;
+		const final = updatedWithMount.replace(insertAfter, insertAfter + mountCode);
+		writeFileSync(indexPath, final);
+		logger.info("Updated src/index.ts with BetterAuth handler mount");
+	}
 }
 
 export async function runAuthSetupCommand(
-  projectRoot: string = process.cwd(),
-  provider: "sqlite" | "pg" = "sqlite"
+	projectRoot: string = process.cwd(),
+	provider: "sqlite" | "pg" = "sqlite",
 ): Promise<void> {
-  const resolvedRoot = path.resolve(projectRoot)
-  const srcDir = path.join(resolvedRoot, "src")
+	const resolvedRoot = path.resolve(projectRoot);
+	const srcDir = path.join(resolvedRoot, "src");
 
-  logger.info("🔐 Setting up BetterAuth...")
+	logger.info("🔐 Setting up BetterAuth...");
 
-  // Install better-auth
-  logger.info("📦 Installing better-auth...")
-  execSync("bun add better-auth", { cwd: resolvedRoot, stdio: "inherit" })
+	// Install better-auth
+	logger.info("📦 Installing better-auth...");
+	execSync("bun add better-auth", { cwd: resolvedRoot, stdio: "inherit" });
 
-  // Create src/auth directory
-  const authDir = path.join(srcDir, "auth")
-  mkdirSync(authDir, { recursive: true })
+	// Create src/auth directory
+	const authDir = path.join(srcDir, "auth");
+	mkdirSync(authDir, { recursive: true });
 
-  // Create src/db/auth-schema.ts
-  logger.info("📝 Creating auth schema...")
-  const authSchemaPath = path.join(srcDir, "db", "auth-schema.ts")
-  const schemaContent = provider === "sqlite" ? AUTH_SCHEMA_SQLITE : AUTH_SCHEMA_PG
-  writeFileSync(authSchemaPath, schemaContent)
+	// Create src/db/auth-schema.ts
+	logger.info("📝 Creating auth schema...");
+	const authSchemaPath = path.join(srcDir, "db", "auth-schema.ts");
+	const schemaContent = provider === "sqlite" ? AUTH_SCHEMA_SQLITE : AUTH_SCHEMA_PG;
+	writeFileSync(authSchemaPath, schemaContent);
 
-  // Ensure db/index.ts exports auth-schema
-  ensureDbIndexExports(resolvedRoot)
+	// Ensure db/index.ts exports auth-schema
+	ensureDbIndexExports(resolvedRoot);
 
-  // Create src/auth/index.ts
-  logger.info("🔑 Creating auth instance...")
-  const authIndexPath = path.join(authDir, "index.ts")
-  writeFileSync(authIndexPath, AUTH_INSTANCE_FILE(provider))
+	// Create src/auth/index.ts
+	logger.info("🔑 Creating auth instance...");
+	const authIndexPath = path.join(authDir, "index.ts");
+	writeFileSync(authIndexPath, AUTH_INSTANCE_FILE(provider));
 
-  // Create src/auth/types.ts
-  logger.info("📋 Creating auth types...")
-  const authTypesPath = path.join(authDir, "types.ts")
-  writeFileSync(authTypesPath, AUTH_TYPES_FILE)
+	// Create src/auth/types.ts
+	logger.info("📋 Creating auth types...");
+	const authTypesPath = path.join(authDir, "types.ts");
+	writeFileSync(authTypesPath, AUTH_TYPES_FILE);
 
-  // Create src/middleware/auth.ts
-  logger.info("🛡️ Creating auth middleware...")
-  const middlewarePath = path.join(srcDir, "middleware", "auth.ts")
-  writeFileSync(middlewarePath, AUTH_MIDDLEWARE_FILE)
+	// Create src/middleware/auth.ts
+	logger.info("🛡️ Creating auth middleware...");
+	const middlewarePath = path.join(srcDir, "middleware", "auth.ts");
+	writeFileSync(middlewarePath, AUTH_MIDDLEWARE_FILE);
 
-  // Update src/index.ts to mount auth handler
-  updateIndexForAuth(resolvedRoot)
+	// Update src/index.ts to mount auth handler
+	updateIndexForAuth(resolvedRoot);
 
-  // Ensure .env.example has AUTH_SECRET
-  ensureEnvVar(resolvedRoot)
+	// Ensure .env.example has AUTH_SECRET
+	ensureEnvVar(resolvedRoot);
 
-  // Run migrations
-  logger.info("🗄️ Running database migrations...")
-  try {
-    execSync("bun run db:push", { cwd: resolvedRoot, stdio: "inherit" })
-  } catch {
-    logger.warn("Could not run db:push automatically. Please run it manually.")
-  }
+	// Run migrations
+	logger.info("🗄️ Running database migrations...");
+	try {
+		execSync("bun run db:push", { cwd: resolvedRoot, stdio: "inherit" });
+	} catch {
+		logger.warn("Could not run db:push automatically. Please run it manually.");
+	}
 
-  logger.success("✅ BetterAuth setup complete!")
-  logger.info("Next steps:")
-  logger.info("1. Set AUTH_SECRET in .env (already added to .env.example)")
-  logger.info("2. Run: bun run db:push (if not already run)")
-  logger.info("3. Use requireAuth middleware on protected routes:")
-  logger.info("   import { requireAuth } from './middleware/auth'")
-  logger.info("   app.use('*', requireAuth)")
+	logger.success("✅ BetterAuth setup complete!");
+	logger.info("Next steps:");
+	logger.info("1. Set AUTH_SECRET in .env (already added to .env.example)");
+	logger.info("2. Run: bun run db:push (if not already run)");
+	logger.info("3. Use requireAuth middleware on protected routes:");
+	logger.info("   import { requireAuth } from './middleware/auth'");
+	logger.info("   app.use('*', requireAuth)");
 }
