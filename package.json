@@ -40,9 +40,10 @@
 	"bugs": {
 		"url": "https://github.com/betterbase/betterbase/issues"
 	},
-	"workspaces": ["apps/*", "packages/*"],
+	"workspaces": ["apps/*", "packages/*","templates/*"],
 	"files": [".", "!node_modules", "!.git"],
 	"scripts": {
+		"test": "bunx turbo run test",
 		"build": "turbo run build",
 		"dev": "turbo run dev --parallel",
 		"lint": "turbo run lint",
