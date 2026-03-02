@@ -16,7 +16,8 @@
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
-		"build": "bun build ./src/index.ts --outdir ./dist --target node"
+		"build": "bun build ./src/index.ts --outdir ./dist --target node",
+		"test": "bun test"
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "^3.995.0",

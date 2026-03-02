@@ -39,7 +39,7 @@ describe("@betterbase/client", () => {
 		const client = createClient({
 			url: "http://localhost:3000",
 			key: "test-key",
-			fetch: fetchMock as typeof fetch,
+			fetch: fetchMock as unknown as typeof fetch,
 		});
 		const res = await client
 			.from("users")
@@ -61,11 +61,35 @@ describe("@betterbase/client", () => {
 
 		const client = createClient({
 			url: "http://localhost:3000",
-			fetch: fetchMock as typeof fetch,
+			fetch: fetchMock as unknown as typeof fetch,
 		});
 		const res = await client.from<{ id: string }>("users").execute();
 
 		expect(res.error).toBeNull();
 		expect(res.data).toEqual([{ id: "1" }]);
+	});
+
+	// Extended tests
+
+	test("client has auth property with methods", () => {
+		const client = createClient({ url: "http://localhost:3000" });
+		expect(client.auth).toBeDefined();
+		expect(typeof client.auth.signUp).toBe("function");
+		expect(typeof client.auth.signIn).toBe("function");
+		expect(typeof client.auth.signOut).toBe("function");
+	});
+
+	test("client has realtime property", () => {
+		const client = createClient({ url: "http://localhost:3000" });
+		expect(client.realtime).toBeDefined();
+	});
+
+	test("client has storage property", () => {
+		const client = createClient({ url: "http://localhost:3000" });
+		expect(client.storage).toBeDefined();
+	});
+
+	test("client requires url parameter", () => {
+		expect(() => createClient({ url: "" })).toThrow();
 	});
 });

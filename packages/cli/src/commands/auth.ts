@@ -213,18 +213,32 @@ function updateIndexForAuth(projectRoot: string): void {
 
 	// Add import for auth if not present
 	if (!current.includes('import { auth } from "./auth"')) {
-		const insertAfter = 'import { registerRoutes } from "./routes";';
-		const importLine = '\nimport { auth } from "./auth";';
-		const updated = current.replace(insertAfter, insertAfter + importLine);
+		// Try with semicolon first, then without
+		let insertAfter = 'import { registerRoutes } from "./routes";';
+		let importLine = '\nimport { auth } from "./auth";';
+		let updated = current.replace(insertAfter, insertAfter + importLine);
+		
+		if (updated === current) {
+			insertAfter = 'import { registerRoutes } from "./routes"';
+			updated = current.replace(insertAfter, insertAfter + importLine);
+		}
+		
 		writeFileSync(indexPath, updated);
 	}
 
 	// Add the auth handler mount if not present
 	const updatedWithMount = readFileSync(indexPath, "utf-8");
 	if (!updatedWithMount.includes("/api/auth/**")) {
-		const insertAfter = "registerRoutes(app);";
-		const mountCode = `\n\napp.on(["POST", "GET"], "/api/auth/**", (c) => {\n  return auth.handler(c.req.raw)\n})`;
-		const final = updatedWithMount.replace(insertAfter, insertAfter + mountCode);
+		// Try with semicolon first, then without
+		let insertAfter = "registerRoutes(app);";
+		let mountCode = `\n\napp.on(["POST", "GET"], "/api/auth/**", (c) => {\n  return auth.handler(c.req.raw)\n})`;
+		let final = updatedWithMount.replace(insertAfter, insertAfter + mountCode);
+		
+		if (final === updatedWithMount) {
+			insertAfter = "registerRoutes(app)";
+			final = updatedWithMount.replace(insertAfter, insertAfter + mountCode);
+		}
+		
 		writeFileSync(indexPath, final);
 		logger.info("Updated src/index.ts with BetterAuth handler mount");
 	}
