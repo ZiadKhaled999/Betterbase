@@ -109,7 +109,7 @@ async function listSqlFiles(baseDir: string): Promise<Map<string, string>> {
 	return entries;
 }
 
-function analyzeMigration(sqlStatements: string[]): MigrationChange[] {
+export function analyzeMigration(sqlStatements: string[]): MigrationChange[] {
 	const changes: MigrationChange[] = [];
 	const ident = '(?:"([^"]+)"|`([^`]+)`|([\\w.-]+))';
 
@@ -300,7 +300,7 @@ async function restoreBackup(backup: MigrationBackup | null): Promise<void> {
 	logger.warn(`Rollback complete. Restored database from ${backup.backupPath}`);
 }
 
-function splitStatements(sql: string): string[] {
+export function splitStatements(sql: string): string[] {
 	const statements: string[] = [];
 	let current = "";
 	let inSingle = false;

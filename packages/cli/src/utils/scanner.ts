@@ -212,6 +212,34 @@ export class SchemaScanner {
 						break;
 					}
 
+					// Handle .on() method chain - index().on(column) should still find the index
+					if (callName === "on") {
+						// Look deeper in the chain to find the original index/uniqueIndex call
+						let inner: ts.CallExpression | undefined = value;
+						while (inner) {
+							const innerCallName = getCallName(inner);
+							if (innerCallName === "index" || innerCallName === "uniqueIndex") {
+								const key = ts.isIdentifier(property.name)
+									? property.name.text
+									: ts.isStringLiteral(property.name)
+										? property.name.text
+										: property.name.getText(this.sourceFile);
+								indexes.push(key);
+								break;
+							}
+							// Move to the next level in the chain
+							if (
+								ts.isPropertyAccessExpression(inner.expression) &&
+								ts.isCallExpression(inner.expression.expression)
+							) {
+								inner = inner.expression.expression;
+							} else {
+								break;
+							}
+						}
+						if (indexes.length > 0) break;
+					}
+
 					if (ts.isPropertyAccessExpression(value.expression)) {
 						value = unwrapExpression(value.expression.expression);
 						continue;
@@ -224,8 +252,9 @@ export class SchemaScanner {
 
 		if (ts.isArrowFunction(indexRoot) || ts.isFunctionExpression(indexRoot)) {
 			const body = indexRoot.body;
-			if (ts.isObjectLiteralExpression(body)) {
-				collectFromObject(body);
+			const unwrappedBody = unwrapExpression(body);
+			if (ts.isObjectLiteralExpression(unwrappedBody)) {
+				collectFromObject(unwrappedBody);
 			}
 
 			if (ts.isBlock(body)) {
