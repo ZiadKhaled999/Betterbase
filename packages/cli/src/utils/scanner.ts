@@ -252,9 +252,11 @@ export class SchemaScanner {
 
 		if (ts.isArrowFunction(indexRoot) || ts.isFunctionExpression(indexRoot)) {
 			const body = indexRoot.body;
-			const unwrappedBody = unwrapExpression(body);
-			if (ts.isObjectLiteralExpression(unwrappedBody)) {
-				collectFromObject(unwrappedBody);
+			if (!ts.isBlock(body)) {
+				const unwrappedBody = unwrapExpression(body);
+				if (ts.isObjectLiteralExpression(unwrappedBody)) {
+					collectFromObject(unwrappedBody);
+				}
 			}
 
 			if (ts.isBlock(body)) {

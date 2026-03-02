@@ -93,32 +93,32 @@ describe("RouteScanner — malformed and edge inputs", () => {
 	test("does not throw on empty file", async () => {
 		const p = join(tmpDir, "routes.ts");
 		await writeFile(p, "");
-		expect(() => new RouteScanner(p).scan()).not.toThrow();
+		expect(() => new RouteScanner().scan(tmpDir)).not.toThrow();
 	});
 
 	test("scan() result is defined for empty file", async () => {
 		const p = join(tmpDir, "routes.ts");
 		await writeFile(p, "");
-		expect(new RouteScanner(p).scan()).toBeDefined();
+		expect(new RouteScanner().scan(tmpDir)).toBeDefined();
 	});
 
 	test("does not throw on file with no route registrations", async () => {
 		const p = join(tmpDir, "routes.ts");
 		await writeFile(p, `const x = 1;\nconst y = 'hello'`);
-		expect(() => new RouteScanner(p).scan()).not.toThrow();
+		expect(() => new RouteScanner().scan(tmpDir)).not.toThrow();
 	});
 
 	test("does not throw on malformed TypeScript", async () => {
 		const p = join(tmpDir, "routes.ts");
 		await writeFile(p, "app.get({{broken");
-		expect(() => new RouteScanner(p).scan()).not.toThrow();
+		expect(() => new RouteScanner().scan(tmpDir)).not.toThrow();
 	});
 
 	test("does not throw on deeply nested code", async () => {
 		const p = join(tmpDir, "routes.ts");
 		const nested = "function a() { function b() { function c() { ".repeat(10) + "} ".repeat(10);
 		await writeFile(p, nested);
-		expect(() => new RouteScanner(p).scan()).not.toThrow();
+		expect(() => new RouteScanner().scan(tmpDir)).not.toThrow();
 	});
 });
 

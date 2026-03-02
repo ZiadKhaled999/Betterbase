@@ -157,9 +157,7 @@ describe("QueryBuilder — chaining", () => {
 describe("QueryBuilder — insert / update / delete", () => {
 	test("insert() sends POST request", async () => {
 		const fetchImpl = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ user: { id: "1" } }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ user: { id: "1" } }), { status: 200 })),
 		);
 		const client = makeClient(fetchImpl);
 		await client.from("users").insert({ name: "Alice", email: "alice@example.com" });
@@ -169,9 +167,7 @@ describe("QueryBuilder — insert / update / delete", () => {
 
 	test("update() sends PATCH request", async () => {
 		const fetchImpl = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ user: { id: "1" } }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ user: { id: "1" } }), { status: 200 })),
 		);
 		const client = makeClient(fetchImpl);
 		await client.from("users").update("1", { name: "Bob" });
@@ -181,9 +177,7 @@ describe("QueryBuilder — insert / update / delete", () => {
 
 	test("delete() sends DELETE request", async () => {
 		const fetchImpl = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ user: { id: "1" } }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ user: { id: "1" } }), { status: 200 })),
 		);
 		const client = makeClient(fetchImpl);
 		await client.from("users").delete("1");
@@ -193,9 +187,7 @@ describe("QueryBuilder — insert / update / delete", () => {
 
 	test("single() sends GET to /api/<table>/<id>", async () => {
 		const fetchImpl = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ user: { id: "42" } }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ user: { id: "42" } }), { status: 200 })),
 		);
 		const client = makeClient(fetchImpl);
 		await client.from("users").single("42");

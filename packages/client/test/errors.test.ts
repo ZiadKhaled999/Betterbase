@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BetterBaseError, NetworkError, AuthError, ValidationError } from "../src/errors";
+import { AuthError, BetterBaseError, NetworkError, ValidationError } from "../src/errors";
 
 describe("errors", () => {
 	describe("BetterBaseError", () => {

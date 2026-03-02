@@ -28,7 +28,6 @@ function getStorageConfig(): StorageConfig | null {
 				region: process.env.STORAGE_REGION || "us-east-1",
 				accessKeyId: process.env.STORAGE_ACCESS_KEY_ID || "",
 				secretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY || "",
-				endpoint: process.env.STORAGE_ENDPOINT,
 			};
 		case "r2":
 			return {
@@ -127,7 +126,7 @@ export const storageRouter = new Hono();
 // Apply auth middleware to all storage routes (except public URL)
 storageRouter.use("/*", async (c, next) => {
 	// Skip auth for public URL endpoint
-	if (c.req.path().endsWith("/public")) {
+	if (c.req.path.toString().endsWith("/public")) {
 		await next();
 		return;
 	}
@@ -287,10 +286,14 @@ storageRouter.get("/:bucket/:key", async (c) => {
 			return c.json({ error: result.error.message }, 500);
 		}
 
-		// Get content type from result metadata or use default
-		const contentType = result.data?.contentType || "application/octet-stream";
+		if (!result.data) {
+			return c.json({ error: "File not found" }, 404);
+		}
 
-		return c.body(result.data as unknown as BodyInit, {
+		// Get content type from result metadata or use default
+		const contentType = "application/octet-stream";
+
+		return c.body(new Uint8Array(result.data), {
 			headers: {
 				"Content-Type": contentType,
 				"Content-Length": String(result.data?.length || 0),

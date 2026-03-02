@@ -35,13 +35,19 @@ describe("RealtimeClient — no WebSocket environment", () => {
 
 	test("subscribe() returns an object with an unsubscribe() method", () => {
 		const client = new RealtimeClient("http://localhost:3000");
-		const sub = client.from("users").on("INSERT", () => {}).subscribe();
+		const sub = client
+			.from("users")
+			.on("INSERT", () => {})
+			.subscribe();
 		expect(typeof sub.unsubscribe).toBe("function");
 	});
 
 	test("unsubscribe() does not throw", () => {
 		const client = new RealtimeClient("http://localhost:3000");
-		const sub = client.from("users").on("INSERT", () => {}).subscribe();
+		const sub = client
+			.from("users")
+			.on("INSERT", () => {})
+			.subscribe();
 		expect(() => sub.unsubscribe()).not.toThrow();
 	});
 
@@ -111,7 +117,10 @@ describe("RealtimeClient — with mock WebSocket", () => {
 		"subscribe() triggers a WebSocket connection",
 		withMockWebSocket(async () => {
 			const client = new RealtimeClient("http://localhost:3000");
-			client.from("users").on("INSERT", () => {}).subscribe();
+			client
+				.from("users")
+				.on("INSERT", () => {})
+				.subscribe();
 			// Wait for async open
 			await new Promise((r) => setTimeout(r, 20));
 			expect(MockWebSocket.lastInstance).not.toBeNull();
@@ -122,7 +131,10 @@ describe("RealtimeClient — with mock WebSocket", () => {
 		"subscribe() sends a subscribe message after connection opens",
 		withMockWebSocket(async () => {
 			const client = new RealtimeClient("http://localhost:3000");
-			client.from("users").on("INSERT", () => {}).subscribe();
+			client
+				.from("users")
+				.on("INSERT", () => {})
+				.subscribe();
 			await new Promise((r) => setTimeout(r, 20));
 			const ws = MockWebSocket.lastInstance!;
 			const subscribeMsg = ws.sent.find((s) => {
@@ -166,7 +178,10 @@ describe("RealtimeClient — with mock WebSocket", () => {
 		withMockWebSocket(async () => {
 			const client = new RealtimeClient("http://localhost:3000");
 			const received: unknown[] = [];
-			client.from("users").on("INSERT", (p) => received.push(p)).subscribe();
+			client
+				.from("users")
+				.on("INSERT", (p) => received.push(p))
+				.subscribe();
 			await new Promise((r) => setTimeout(r, 20));
 
 			MockWebSocket.lastInstance!.simulateMessage({
@@ -193,9 +208,27 @@ describe("RealtimeClient — with mock WebSocket", () => {
 			await new Promise((r) => setTimeout(r, 20));
 
 			const ws = MockWebSocket.lastInstance!;
-			ws.simulateMessage({ type: "update", event: "INSERT", table: "users", data: {}, timestamp: 0 });
-			ws.simulateMessage({ type: "update", event: "UPDATE", table: "users", data: {}, timestamp: 0 });
-			ws.simulateMessage({ type: "update", event: "DELETE", table: "users", data: {}, timestamp: 0 });
+			ws.simulateMessage({
+				type: "update",
+				event: "INSERT",
+				table: "users",
+				data: {},
+				timestamp: 0,
+			});
+			ws.simulateMessage({
+				type: "update",
+				event: "UPDATE",
+				table: "users",
+				data: {},
+				timestamp: 0,
+			});
+			ws.simulateMessage({
+				type: "update",
+				event: "DELETE",
+				table: "users",
+				data: {},
+				timestamp: 0,
+			});
 
 			expect(events).toEqual(["INSERT", "UPDATE", "DELETE"]);
 		}),
@@ -205,7 +238,10 @@ describe("RealtimeClient — with mock WebSocket", () => {
 		"unsubscribe() sends unsubscribe message when last subscriber leaves",
 		withMockWebSocket(async () => {
 			const client = new RealtimeClient("http://localhost:3000");
-			const sub = client.from("users").on("INSERT", () => {}).subscribe();
+			const sub = client
+				.from("users")
+				.on("INSERT", () => {})
+				.subscribe();
 			await new Promise((r) => setTimeout(r, 20));
 
 			sub.unsubscribe();
@@ -226,7 +262,10 @@ describe("RealtimeClient — with mock WebSocket", () => {
 		"WebSocket URL uses ws:// protocol",
 		withMockWebSocket(async () => {
 			const client = new RealtimeClient("http://localhost:3000");
-			client.from("users").on("INSERT", () => {}).subscribe();
+			client
+				.from("users")
+				.on("INSERT", () => {})
+				.subscribe();
 			await new Promise((r) => setTimeout(r, 20));
 			expect(MockWebSocket.lastInstance!.url).toContain("ws://");
 		}),
@@ -236,7 +275,10 @@ describe("RealtimeClient — with mock WebSocket", () => {
 		"token is appended to WebSocket URL when provided",
 		withMockWebSocket(async () => {
 			const client = new RealtimeClient("http://localhost:3000", "my-token");
-			client.from("users").on("INSERT", () => {}).subscribe();
+			client
+				.from("users")
+				.on("INSERT", () => {})
+				.subscribe();
 			await new Promise((r) => setTimeout(r, 20));
 			expect(MockWebSocket.lastInstance!.url).toContain("token=my-token");
 		}),

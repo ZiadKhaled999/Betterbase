@@ -20,7 +20,7 @@ const BetterBaseConfigSchema = z.object({
 });
 
 export class BetterBaseClient {
-	private headers: Record<string, string>;
+	private headers: Record<string, string | undefined>;
 	private fetchImpl: typeof fetch;
 	private _url: string;
 	public auth: AuthClient;
@@ -36,14 +36,18 @@ export class BetterBaseClient {
 		};
 		this.fetchImpl = (parsed.fetch ?? fetch) as typeof fetch;
 
+		const filteredHeaders: Record<string, string> = Object.fromEntries(
+			Object.entries(this.headers).filter(([, v]) => v !== undefined),
+		) as Record<string, string>;
+
 		this.auth = new AuthClient(
 			this._url,
-			this.headers,
+			filteredHeaders,
 			(token) => {
 				if (token) {
 					this.headers.Authorization = `Bearer ${token}`;
 				} else {
-					delete this.headers.Authorization;
+					this.headers.Authorization = undefined;
 				}
 				this.realtime.setToken(token);
 			},
@@ -78,10 +82,13 @@ export class BetterBaseClient {
 	 * Internal fetch method for making authenticated API requests.
 	 */
 	async fetch(url: string, options: RequestInit = {}): Promise<Response> {
+		const filteredHeaders: Record<string, string> = Object.fromEntries(
+			Object.entries(this.headers).filter(([, v]) => v !== undefined),
+		) as Record<string, string>;
 		const response = await this.fetchImpl(url, {
 			...options,
 			headers: {
-				...this.headers,
+				...filteredHeaders,
 				...options.headers,
 			},
 		});
@@ -89,7 +96,10 @@ export class BetterBaseClient {
 	}
 
 	from<T = unknown>(table: string, options?: QueryBuilderOptions): QueryBuilder<T> {
-		return new QueryBuilder<T>(this._url, table, this.headers, this.fetchImpl, options);
+		const filteredHeaders: Record<string, string> = Object.fromEntries(
+			Object.entries(this.headers).filter(([, v]) => v !== undefined),
+		) as Record<string, string>;
+		return new QueryBuilder<T>(this._url, table, filteredHeaders, this.fetchImpl, options);
 	}
 }
 

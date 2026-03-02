@@ -62,9 +62,7 @@ describe("Client SDK — network failure handling", () => {
 describe("Client SDK — URL encoding", () => {
 	test(".eq() with special characters produces a parseable URL", async () => {
 		const captureFetch = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ users: [], error: null }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ users: [], error: null }), { status: 200 })),
 		);
 		const client = makeClient(captureFetch);
 		await client.from("users").eq("name", "O'Reilly & Co. <test>").execute();
@@ -74,9 +72,7 @@ describe("Client SDK — URL encoding", () => {
 
 	test(".in() with special characters in values produces a parseable URL", async () => {
 		const captureFetch = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ users: [], error: null }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ users: [], error: null }), { status: 200 })),
 		);
 		const client = makeClient(captureFetch);
 		await client.from("users").in("name", ["Alice & Bob", "O'Reilly"]).execute();
@@ -86,9 +82,7 @@ describe("Client SDK — URL encoding", () => {
 
 	test("table name is correctly included in the request URL", async () => {
 		const captureFetch = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ posts: [], error: null }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ posts: [], error: null }), { status: 200 })),
 		);
 		const client = makeClient(captureFetch);
 		await client.from("posts").execute();
@@ -100,9 +94,7 @@ describe("Client SDK — URL encoding", () => {
 describe("Client SDK — single-use QueryBuilder", () => {
 	test("calling execute() twice on same builder returns error on second call", async () => {
 		const fetchImpl = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ users: [] }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ users: [] }), { status: 200 })),
 		);
 		const client = makeClient(fetchImpl);
 		const qb = client.from("users");
@@ -115,9 +107,7 @@ describe("Client SDK — single-use QueryBuilder", () => {
 
 	test("each client.from() call creates a fresh independent builder", async () => {
 		const fetchImpl = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ users: [] }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ users: [] }), { status: 200 })),
 		);
 		const client = makeClient(fetchImpl);
 		await client.from("users").execute();
@@ -131,9 +121,7 @@ describe("Client SDK — single-use QueryBuilder", () => {
 describe("Client SDK — boundary inputs", () => {
 	test(".limit(0) sends limit=0 in request", async () => {
 		const captureFetch = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ users: [] }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ users: [] }), { status: 200 })),
 		);
 		const client = makeClient(captureFetch);
 		await client.from("users").limit(0).execute();
@@ -143,9 +131,7 @@ describe("Client SDK — boundary inputs", () => {
 
 	test(".offset(0) sends offset=0 in request", async () => {
 		const captureFetch = mock(() =>
-			Promise.resolve(
-				new Response(JSON.stringify({ users: [] }), { status: 200 }),
-			),
+			Promise.resolve(new Response(JSON.stringify({ users: [] }), { status: 200 })),
 		);
 		const client = makeClient(captureFetch);
 		await client.from("users").offset(0).execute();
