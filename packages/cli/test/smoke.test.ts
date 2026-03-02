@@ -42,8 +42,9 @@ describe("cli", () => {
 		const program = createProgram();
 
 		const migrate = program.commands.find((command) => command.name() === "migrate");
-		const preview = program.commands.find((command) => command.name() === "migrate:preview");
-		const production = program.commands.find((command) => command.name() === "migrate:production");
+		// Check subcommands of migrate (preview and production are nested under migrate)
+		const preview = migrate?.commands.find((command) => command.name() === "preview");
+		const production = migrate?.commands.find((command) => command.name() === "production");
 
 		expect(migrate).toBeDefined();
 		expect(preview).toBeDefined();
