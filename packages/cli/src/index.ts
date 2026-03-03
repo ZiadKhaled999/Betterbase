@@ -9,7 +9,7 @@ import { runGenerateGraphqlCommand, runGraphqlPlaygroundCommand } from './comman
 import { runRlsCommand } from './commands/rls';
 import { runWebhookCommand } from './commands/webhook';
 import { runFunctionCommand } from './commands/function';
-// import { runLoginCommand, runLogoutCommand } from './commands/login';
+import { runLoginCommand, runLogoutCommand } from './commands/login';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
@@ -310,15 +310,15 @@ export function createProgram(): Command {
   // This code is complete and tested. Uncomment when app.betterbase.com is live.
   // See: betterbase_backend_rebuild.md Part 3
   // ────────────────────────────────────────────────────────────────────────────
-  // program
-  //   .command('login')
-  //   .description('Authenticate the CLI with app.betterbase.com')
-  //   .action(runLoginCommand);
-  //
-  // program
-  //   .command('logout')
-  //   .description('Sign out of app.betterbase.com')
-  //   .action(runLogoutCommand);
+  program
+    .command('login')
+    .description('Authenticate the CLI with app.betterbase.com')
+    .action(runLoginCommand);
+  
+  program
+    .command('logout')
+    .description('Sign out of app.betterbase.com')
+    .action(runLogoutCommand);
 
   return program;
 }

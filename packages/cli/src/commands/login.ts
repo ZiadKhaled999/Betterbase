@@ -35,7 +35,7 @@ export async function runLoginCommand(): Promise<void> {
 
   // Generate a one-time device code
   const code = generateDeviceCode()
-  const authUrl = `${BETTERBASE_API}/cli/auth?code=${code}`
+  const authUrl = `${BETTERBASE_API}/cli-auth-page?code=${code}`
 
   info("Opening browser for authentication...")
   info(`Auth URL: ${authUrl}`)
@@ -134,7 +134,7 @@ async function pollForAuth(code: string): Promise<Credentials | null> {
 
     try {
       const response = await fetch(
-        `${BETTERBASE_API}/api/cli/auth/poll?code=${code}`
+        `${BETTERBASE_API}/cli-auth-poll?code=${code}`
       )
 
       if (response.status === 200) {
