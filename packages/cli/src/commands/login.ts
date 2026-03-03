@@ -11,13 +11,13 @@ export interface Credentials {
   expiresAt: string
 }
 
-/* 
+
 // ── bb login — STAGED FOR ACTIVATION ────────────────────────────────────────
 // This code is complete and tested. Uncomment when app.betterbase.com is live.
 // See: betterbase_backend_rebuild.md Part 3
 // ────────────────────────────────────────────────────────────────────────────
 
-const BETTERBASE_API = process.env.BETTERBASE_API_URL ?? "https://app.betterbase.com"
+const BETTERBASE_API = process.env.BETTERBASE_API_URL ?? "https://gzmqjmgomlkpwntbivox.supabase.co/functions/v1"
 const CREDENTIALS_PATH = path.join(os.homedir(), ".betterbase", "credentials.json")
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS = 300000  // 5 minutes
@@ -166,4 +166,4 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-*/
+
