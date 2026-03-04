@@ -98,7 +98,7 @@ async function initializeGitRepository(projectPath: string): Promise<void> {
 	}
 }
 
-function buildPackageJson(projectName: string, provider: ProviderType, useAuth: boolean): string {
+function buildPackageJson(projectName: string, provider: ProviderType, useAuth: boolean, storageProvider: StorageProvider | null): string {
 	const dependencies: Record<string, string> = {
 		hono: "^4.11.9",
 		"drizzle-orm": "^0.45.1",
@@ -123,6 +123,11 @@ function buildPackageJson(projectName: string, provider: ProviderType, useAuth: 
 
 	if (useAuth) {
 		dependencies["better-auth"] = "^1.1.15";
+	}
+
+	if (storageProvider) {
+		dependencies["@aws-sdk/client-s3"] = "^3.700.0";
+		dependencies["@aws-sdk/s3-request-presigner"] = "^3.700.0";
 	}
 
 	const json = {
@@ -708,6 +713,59 @@ export function registerRoutes(app: Hono): void {
 `;
 }
 
+function buildStorageRoute(provider: StorageProvider): string {
+	const endpointLine =
+		provider === "s3"
+			? `  region: process.env.STORAGE_REGION ?? "us-east-1",`
+			: `  endpoint: process.env.STORAGE_ENDPOINT,`;
+
+	return `import { Hono } from 'hono';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
+const s3 = new S3Client({
+  credentials: {
+    accessKeyId: process.env.STORAGE_ACCESS_KEY ?? '',
+    secretAccessKey: process.env.STORAGE_SECRET_KEY ?? '',
+  },
+${endpointLine}
+});
+
+const BUCKET = process.env.STORAGE_BUCKET ?? '';
+
+export const storageRoute = new Hono();
+
+// Upload — returns a presigned PUT URL
+storageRoute.post('/presign', async (c) => {
+  const { key, contentType } = await c.req.json<{ key: string; contentType: string }>();
+  const url = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType }),
+    { expiresIn: 300 },
+  );
+  return c.json({ url, key });
+});
+
+// Download — returns a presigned GET URL
+storageRoute.get('/presign/:key{.+}', async (c) => {
+  const key = c.req.param('key');
+  const url = await getSignedUrl(
+    s3,
+    new GetObjectCommand({ Bucket: BUCKET, Key: key }),
+    { expiresIn: 300 },
+  );
+  return c.json({ url, key });
+});
+
+// Delete
+storageRoute.delete('/:key{.+}', async (c) => {
+  const key = c.req.param('key');
+  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+  return c.json({ deleted: true, key });
+});
+`;
+}
+
 async function writeProjectFiles(
 	projectPath: string,
 	projectName: string,
@@ -788,51 +846,41 @@ STORAGE_BUCKET=
 	await writeFile(path.join(projectPath, ".env.example"), envExampleContent);
 
 	// env.ts with appropriate schema
-	let envSchemaContent = `import { z } from 'zod';
+	const dbEnvFields =
+		provider === "turso"
+			? `  TURSO_URL: z.string().url(),
+  TURSO_AUTH_TOKEN: z.string().min(1),`
+		: provider !== "managed"
+			? `  DATABASE_URL: z.string().min(1),`
+			: "";
 
-export const DEFAULT_DB_PATH = 'local.db';
+	const authEnvFields = useAuth
+		? `  AUTH_SECRET: z.string().min(32),
+  AUTH_URL: z.string().default('http://localhost:3000'),`
+		: "";
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().positive().default(3000),
-  DB_PATH: z.string().min(1).default(DEFAULT_DB_PATH),
-});
-`;
-	// All providers except managed need DATABASE_URL or Turso-specific env vars
-	if (provider === "turso") {
-		envSchemaContent += `
-envSchema = envSchema.extend({
-  TURSO_URL: z.string().url(),
-  TURSO_AUTH_TOKEN: z.string().min(1),
-});`;
-	} else if (provider !== "managed") {
-		envSchemaContent += `
-envSchema = envSchema.extend({
-  DATABASE_URL: z.string().url(),
-});`;
-	}
-
-	if (useAuth) {
-		envSchemaContent += `
-envSchema = envSchema.extend({
-  AUTH_SECRET: z.string().min(32),
-  AUTH_URL: z.string().url().default('http://localhost:3000'),
-});`;
-	}
-
-	if (storageProvider) {
-		envSchemaContent += `
-envSchema = envSchema.extend({
-  STORAGE_PROVIDER: z.enum(['s3', 'r2', 'backblaze', 'minio']),
+	const storageEnvFields = storageProvider
+		? `  STORAGE_PROVIDER: z.enum(['s3', 'r2', 'backblaze', 'minio']),
   STORAGE_ACCESS_KEY: z.string().min(1),
   STORAGE_SECRET_KEY: z.string().min(1),
   STORAGE_BUCKET: z.string().min(1),
   STORAGE_REGION: z.string().optional(),
-  STORAGE_ENDPOINT: z.string().optional(),
-});`;
-	}
+  STORAGE_ENDPOINT: z.string().optional(),`
+		: "";
 
-	envSchemaContent += "\n\nexport const env = envSchema.parse(process.env);\n";
+	const envSchemaContent = `import { z } from 'zod'
+
+export const DEFAULT_DB_PATH = 'local.db'
+
+export const env = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().positive().default(3000),
+  DB_PATH: z.string().min(1).default(DEFAULT_DB_PATH),
+${dbEnvFields}
+${authEnvFields}
+${storageEnvFields}
+}).parse(process.env)
+`;
 
 	await writeFile(path.join(projectPath, "src/lib/env.ts"), envSchemaContent);
 
@@ -843,7 +891,7 @@ envSchema = envSchema.extend({
 	await writeFile(path.join(projectPath, "drizzle.config.ts"), buildDrizzleConfig(provider));
 	await writeFile(
 		path.join(projectPath, "package.json"),
-		buildPackageJson(projectName, provider, useAuth),
+		buildPackageJson(projectName, provider, useAuth, storageProvider),
 	);
 
 	await writeFile(
@@ -1128,6 +1176,28 @@ export default server;
 			`${dbIndexContent}\nexport * from "./auth-schema";\n`,
 		);
 	}
+
+	// Write storage route if enabled
+	if (storageProvider) {
+		await writeFile(
+			path.join(projectPath, "src/routes/storage.ts"),
+			buildStorageRoute(storageProvider),
+		);
+
+		// Register in routes/index.ts
+		const routesIndexPath = path.join(projectPath, "src/routes/index.ts");
+		const routesIndex = await Bun.file(routesIndexPath).text();
+		const updated = routesIndex
+			.replace(
+				`import { usersRoute } from './users';`,
+				`import { usersRoute } from './users';\nimport { storageRoute } from './storage';`,
+			)
+			.replace(
+				`app.route('/api/users', usersRoute);`,
+				`app.route('/api/users', usersRoute);\n  app.route('/api/storage', storageRoute);`,
+			);
+		await writeFile(routesIndexPath, updated);
+	}
 }
 
 /**
@@ -1161,29 +1231,49 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
 	let storageProvider: StorageProvider | null = null;
 	const storageCredentials: StorageCredentials = {};
 
-	if (authEnabled) {
-		logger.info("You can run bb auth setup later to add authentication.");
-	} else {
-		logger.info("You can run bb auth setup later to add authentication.");
-	}
-
-	// PROMPT 5 — Storage Setup Option (placeholder - Phase 14)
-	const storageChoice = await prompts.select({
+	// PROMPT 5 — Storage
+	storageEnabled = await prompts.confirm({
 		message: "Set up S3-compatible storage now?",
-		options: [
-			{ value: "yes", label: "Yes" },
-			{ value: "skip", label: "Skip" },
-		],
-		default: "skip",
+		default: false,
 	});
 
-	if (storageChoice === "yes") {
-		logger.info("Storage setup coming in Phase 14");
-	}
+	if (storageEnabled) {
+		const storageChoice = await prompts.select({
+			message: "Storage provider:",
+			options: [
+				{ label: "AWS S3", value: "s3" },
+				{ label: "Cloudflare R2", value: "r2" },
+				{ label: "Backblaze B2", value: "backblaze" },
+				{ label: "MinIO (self-hosted)", value: "minio" },
+			],
+		});
+		storageProvider = storageChoice as StorageProvider;
 
-	// Storage is disabled for now - placeholder only
-	storageEnabled = false;
-	storageProvider = null;
+		storageCredentials.STORAGE_ACCESS_KEY = await prompts.text({
+			message: "Access Key ID:",
+			initial: "",
+		});
+		storageCredentials.STORAGE_SECRET_KEY = await prompts.text({
+			message: "Secret Access Key:",
+			initial: "",
+		});
+		storageCredentials.STORAGE_BUCKET = await prompts.text({
+			message: "Bucket name:",
+			initial: "",
+		});
+
+		if (storageProvider === "s3") {
+			storageCredentials.STORAGE_REGION = await prompts.text({
+				message: "Region:",
+				initial: "us-east-1",
+			});
+		} else {
+			storageCredentials.STORAGE_ENDPOINT = await prompts.text({
+				message: "Endpoint URL:",
+				initial: "",
+			});
+		}
+	}
 
 	// PROMPT 6 — FINAL SUMMARY AND CONFIRMATION
 	logger.info(`Creating project: ${projectName}`);
@@ -1245,7 +1335,6 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
 		console.log(`📁 Project: ${projectName}`);
 		console.log(`🗄️  Database: ${getDatabaseLabel(provider)}`);
 		console.log(`🔐 Auth: ${authEnabled ? "Enabled" : "Disabled"}`);
-		console.log(`📦 Storage: ${storageProvider ?? "Disabled"}`);
 		console.log("");
 		console.log("Next steps:");
 		console.log(`  cd ${projectName}`);

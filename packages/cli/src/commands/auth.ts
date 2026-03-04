@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import * as logger from "../utils/logger";
+import { confirm } from "../utils/prompts";
 
 const AUTH_INSTANCE_FILE = (provider: string) => `import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
@@ -253,6 +254,30 @@ export async function runAuthSetupCommand(
 
 	logger.info("🔐 Setting up BetterAuth...");
 
+	// Check if auth is already set up by looking for auth-schema.ts
+	let authSchemaPath = path.join(srcDir, "db", "auth-schema.ts");
+	if (existsSync(authSchemaPath)) {
+		logger.info("✅ Auth is already set up!");
+		
+		// Ask if they want to re-run migrations
+		const shouldRunMigrations = await confirm({
+			message: "Would you like to re-run migrations?",
+			default: false,
+		});
+		
+		if (shouldRunMigrations) {
+			logger.info("🗄️ Running database migrations...");
+			try {
+				execSync("bunx drizzle-kit push", { cwd: resolvedRoot, stdio: "inherit" });
+				logger.success("✅ Migrations complete!");
+			} catch (error: any) {
+				logger.warn(`Could not run drizzle-kit push automatically: ${error.message}. Please run it manually.`);
+			}
+		}
+		
+		return;
+	}
+
 	// Install better-auth
 	logger.info("📦 Installing better-auth...");
 	execSync("bun add better-auth", { cwd: resolvedRoot, stdio: "inherit" });
@@ -263,7 +288,7 @@ export async function runAuthSetupCommand(
 
 	// Create src/db/auth-schema.ts
 	logger.info("📝 Creating auth schema...");
-	const authSchemaPath = path.join(srcDir, "db", "auth-schema.ts");
+	authSchemaPath = path.join(srcDir, "db", "auth-schema.ts");
 	const schemaContent = provider === "sqlite" ? AUTH_SCHEMA_SQLITE : AUTH_SCHEMA_PG;
 	writeFileSync(authSchemaPath, schemaContent);
 
@@ -294,15 +319,17 @@ export async function runAuthSetupCommand(
 	// Run migrations
 	logger.info("🗄️ Running database migrations...");
 	try {
-		execSync("bun run db:push", { cwd: resolvedRoot, stdio: "inherit" });
-	} catch {
-		logger.warn("Could not run db:push automatically. Please run it manually.");
+		// Use drizzle-kit push to push schema directly without needing migration files
+		logger.info("Executing drizzle-kit push...");
+		execSync("bunx drizzle-kit push", { cwd: resolvedRoot, stdio: "inherit" });
+	} catch (error: any) {
+		logger.warn(`Could not run drizzle-kit push automatically: ${error.message}. Please run it manually.`);
 	}
 
 	logger.success("✅ BetterAuth setup complete!");
 	logger.info("Next steps:");
 	logger.info("1. Set AUTH_SECRET in .env (already added to .env.example)");
-	logger.info("2. Run: bun run db:push (if not already run)");
+	logger.info("2. Run: bunx drizzle-kit push (if not already run)");
 	logger.info("3. Use requireAuth middleware on protected routes:");
 	logger.info("   import { requireAuth } from './middleware/auth'");
 	logger.info("   app.use('*', requireAuth)");
