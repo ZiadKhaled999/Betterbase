@@ -32,7 +32,7 @@ const mockSignUp = mock(async (params: { email: string; password: string; name: 
         createdAt: new Date(),
         updatedAt: new Date(),
       },
-      token: "mock-session-token-" + params.email,
+      token: `mock-session-token-${params.email}`,
     },
     error: null,
   }
@@ -50,7 +50,7 @@ const mockSignIn = mock(async (params: { email: string; password: string }) => {
         createdAt: new Date(),
         updatedAt: new Date(),
       },
-      token: "signed-in-token-" + params.email,
+      token: `signed-in-token-${params.email}`,
     },
     error: null,
   }

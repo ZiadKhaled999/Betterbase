@@ -109,13 +109,6 @@ describe("migration/index", () => {
 				}),
 			}))
 
-			// Mock applyRLSMigration
-			vi.mock("../src/migration/rls-migrator", () => ({
-				applyAuthFunction: vi.fn().mockResolvedValue(undefined),
-				applyPolicies: vi.fn().mockResolvedValue(undefined),
-				applyRLSMigration: vi.fn().mockResolvedValue(undefined),
-			}))
-
 			await runMigration(tmpDir, db, provider)
 
 			expect(consoleSpy).toHaveBeenCalledWith(
@@ -167,6 +160,23 @@ describe("migration/index", () => {
 })
 
 describe("migration/rls-migrator", () => {
+	// Re-import the modules to avoid mock pollution from runMigration tests
+	let applyAuthFunction: typeof import("../src/migration/rls-migrator").applyAuthFunction
+	let applyPolicies: typeof import("../src/migration/rls-migrator").applyPolicies
+	let applyRLSMigration: typeof import("../src/migration/rls-migrator").applyRLSMigration
+	let dropPolicies: typeof import("../src/migration/rls-migrator").dropPolicies
+	let dropTableRLS: typeof import("../src/migration/rls-migrator").dropTableRLS
+	let getAppliedPolicies: typeof import("../src/migration/rls-migrator").getAppliedPolicies
+
+	beforeAll(async () => {
+		const module = await import("../src/migration/rls-migrator")
+		applyAuthFunction = module.applyAuthFunction
+		applyPolicies = module.applyPolicies
+		applyRLSMigration = module.applyRLSMigration
+		dropPolicies = module.dropPolicies
+		dropTableRLS = module.dropTableRLS
+		getAppliedPolicies = module.getAppliedPolicies
+	})
 	describe("applyAuthFunction", () => {
 		it("executes auth function SQL", async () => {
 			const executeFn = vi.fn().mockResolvedValue({})

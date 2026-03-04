@@ -215,6 +215,26 @@ function pascalCase(str: string): string {
 }
 
 /**
+ * Singularize a plural word (simple implementation)
+ */
+function singularize(str: string): string {
+	// Handle common English plural forms
+	if (str.endsWith("ies")) {
+		return str.slice(0, -3) + "y";
+	}
+	if (str.endsWith("es") && str.length > 2) {
+		// Don't singularize words like "status", "statuses" -> "statuse"
+		if (!str.endsWith("ses")) {
+			return str.slice(0, -2);
+		}
+	}
+	if (str.endsWith("s") && str.length > 1) {
+		return str.slice(0, -1);
+	}
+	return str;
+}
+
+/**
  * Get column name from Drizzle column
  */
 function getColumnName(column: AnyColumn): string {
@@ -262,7 +282,8 @@ function generateObjectType(
 	tableInfo: TableInfo,
 	config: Required<GraphQLGenerationConfig>,
 ): GraphQLObjectType {
-	const typeName = config.typePrefix + pascalCase(tableInfo.name);
+	// Use singular name for the type (e.g., "users" -> "User")
+	const typeName = config.typePrefix + singularize(pascalCase(tableInfo.name));
 
 	const fieldsConfig: GraphQLFieldConfigMap<unknown, unknown> = {};
 
@@ -290,7 +311,7 @@ function generateCreateInputType(
 	tableInfo: TableInfo,
 	config: Required<GraphQLGenerationConfig>,
 ): GraphQLInputObjectType {
-	const inputName = `Create${config.typePrefix + pascalCase(tableInfo.name)}Input`;
+	const inputName = `Create${config.typePrefix + singularize(pascalCase(tableInfo.name))}Input`;
 
 	const fieldsConfig: GraphQLInputObjectTypeConfig["fields"] = {};
 
@@ -328,7 +349,7 @@ function generateUpdateInputType(
 	tableInfo: TableInfo,
 	config: Required<GraphQLGenerationConfig>,
 ): GraphQLInputObjectType {
-	const inputName = `Update${config.typePrefix + pascalCase(tableInfo.name)}Input`;
+	const inputName = `Update${config.typePrefix + singularize(pascalCase(tableInfo.name))}Input`;
 
 	const fieldsConfig: GraphQLInputObjectTypeConfig["fields"] = {};
 
@@ -369,7 +390,7 @@ function generateWhereInputType(
 	tableInfo: TableInfo,
 	config: Required<GraphQLGenerationConfig>,
 ): GraphQLInputObjectType {
-	const inputName = `${config.typePrefix + pascalCase(tableInfo.name)}WhereInput`;
+	const inputName = `${config.typePrefix + singularize(pascalCase(tableInfo.name))}WhereInput`;
 
 	const fieldsConfig: GraphQLInputObjectTypeConfig["fields"] = {};
 
@@ -455,7 +476,7 @@ export function generateGraphQLSchema(
 	const queryFieldsConfig: GraphQLFieldConfigMap<unknown, unknown> = {};
 
 	for (const tableInfo of tableInfos) {
-		const typeName = mergedConfig.typePrefix + pascalCase(tableInfo.name);
+		const typeName = mergedConfig.typePrefix + singularize(pascalCase(tableInfo.name));
 		const typeRef = objectTypes.find((t) => t.name === typeName)!;
 
 		// Get by ID query
@@ -485,10 +506,10 @@ export function generateGraphQLSchema(
 
 	if (mergedConfig.mutations) {
 		for (const tableInfo of tableInfos) {
-			const typeName = mergedConfig.typePrefix + pascalCase(tableInfo.name);
+			const typeName = mergedConfig.typePrefix + singularize(pascalCase(tableInfo.name));
 			const typeRef = objectTypes.find((t) => t.name === typeName)!;
-			const createInputName = `Create${mergedConfig.typePrefix + pascalCase(tableInfo.name)}Input`;
-			const updateInputName = `Update${mergedConfig.typePrefix + pascalCase(tableInfo.name)}Input`;
+			const createInputName = `Create${mergedConfig.typePrefix + singularize(pascalCase(tableInfo.name))}Input`;
+			const updateInputName = `Update${mergedConfig.typePrefix + singularize(pascalCase(tableInfo.name))}Input`;
 
 			const createInput = createInputTypes.find((t) => t.name === createInputName)!;
 			const updateInput = updateInputTypes.find((t) => t.name === updateInputName)!;
@@ -497,7 +518,7 @@ export function generateGraphQLSchema(
 			const pkName = pkColumn ? getColumnName(pkColumn) : "id";
 
 			// Create mutation
-			mutationFieldsConfig[`create${pascalCase(tableInfo.name)}`] = {
+			mutationFieldsConfig[`create${singularize(pascalCase(tableInfo.name))}`] = {
 				type: typeRef,
 				args: {
 					input: { type: new GraphQLNonNull(createInput) },
@@ -505,7 +526,7 @@ export function generateGraphQLSchema(
 			};
 
 			// Update mutation
-			mutationFieldsConfig[`update${pascalCase(tableInfo.name)}`] = {
+			mutationFieldsConfig[`update${singularize(pascalCase(tableInfo.name))}`] = {
 				type: typeRef,
 				args: {
 					id: { type: new GraphQLNonNull(GraphQLID) },
@@ -514,7 +535,7 @@ export function generateGraphQLSchema(
 			};
 
 			// Delete mutation
-			mutationFieldsConfig[`delete${pascalCase(tableInfo.name)}`] = {
+			mutationFieldsConfig[`delete${singularize(pascalCase(tableInfo.name))}`] = {
 				type: typeRef,
 				args: {
 					id: { type: new GraphQLNonNull(GraphQLID) },
@@ -528,7 +549,7 @@ export function generateGraphQLSchema(
 
 	if (mergedConfig.subscriptions) {
 		for (const tableInfo of tableInfos) {
-			const typeName = mergedConfig.typePrefix + pascalCase(tableInfo.name);
+			const typeName = mergedConfig.typePrefix + singularize(pascalCase(tableInfo.name));
 			const typeRef = objectTypes.find((t) => t.name === typeName)!;
 
 			// Subscribe to created records
@@ -578,7 +599,7 @@ export function generateGraphQLSchema(
 	// Build and return the schema
 	const schemaConfig: GraphQLSchemaConfig = {
 		query: queryType,
-		mutation: mutationType,
+		mutation: mergedConfig.mutations && Object.keys(mutationFieldsConfig).length > 0 ? mutationType : null,
 		types: [
 			...objectTypes,
 			...createInputTypes,
@@ -589,7 +610,8 @@ export function generateGraphQLSchema(
 		],
 	};
 
-	if (subscriptionType) {
+	// Only add subscription type if subscriptions are enabled
+	if (mergedConfig.subscriptions && Object.keys(subscriptionFieldsConfig).length > 0) {
 		schemaConfig.subscription = subscriptionType;
 	}
 

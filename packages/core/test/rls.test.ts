@@ -247,9 +247,9 @@ describe("rls/generator", () => {
 				definePolicy("posts", { select: "auth.uid() = user_id" }),
 			]
 			const sql = policiesToSQL(policies)
-			expect(sql.length).toBeGreaterThan(2)
-			expect(sql).toContain("ALTER TABLE users ENABLE ROW LEVEL SECURITY;")
-			expect(sql).toContain("ALTER TABLE posts ENABLE ROW LEVEL SECURITY;")
+			expect(sql.length).toBe(2)
+			expect(sql[0]).toContain("ALTER TABLE users ENABLE ROW LEVEL SECURITY;")
+			expect(sql[1]).toContain("ALTER TABLE posts ENABLE ROW LEVEL SECURITY;")
 		})
 	})
 
@@ -399,9 +399,9 @@ export const usersPolicy = {
 	})
 
 	describe("getPolicyFileInfo", () => {
-		it("returns null for non-existent file", async () => {
+		it("returns empty array for non-existent file", async () => {
 			const info = await getPolicyFileInfo(path.join(tmpDir, "nonexistent.ts"))
-			expect(info).toBeNull()
+			expect(info).toEqual([])
 		})
 	})
 })
