@@ -1352,6 +1352,13 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
 			}
 		}
 
+		const message = error instanceof Error ? error.message : String(error);
+		logger.error(
+			`Failed to install dependencies.\n` +
+			`Try running manually: cd ${projectName} && bun install\n` +
+			`Error: ${message}`
+		);
+
 		throw error;
 	}
 }
