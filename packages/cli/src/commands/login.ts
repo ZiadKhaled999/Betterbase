@@ -83,6 +83,11 @@ export async function getCredentials(): Promise<Credentials | null> {
   }
 }
 
+export async function isAuthenticated(): Promise<boolean> {
+  const creds = await getCredentials()
+  return creds !== null
+}
+
 export async function requireCredentials(): Promise<Credentials> {
   const creds = await getCredentials()
   if (!creds) {
