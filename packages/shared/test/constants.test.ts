@@ -50,7 +50,7 @@ describe("constants", () => {
     })
 
     it("should be a valid file name with json extension", () => {
-      expect(CONTEXT_FILE_NAME).toContain(".json")
+      expect(CONTEXT_FILE_NAME).toMatch(/\.json$/)
     })
   })
 
@@ -81,7 +81,7 @@ describe("constants", () => {
     })
 
     it("should be a valid directory path", () => {
-      expect(FUNCTIONS_DIR).toContain("/")
+      expect(FUNCTIONS_DIR).toMatch(/^[^/]+\/[^/]+$/)
     })
   })
 
@@ -91,7 +91,7 @@ describe("constants", () => {
     })
 
     it("should be a valid directory path", () => {
-      expect(POLICIES_DIR).toContain("/")
+      expect(POLICIES_DIR).toMatch(/^[^/]+\/[^/]+$/)
     })
   })
 })
