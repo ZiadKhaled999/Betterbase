@@ -92,7 +92,7 @@ class ServerManager {
 	 */
 	private spawnProcess(): void {
 		this.process = Bun.spawn({
-			cmd: ["bun", "--hot", SERVER_ENTRY],
+			cmd: [process.execPath, "--hot", SERVER_ENTRY],
 			cwd: this.projectRoot,
 			stdout: "inherit",
 			stderr: "inherit",
