@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test"
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from "bun:test"
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs"
 import { existsSync } from "node:fs"
 import os from "node:os"
@@ -34,11 +34,11 @@ import {
 
 let tmpDir: string
 
-beforeAll(() => {
+beforeEach(() => {
 	tmpDir = mkdtempSync(path.join(os.tmpdir(), "betterbase-test-"))
 })
 
-afterAll(() => {
+afterEach(() => {
 	rmSync(tmpDir, { recursive: true, force: true })
 })
 
@@ -147,8 +147,9 @@ describe("rls/generator", () => {
 				select: "auth.uid() = id",
 			})
 			const sql = policyToSQL(policy)
-			expect(sql).toContain("ALTER TABLE users ENABLE ROW LEVEL SECURITY;")
-			expect(sql).toContain("CREATE POLICY users_select_policy ON users FOR SELECT USING (auth.uid() = id);")
+			const sqlJoined = sql.join(" ")
+			expect(sqlJoined).toContain("ALTER TABLE users ENABLE ROW LEVEL SECURITY;")
+			expect(sqlJoined).toContain("CREATE POLICY users_select_policy ON users FOR SELECT USING (auth.uid() = id);")
 		})
 
 		it("generates SQL for multiple operations", () => {
@@ -158,9 +159,9 @@ describe("rls/generator", () => {
 				delete: "auth.uid() = id",
 			})
 			const sql = policyToSQL(policy)
-			expect(sql).toContain("CREATE POLICY users_select_policy")
-			expect(sql).toContain("CREATE POLICY users_update_policy")
-			expect(sql).toContain("CREATE POLICY users_delete_policy")
+			expect(sql.some(s => s.includes("CREATE POLICY users_select_policy"))).toBe(true)
+			expect(sql.some(s => s.includes("CREATE POLICY users_update_policy"))).toBe(true)
+			expect(sql.some(s => s.includes("CREATE POLICY users_delete_policy"))).toBe(true)
 		})
 
 		it("generates USING clause for select/update/delete", () => {
@@ -168,7 +169,7 @@ describe("rls/generator", () => {
 				using: "auth.uid() = user_id",
 			})
 			const sql = policyToSQL(policy)
-			expect(sql).toContain("USING (auth.uid() = user_id)")
+			expect(sql.some(s => s.includes("USING (auth.uid() = user_id)"))).toBe(true)
 		})
 
 		it("generates WITH CHECK clause for insert/update", () => {
@@ -177,7 +178,7 @@ describe("rls/generator", () => {
 				withCheck: "auth.uid() = user_id",
 			})
 			const sql = policyToSQL(policy)
-			expect(sql).toContain("WITH CHECK (auth.uid() = user_id)")
+			expect(sql.some(s => s.includes("WITH CHECK (auth.uid() = user_id)"))).toBe(true)
 		})
 
 		it("handles insert with operation-specific condition", () => {
@@ -185,8 +186,8 @@ describe("rls/generator", () => {
 				insert: "auth.uid() = user_id",
 			})
 			const sql = policyToSQL(policy)
-			expect(sql).toContain("FOR INSERT")
-			expect(sql).toContain("WITH CHECK (auth.uid() = user_id)")
+			expect(sql.some(s => s.includes("FOR INSERT"))).toBe(true)
+			expect(sql.some(s => s.includes("WITH CHECK (auth.uid() = user_id)"))).toBe(true)
 		})
 	})
 
@@ -247,9 +248,10 @@ describe("rls/generator", () => {
 				definePolicy("posts", { select: "auth.uid() = user_id" }),
 			]
 			const sql = policiesToSQL(policies)
-			expect(sql.length).toBe(2)
-			expect(sql[0]).toContain("ALTER TABLE users ENABLE ROW LEVEL SECURITY;")
-			expect(sql[1]).toContain("ALTER TABLE posts ENABLE ROW LEVEL SECURITY;")
+			// Each policy returns 2 statements: ALTER TABLE + CREATE POLICY
+			expect(sql.length).toBe(4)
+			expect(sql.some(s => s.includes("ALTER TABLE users ENABLE ROW LEVEL SECURITY;"))).toBe(true)
+			expect(sql.some(s => s.includes("ALTER TABLE posts ENABLE ROW LEVEL SECURITY;"))).toBe(true)
 		})
 	})
 

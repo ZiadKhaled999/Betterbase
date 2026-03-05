@@ -338,7 +338,7 @@ describe("graphql/resolvers", () => {
 			}
 			const mockDb = {}
 			const resolvers = generateResolvers(tables, mockDb as any, { subscriptions: false })
-			expect(resolvers.Subscription).toBeDefined()
+			expect(resolvers.Subscription).toBeUndefined()
 		})
 	})
 })

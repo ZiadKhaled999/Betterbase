@@ -7,14 +7,6 @@ import {
 	runMigration,
 	isRLSSupported,
 } from "../src/migration/index"
-import {
-	applyPolicies,
-	applyAuthFunction,
-	applyRLSMigration,
-	dropPolicies,
-	dropTableRLS,
-	getAppliedPolicies,
-} from "../src/migration/rls-migrator"
 import type { ProviderAdapter, DatabaseConnection } from "../src/providers/types"
 
 let tmpDir: string

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "bun:test"
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs"
-import { existsSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import {
