@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "../db";
 import * as schema from "../db/schema";
+import { env } from "../lib/env";
 
 export const auth = betterAuth({
 	database: drizzleAdapter(db, {
@@ -17,9 +18,9 @@ export const auth = betterAuth({
 		enabled: true,
 		requireEmailVerification: false,
 	},
-	secret: process.env.AUTH_SECRET,
-	baseURL: process.env.AUTH_URL ?? "http://localhost:3000",
-	trustedOrigins: [process.env.AUTH_URL ?? "http://localhost:3000"],
+	secret: env.AUTH_SECRET,
+	baseURL: env.AUTH_URL,
+	trustedOrigins: [env.AUTH_URL],
 	plugins: [],
 });
 

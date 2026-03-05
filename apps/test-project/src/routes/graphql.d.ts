@@ -4,6 +4,6 @@
 
 import type { Hono } from "hono";
 
-declare module "./routes/graphql" {
+declare module "./graphql" {
 	export const graphqlRoute: Hono;
 }
