@@ -101,14 +101,19 @@ function validatePath(path: string): string {
 
 // Auth middleware for storage routes
 async function requireAuth(c: Context, next: Next): Promise<Response | undefined> {
-	const session = await auth.api.getSession({
-		headers: c.req.raw.headers,
-	});
-	if (!session) {
+	try {
+		const session = await auth.api.getSession({
+			headers: c.req.raw.headers,
+		});
+		if (!session) {
+			return c.json({ error: "Unauthorized" }, 401);
+		}
+		c.set("user", session.user);
+		c.set("session", session.session);
+	} catch (error) {
+		console.error("Storage requireAuth error:", error);
 		return c.json({ error: "Unauthorized" }, 401);
 	}
-	c.set("user", session.user);
-	c.set("session", session.session);
 	await next();
 }
 
@@ -223,8 +228,7 @@ storageRouter.post("/:bucket/upload", async (c) => {
 		// Get content type from headers or form
 		const contentType = c.req.header("Content-Type") || "application/octet-stream";
 
-		// Try to get file from form data first, then raw body
-
+		// Best-effort early abort based on Content-Length header (can be spoofed)
 		const contentLength = c.req.header("Content-Length");
 		const maxSize = 50 * 1024 * 1024; // 50MB limit
 
@@ -232,9 +236,35 @@ storageRouter.post("/:bucket/upload", async (c) => {
 			return c.json({ error: "File too large. Maximum size is 50MB" }, 400);
 		}
 
-		// Get the file buffer
-		const arrayBuffer = await c.req.arrayBuffer();
-		const body = Buffer.from(arrayBuffer);
+		// Stream the body and enforce maxSize during streaming to prevent DoS attacks
+		// Content-Length can be spoofed, so we must enforce the limit during read
+		const bodyStream = c.req.body({ all: true });
+		if (!bodyStream) {
+			return c.json({ error: "No body provided" }, 400);
+		}
+
+		const chunks: Uint8Array[] = [];
+		const reader = bodyStream.getReader();
+		let byteCount = 0;
+
+		try {
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				byteCount += value.length;
+				if (byteCount > maxSize) {
+					return c.json({ error: "File too large. Maximum size is 50MB" }, 413);
+				}
+
+				chunks.push(value);
+			}
+		} catch (error) {
+			return c.json({ error: "Failed to read body" }, 400);
+		}
+
+		// Concatenate all chunks into a single buffer
+		const body = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
 
 		// Extract and validate path from query param or use default
 		const pathInput = c.req.query("path") || `uploads/${Date.now()}-file`;
@@ -266,7 +296,7 @@ storageRouter.post("/:bucket/upload", async (c) => {
 });
 
 // GET /api/storage/:bucket/:key - Download a file
-storageRouter.get("/:bucket/:key", async (c) => {
+storageRouter.get("/:bucket/:key{.+}", async (c) => {
 	try {
 		const bucket = c.req.param("bucket");
 		const keyInput = c.req.param("key");
@@ -310,7 +340,7 @@ storageRouter.get("/:bucket/:key", async (c) => {
 });
 
 // GET /api/storage/:bucket/:key/public - Get public URL
-storageRouter.get("/:bucket/:key/public", async (c) => {
+storageRouter.get("/:bucket/:key{.+}/public", async (c) => {
 	try {
 		const bucket = c.req.param("bucket");
 		const keyInput = c.req.param("key");
@@ -334,7 +364,7 @@ storageRouter.get("/:bucket/:key/public", async (c) => {
 });
 
 // POST /api/storage/:bucket/:key/sign - Create signed URL
-storageRouter.post("/:bucket/:key/sign", async (c) => {
+storageRouter.post("/:bucket/:key{.+}/sign", async (c) => {
 	try {
 		const bucket = c.req.param("bucket");
 		const keyInput = c.req.param("key");
