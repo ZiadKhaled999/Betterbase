@@ -68,6 +68,18 @@ export async function optionalAuth(c: Context, next: Next) {
   }
   await next()
 }
+
+export function getAuthUser(c: Context) {
+  return c.get("user")
+}
+
+export function isAuthenticated(c: Context): boolean {
+  return !!c.get("user")
+}
+
+export function getSession(c: Context) {
+  return c.get("session")
+}
 `;
 
 const AUTH_SCHEMA_SQLITE = `import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
