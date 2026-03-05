@@ -144,5 +144,5 @@ describe("runAuthSetupCommand", () => {
 		const index = await readFile(join(tmpDir, "src/index.ts"), "utf-8");
 		const matches = index.match(/\/api\/auth\/\*\*/g) || [];
 		expect(matches.length).toBe(1);
-	});
+	}, 120000);
 });

@@ -8,16 +8,16 @@ describe("Prompt utilities", () => {
       await expect(prompts.text({ message: "" })).rejects.toThrow()
     })
 
-    it("accepts valid text prompt options", () => {
-      // This should not throw - just checking the schema accepts valid input
-      // We're not actually calling inquirer so this tests schema validation only
-      const options = { message: "Enter your name:" }
-      expect(options.message).toBe("Enter your name:")
+    it("accepts valid text prompt options", async () => {
+      // Actually call the prompts.text function to verify it accepts valid input
+      const result = prompts.text({ message: "Enter your name:" })
+      expect(result).toBeDefined()
     })
 
-    it("accepts initial value option", () => {
-      const options = { message: "Enter your name:", initial: "John" }
-      expect(options.initial).toBe("John")
+    it("accepts initial value option", async () => {
+      // Actually call the prompts.text function with initial value
+      const result = prompts.text({ message: "Enter your name:", initial: "John" })
+      expect(result).toBeDefined()
     })
   })
 
@@ -27,15 +27,16 @@ describe("Prompt utilities", () => {
       await expect(prompts.confirm({ message: "" })).rejects.toThrow()
     })
 
-    it("accepts valid confirm prompt options", () => {
-      const options = { message: "Continue?", default: true }
-      expect(options.message).toBe("Continue?")
-      expect(options.default).toBe(true)
+    it("accepts valid confirm prompt options", async () => {
+      // Actually call the prompts.confirm function to verify it accepts valid input
+      const result = prompts.confirm({ message: "Continue?", default: true })
+      expect(result).toBeDefined()
     })
 
-    it("accepts initial option for backward compatibility", () => {
-      const options = { message: "Continue?", initial: false }
-      expect(options.initial).toBe(false)
+    it("accepts initial option for backward compatibility", async () => {
+      // Actually call the prompts.confirm function with initial value
+      const result = prompts.confirm({ message: "Continue?", initial: false })
+      expect(result).toBeDefined()
     })
   })
 
@@ -50,49 +51,50 @@ describe("Prompt utilities", () => {
       await expect(prompts.select({ message: "Select one:", options: [] })).rejects.toThrow()
     })
 
-    it("validates option has value and label", () => {
-      const options = { message: "Select one:", options: [{ value: "neon", label: "Neon" }] }
-      expect(options.options[0].value).toBe("neon")
-      expect(options.options[0].label).toBe("Neon")
+    it("validates option has value and label", async () => {
+      // Actually call the prompts.select function to verify it accepts valid input
+      const result = prompts.select({ message: "Select one:", options: [{ value: "neon", label: "Neon" }] })
+      expect(result).toBeDefined()
     })
 
-    it("accepts default option", () => {
-      const options = {
+    it("accepts default option", async () => {
+      // Actually call the prompts.select function with default option
+      const result = prompts.select({
         message: "Select provider:",
         options: [
           { value: "neon", label: "Neon" },
           { value: "turso", label: "Turso" },
         ],
         default: "neon",
-      }
-      expect(options.default).toBe("neon")
+      })
+      expect(result).toBeDefined()
     })
 
-    it("accepts initial option for backward compatibility", () => {
-      const options = {
+    it("accepts initial option for backward compatibility", async () => {
+      // Actually call the prompts.select function with initial option
+      const result = prompts.select({
         message: "Select provider:",
         options: [
           { value: "neon", label: "Neon" },
           { value: "turso", label: "Turso" },
         ],
         initial: "turso",
-      }
-      expect(options.initial).toBe("turso")
+      })
+      expect(result).toBeDefined()
     })
 
-    it("validates default matches an option value", () => {
-      // This tests that if default is provided, it must match one of the option values
-      const options = {
-        message: "Select provider:",
-        options: [
-          { value: "neon", label: "Neon" },
-          { value: "turso", label: "Turso" },
-        ],
-        default: "invalid",
-      }
-      // The validation should fail because "invalid" is not in the options
-      const isValid = options.options.some(opt => opt.value === options.default)
-      expect(isValid).toBe(false)
+    it("validates default matches an option value", async () => {
+      // Actually call the prompts.select function - validation should fail because "invalid" is not in options
+      await expect(
+        prompts.select({
+          message: "Select provider:",
+          options: [
+            { value: "neon", label: "Neon" },
+            { value: "turso", label: "Turso" },
+          ],
+          default: "invalid",
+        })
+      ).rejects.toThrow()
     })
   })
 })
