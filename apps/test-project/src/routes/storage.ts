@@ -238,7 +238,7 @@ storageRouter.post("/:bucket/upload", async (c) => {
 
 		// Stream the body and enforce maxSize during streaming to prevent DoS attacks
 		// Content-Length can be spoofed, so we must enforce the limit during read
-		const bodyStream = c.req.body({ all: true });
+		const bodyStream = c.req.raw.body;
 		if (!bodyStream) {
 			return c.json({ error: "No body provided" }, 400);
 		}
