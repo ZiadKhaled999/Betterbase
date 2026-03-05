@@ -1,3 +1,6 @@
+import { EventEmitter } from "events";
+EventEmitter.defaultMaxListeners = 20;
+
 import { describe, it, expect } from "bun:test"
 import * as prompts from "../src/utils/prompts"
 
