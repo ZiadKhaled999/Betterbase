@@ -86,7 +86,7 @@ function generatePolicyStatement(
 /**
  * Convert a PolicyDefinition to SQL statements
  * @param policy - The policy definition
- * @returns SQL statements to apply the policy (joined as a single string)
+ * @returns Array of SQL statements to apply the policy
  *
  * @example
  * ```typescript
@@ -98,10 +98,15 @@ function generatePolicyStatement(
  *
  * const sql = policyToSQL(policy);
  * // Returns:
- * // "ALTER TABLE users ENABLE ROW LEVEL SECURITY; CREATE POLICY users_select_policy ON users FOR SELECT USING (auth.uid() = id); CREATE POLICY users_update_policy ON users FOR UPDATE USING (auth.uid() = id); CREATE POLICY users_delete_policy ON users FOR DELETE USING (auth.uid() = id);"
+ * // [
+ * //   "ALTER TABLE users ENABLE ROW LEVEL SECURITY;",
+ * //   "CREATE POLICY users_select_policy ON users FOR SELECT USING (auth.uid() = id);",
+ * //   "CREATE POLICY users_update_policy ON users FOR UPDATE USING (auth.uid() = id);",
+ * //   "CREATE POLICY users_delete_policy ON users FOR DELETE USING (auth.uid() = id);"
+ * // ]
  * ```
  */
-export function policyToSQL(policy: PolicyDefinition): string {
+export function policyToSQL(policy: PolicyDefinition): string[] {
 	const statements: string[] = [];
 
 	// First, enable RLS on the table
@@ -117,7 +122,7 @@ export function policyToSQL(policy: PolicyDefinition): string {
 		}
 	}
 
-	return statements.join(" ");
+	return statements;
 }
 
 /**

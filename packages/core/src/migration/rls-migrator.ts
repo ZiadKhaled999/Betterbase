@@ -145,9 +145,7 @@ export async function applyPolicies(
 	const allStatements: string[] = [];
 
 	for (const policy of policies) {
-		const sql = policyToSQL(policy);
-		// Split the joined SQL string into individual statements (separated by semicolons)
-		const statements = sql.split(";").filter(s => s.trim().length > 0).map(s => s.trim() + ";");
+		const statements = policyToSQL(policy);
 		allStatements.push(...statements);
 	}
 
