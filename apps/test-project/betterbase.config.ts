@@ -13,6 +13,22 @@
 import type { BetterBaseConfig } from "@betterbase/core";
 
 /**
+ * Validate DATABASE_URL is present and non-empty
+ */
+function getDatabaseUrl(): string {
+	const dbUrl = process.env.DATABASE_URL;
+	if (!dbUrl || typeof dbUrl !== "string" || dbUrl.trim() === "") {
+		console.error(
+			"[BetterBase Config Error] DATABASE_URL is required but not set or is empty. " +
+			"Please set the DATABASE_URL environment variable.\n" +
+			"Example: DATABASE_URL=\"postgresql://user:pass@localhost:5432/mydb\""
+		);
+		process.exit(1);
+	}
+	return dbUrl;
+}
+
+/**
  * BetterBase Project Configuration
  *
  * @example
@@ -54,7 +70,7 @@ export default {
 		 * Format: postgresql://user:pass@host:port/db for PostgreSQL
 		 * Format: mysql://user:pass@host:port/db for MySQL/PlanetScale
 		 */
-		connectionString: process.env.DATABASE_URL,
+		connectionString: getDatabaseUrl(),
 
 		// Turso-specific (uncomment if using Turso):
 		// url: process.env.TURSO_URL,

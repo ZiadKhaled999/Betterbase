@@ -17,11 +17,14 @@ app.get(
 	"/ws",
 	upgradeWebSocket((c) => {
 		const authHeaderToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
-		// Prefer Authorization header. Query token is compatibility fallback and should be short-lived in production.
+		// Query token is ONLY allowed in development mode for testing
 		const queryToken = c.req.query("token");
-		const token = authHeaderToken ?? queryToken;
+		const isDev = process.env.NODE_ENV !== "production";
 
-		if (!authHeaderToken && queryToken) {
+		// Only accept queryToken in development mode
+		const token = authHeaderToken ?? (isDev ? queryToken : undefined);
+
+		if (!authHeaderToken && queryToken && isDev) {
 			console.warn(
 				"WebSocket auth using query token fallback; prefer header/cookie/subprotocol in production.",
 			);
@@ -53,18 +56,34 @@ const graphqlEnabled = config.graphql?.enabled ?? true;
 if (graphqlEnabled) {
 	// Dynamic import to handle case where graphql route doesn't exist yet
 	try {
-		// Using require for dynamic loading of potentially non-existent module
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
-		const graphql = require("./routes/graphql");
+		const graphql = await import("./routes/graphql");
 		const graphqlRoute = graphql.graphqlRoute as ReturnType<
 			typeof import("hono").Hono.prototype.route
 		>;
 		app.route("/", graphqlRoute);
 		console.log("🛸 GraphQL API enabled at /api/graphql");
-	} catch {
-		// GraphQL route not generated yet
-		if (env.NODE_ENV === "development") {
-			console.log('ℹ️  Run "bb graphql generate" to enable GraphQL API');
+	} catch (err: unknown) {
+		// Check if it's a "module not found" error vs a real syntax/runtime error
+		const isModuleNotFound =
+			err &&
+			(typeof err === "object" &&
+				(("code" in err &&
+					(err.code === "ERR_MODULE_NOT_FOUND" ||
+						 err.code === "MODULE_NOT_FOUND")) ||
+					("message" in err &&
+						/Cannot find module|Cannot find package/.test(
+							String(err.message)
+						))));
+
+		if (isModuleNotFound) {
+			// GraphQL route not generated yet - only log in development
+			if (env.NODE_ENV === "development") {
+				console.log('ℹ️  Run "bb graphql generate" to enable GraphQL API');
+			}
+		} else {
+			// Re-throw real errors (syntax errors, runtime errors) so they're not swallowed
+			console.error("Failed to load GraphQL module:", err);
+			throw err;
 		}
 	}
 }

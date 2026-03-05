@@ -52,7 +52,7 @@ export class RealtimeServer {
 	private config: RealtimeConfig;
 
 	constructor(config?: Partial<RealtimeConfig>) {
-		if (process.env.NODE_ENV !== "development" && process.env.ENABLE_DEV_AUTH !== "true") {
+		if (process.env.NODE_ENV !== "development") {
 			realtimeLogger.warn(
 				"Realtime auth verifier is not configured; dev token parser is disabled. Configure a real verifier for production.",
 			);
@@ -69,8 +69,7 @@ export class RealtimeServer {
 	authenticate(token: string | undefined): { userId: string; claims: string[] } | null {
 		if (!token || !token.trim()) return null;
 
-		const allowDevAuth =
-			process.env.NODE_ENV === "development" || process.env.ENABLE_DEV_AUTH === "true";
+		const allowDevAuth = process.env.NODE_ENV === "development";
 		if (!allowDevAuth) {
 			return null;
 		}
