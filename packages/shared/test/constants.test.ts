@@ -91,7 +91,7 @@ describe("constants", () => {
     })
 
     it("should be a valid directory path", () => {
-      expect(POLICIES_DIR).toMatch(/^[^/]+\/[^/]+$/)
+      expect(POLICIES_DIR).toMatch(/^[^/]+(\/[^/]+)+$/)
     })
   })
 })

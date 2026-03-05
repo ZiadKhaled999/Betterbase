@@ -733,6 +733,7 @@ ${endpointLine}
 });
 
 const BUCKET = process.env.STORAGE_BUCKET ?? '';
+`;
 
 // Helper to check if user is authenticated and get user ID
 async function getAuthenticatedUserId(c: any): Promise<{ id: string } | null> {
