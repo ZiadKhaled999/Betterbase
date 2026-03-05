@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import { existsSync } from "node:fs"
 import os from "node:os"
 import { info, success, error as logError, warn } from "../utils/logger"
+import { randomBytes } from "node:crypto"
 
 export interface Credentials {
   token: string
@@ -97,17 +98,20 @@ export async function requireCredentials(): Promise<Credentials> {
 
 function generateDeviceCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-  const part1 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("")
-  const part2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("")
+  const part1 = Array.from({ length: 4 }, () => chars[randomBytes(1)[0] % chars.length]).join("")
+  const part2 = Array.from({ length: 4 }, () => chars[randomBytes(1)[0] % chars.length]).join("")
   return `${part1}-${part2}`
 }
 
 async function openBrowser(url: string): Promise<void> {
   try {
-    const { execSync } = await import("child_process")
-    if (process.platform === "darwin") execSync(`open "${url}"`, { stdio: "ignore" })
-    else if (process.platform === "win32") execSync(`start "" "${url}"`, { stdio: "ignore" })
-    else execSync(`xdg-open "${url}"`, { stdio: "ignore" })
+    if (process.platform === "darwin") {
+      await Bun.spawn(["open", url])
+    } else if (process.platform === "win32") {
+      await Bun.spawn(["cmd", "/c", "start", "", url])
+    } else {
+      await Bun.spawn(["xdg-open", url])
+    }
   } catch {
     // Browser open failed — URL already printed, user can open manually
   }

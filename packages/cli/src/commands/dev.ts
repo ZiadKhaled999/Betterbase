@@ -1,4 +1,4 @@
-import { type FSWatcher, existsSync, watch } from "node:fs";
+import { type FSWatcher, existsSync, statSync, watch } from "node:fs";
 import path from "node:path";
 import { ContextGenerator } from "../utils/context-generator";
 import * as logger from "../utils/logger";
@@ -153,7 +153,12 @@ export async function runDevCommand(projectRoot: string = process.cwd()): Promis
 		}
 
 		try {
-			const watcher = watch(watchPath, { recursive: true }, (_eventType, filename) => {
+			// Only use recursive option for directories on supported platforms (darwin/win32)
+			const isDir = statSync(watchPath).isDirectory();
+			const isSupportedPlatform = process.platform === 'darwin' || process.platform === 'win32';
+			const opts = isDir && isSupportedPlatform ? { recursive: true } : undefined;
+
+			const watcher = watch(watchPath, opts, (_eventType, filename) => {
 				logger.info(`File changed: ${String(filename ?? "")}`);
 
 				const existing = timers.get(watchPath);

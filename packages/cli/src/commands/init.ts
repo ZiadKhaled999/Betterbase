@@ -714,10 +714,11 @@ export function registerRoutes(app: Hono): void {
 }
 
 function buildStorageRoute(provider: StorageProvider): string {
+	const regionLine = `  region: process.env.STORAGE_REGION ?? "us-east-1",`;
 	const endpointLine =
 		provider === "s3"
-			? `  region: process.env.STORAGE_REGION ?? "us-east-1",`
-			: `  endpoint: process.env.STORAGE_ENDPOINT,`;
+			? regionLine
+			: `  endpoint: process.env.STORAGE_ENDPOINT,\n${regionLine}`;
 
 	return `import { Hono } from 'hono';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -733,11 +734,65 @@ ${endpointLine}
 
 const BUCKET = process.env.STORAGE_BUCKET ?? '';
 
+// Helper to check if user is authenticated and get user ID
+async function getAuthenticatedUserId(c: any): Promise<{ id: string } | null> {
+  // Try to get user from session/cookie (BetterAuth pattern)
+  const sessionCookie = c.req.cookie('better-auth.session_token');
+  if (!sessionCookie) {
+    return null;
+  }
+  
+  // In production, validate the session token with BetterAuth
+  // For now, check for user ID in header (set by auth middleware after validation)
+  const userId = c.req.header('x-user-id');
+  if (!userId) {
+    return null;
+  }
+  
+  return { id: userId };
+}
+
+// Helper to validate user owns the key (key must start with user ID)
+function validateKeyOwnership(key: string, userId: string, isAdmin: boolean = false): boolean {
+  // Key must be prefixed with user ID to ensure ownership
+  // Format: users/{userId}/... or {userId}/...
+  const prefix = `users/${userId}/`;
+  const directPrefix = `${userId}/`;
+  
+  if (key.startsWith(prefix) || key.startsWith(directPrefix)) {
+    return true;
+  }
+  
+  // Also allow admin users to access any key
+  return isAdmin;
+}
+
 export const storageRoute = new Hono();
+
+// Auth middleware for all storage routes
+storageRoute.use('*', async (c, next) => {
+  const user = await getAuthenticatedUserId(c);
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  c.set('userId', user.id);
+  await next();
+});
 
 // Upload — returns a presigned PUT URL
 storageRoute.post('/presign', async (c) => {
+  const userId = c.get('userId');
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  
   const { key, contentType } = await c.req.json<{ key: string; contentType: string }>();
+  
+  // Validate ownership: key must be owned by the user
+  if (!validateKeyOwnership(key, userId)) {
+    return c.json({ error: 'Forbidden: You can only upload files to your own directory' }, 403);
+  }
+  
   const url = await getSignedUrl(
     s3,
     new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType }),
@@ -748,7 +803,18 @@ storageRoute.post('/presign', async (c) => {
 
 // Download — returns a presigned GET URL
 storageRoute.get('/presign/:key{.+}', async (c) => {
+  const userId = c.get('userId');
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  
   const key = c.req.param('key');
+  
+  // Validate ownership: key must be owned by the user
+  if (!validateKeyOwnership(key, userId)) {
+    return c.json({ error: 'Forbidden: You can only download files from your own directory' }, 403);
+  }
+  
   const url = await getSignedUrl(
     s3,
     new GetObjectCommand({ Bucket: BUCKET, Key: key }),
@@ -759,7 +825,18 @@ storageRoute.get('/presign/:key{.+}', async (c) => {
 
 // Delete
 storageRoute.delete('/:key{.+}', async (c) => {
+  const userId = c.get('userId');
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  
   const key = c.req.param('key');
+  
+  // Validate ownership: key must be owned by the user
+  if (!validateKeyOwnership(key, userId)) {
+    return c.json({ error: 'Forbidden: You can only delete files from your own directory' }, 403);
+  }
+  
   await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
   return c.json({ deleted: true, key });
 });
