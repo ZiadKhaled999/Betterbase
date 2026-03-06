@@ -915,6 +915,7 @@ subscription.unsubscribe();
 
 ```typescript
 import { Hono } from 'hono';
+import { eq } from 'drizzle-orm';
 import { auth } from './auth';
 import { db } from './db';
 import { users } from './db/schema';
@@ -1146,15 +1147,17 @@ export default app;
 ```typescript
 import { requireAuth, optionalAuth } from './middleware/auth';
 
-// Require authentication for all routes
+// Example 1: Require authentication for all routes
 app.use('*', requireAuth);
 
-// Optional authentication
-app.use('*', optionalAuth);
+// Example 2: Optional authentication (mutually exclusive - use one or the other)
+// app.use('*', optionalAuth);
 
 // Get user from context
 const user = c.get('user');
 ```
+
+> **Note:** `requireAuth` and `optionalAuth` are mutually exclusive choices for route protection. Use `app.use('*', requireAuth)` for mandatory authentication, or `app.use('*', optionalAuth)` for optional authentication.
 
 ### Realtime Broadcast
 
@@ -1191,8 +1194,8 @@ export default defineConfig({
     provider: 's3',
     bucket: 'my-bucket',
     region: 'us-east-1',
-    accessKeyId: process.env.STORAGE_ACCESS_KEY,
-    secretAccessKey: process.env.STORAGE_SECRET_KEY,
+    accessKeyId: process.env.STORAGE_ACCESS_KEY_ID,
+    secretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY,
   },
   webhooks: [
     {
@@ -1267,7 +1270,7 @@ Tests are located in the `test/` directory of each package. The test files follo
 
 ```bash
 # Clone repository
-git clone https://github.com/your-username/betterbase.git
+git clone <repository-URL>
 cd betterbase
 
 # Install dependencies
