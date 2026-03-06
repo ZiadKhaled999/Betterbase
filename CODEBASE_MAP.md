@@ -1,7 +1,6 @@
 # BetterBase — Complete Codebase Map
 
-> Auto-generated. Regenerate with: [paste this prompt into Cursor]
-> Last updated: 2026-03-04
+> Last updated: 2026-03-06
 
 ## Project Identity
 
@@ -21,6 +20,23 @@
 | **Authentication** | BetterAuth | TypeScript-first, extensible, AI-friendly context |
 | **Validation** | Zod | Schema validation, TypeScript inference |
 | **Storage** | S3-compatible | Universal storage interface (AWS S3, MinIO, etc.) |
+
+---
+
+## Tech Stack Overview
+
+| Layer | Technologies |
+|-------|--------------|
+| **Runtime** | Bun 1.x, Node.js (Bun-compatible) |
+| **API Framework** | Hono.js (lightweight, fast, composable) |
+| **Database** | Drizzle ORM (SQL abstraction), SQLite (local), PostgreSQL (Neon/Supabase), MySQL (PlanetScale), libSQL (Turso) |
+| **Authentication** | BetterAuth (password, social) |
+| **Storage** | AWS S3, Cloudflare R2, Backblaze B2, MinIO |
+| **Realtime** | WebSockets (Bun server) |
+| **GraphQL** | graphql-yoga (server), GraphQL.js (schema) |
+| **Validation** | Zod (schema validation) |
+| **Build Tool** | Turbo (monorepo), Bun build |
+| **CLI** | Commander.js |
 
 ---
 
@@ -252,6 +268,441 @@ betterbase/
 
 ---
 
+## packages/shared
+
+`@betterbase/shared` - Shared utilities and types across all packages.
+
+### Shared Modules
+
+#### [`src/constants.ts`](packages/shared/src/constants.ts)
+**Purpose:** Defines shared constants used by all packages.
+- **Exports:** `BETTERBASE_VERSION`, `DEFAULT_PORT`, `DEFAULT_DB_PATH`, `CONTEXT_FILE_NAME`, `CONFIG_FILE_NAME`, `MIGRATIONS_DIR`, `FUNCTIONS_DIR`, `POLICIES_DIR`
+- **Values:**
+  - `BETTERBASE_VERSION`: "0.1.0"
+  - `DEFAULT_PORT`: 3000
+  - `DEFAULT_DB_PATH`: "local.db"
+  - `CONTEXT_FILE_NAME`: ".betterbase-context.json"
+  - `CONFIG_FILE_NAME`: "betterbase.config.ts"
+  - `MIGRATIONS_DIR`: "drizzle"
+  - `FUNCTIONS_DIR`: "src/functions"
+  - `POLICIES_DIR`: "src/db/policies"
+
+#### [`src/errors.ts`](packages/shared/src/errors.ts)
+**Purpose:** Defines custom error classes for consistent error handling.
+- **Exports:** `BetterBaseError`, `ValidationError`, `NotFoundError`, `UnauthorizedError`
+- **Key Features:**
+  - `BetterBaseError`: Base error class with code and status code
+  - `ValidationError`: 400 Bad Request error for validation failures
+  - `NotFoundError`: 404 Not Found error for missing resources
+  - `UnauthorizedError`: 401 Unauthorized error for authentication failures
+
+#### [`src/types.ts`](packages/shared/src/types.ts)
+**Purpose:** Shared TypeScript type definitions.
+- **Exports:**
+  - `SerializedError`: JSON-serializable error representation
+  - `BetterBaseResponse<T>`: Generic API response wrapper with data, error, count, and pagination
+  - `DBEventType`: Database event type (INSERT, UPDATE, DELETE)
+  - `DBEvent`: Database event object with table, type, record, old_record, and timestamp
+  - `ProviderType`: Supported database providers (neon, turso, planetscale, supabase, postgres, managed)
+  - `PaginationParams`: Generic pagination parameters (limit, offset)
+
+#### [`src/utils.ts`](packages/shared/src/utils.ts)
+**Purpose:** Utility functions used across all packages.
+- **Exports:**
+  - `serializeError(error)`: Converts an Error object to SerializedError
+  - `isValidProjectName(name)`: Validates project name is slug-safe (lowercase, alphanumeric, hyphens)
+  - `toCamelCase(str)`: Converts snake_case to camelCase
+  - `toSnakeCase(str)`: Converts camelCase/PascalCase to snake_case
+  - `safeJsonParse<T>(str)`: Safely parses JSON without throwing, returns null on failure
+  - `formatBytes(bytes)`: Formats bytes to human-readable string (B, KiB, MiB, GiB, TiB, PiB)
+
+#### [`src/index.ts`](packages/shared/src/index.ts)
+**Purpose:** Shared package entry point re-exporting all modules.
+
+---
+
+## packages/core
+
+`@betterbase/core` - Core backend engine with all server-side functionality.
+
+### Core Modules
+
+#### [`src/config/index.ts`](packages/core/src/config/index.ts)
+**Purpose:** Configuration module exports.
+
+#### [`src/config/schema.ts`](packages/core/src/config/schema.ts)
+**Purpose:** Project configuration schema validation using Zod.
+- **Exports:** `ProviderTypeSchema`, `BetterBaseConfigSchema`, `defineConfig`, `validateConfig`, `parseConfig`, `assertConfig`
+- **Key Types:** `ProviderType`, `BetterBaseConfig`
+- **Validation Features:**
+  - Validates project configuration structure
+  - Provider-specific validation (e.g., Turso requires url and authToken)
+  - Storage configuration validation
+  - Webhook configuration validation
+  - GraphQL configuration validation
+
+#### [`src/config/drizzle-generator.ts`](packages/core/src/config/drizzle-generator.ts)
+**Purpose:** Drizzle configuration generator based on provider type.
+- **Exports:** `generateDrizzleConfig`, `getDialectForProvider`, `getDriverForProvider`, `getRequiredEnvVars`
+- **Key Types:** `DrizzleDriver`, `DrizzleDialect`, `DrizzleConfigOutput`, `DbCredentials`
+- **Supported Providers:** Neon, Turso, PlanetScale, Supabase, PostgreSQL, managed
+
+### functions/
+
+#### [`functions/index.ts`](packages/core/src/functions/index.ts)
+**Purpose:** Serverless functions module exports.
+
+#### [`functions/bundler.ts`](packages/core/src/functions/bundler.ts)
+**Purpose:** Bundles serverless functions using Bun's build API for edge compatibility.
+- **Exports:** `bundleFunction`, `readFunctionConfig`, `listFunctions`, `isFunctionBuilt`
+- **Key Types:** `BundleResult`, `FunctionConfig`, `FunctionInfo`
+- **Features:**
+  - Bundles TypeScript functions into single JavaScript file
+  - Supports Cloudflare Workers and Vercel Edge runtime
+  - Handles function configuration from config.ts
+  - Lists all functions in project
+  - Checks if function has been built
+
+#### [`functions/deployer.ts`](packages/core/src/functions/deployer.ts)
+**Purpose:** Deploys serverless functions to cloud providers.
+- **Exports:** `deployToCloudflare`, `deployToVercel`, `syncEnvToCloudflare`, `syncEnvToVercel`, `getCloudflareLogs`, `getVercelLogs`
+- **Key Types:** `DeployResult`
+- **Features:**
+  - Deploys to Cloudflare Workers using Wrangler CLI
+  - Deploys to Vercel Edge using Vercel CLI
+  - Syncs environment variables
+  - Retrieves function logs
+
+### graphql/
+
+#### [`graphql/index.ts`](packages/core/src/graphql/index.ts)
+**Purpose:** GraphQL module exports.
+
+#### [`graphql/resolvers.ts`](packages/core/src/graphql/resolvers.ts)
+**Purpose:** GraphQL resolver generator that calls Drizzle ORM directly.
+- **Exports:** `generateResolvers`, `GraphQLContext`, `GraphQLResolver`, `Resolvers`, `ResolverGenerationConfig`
+- **Key Features:**
+  - Auto-generates resolvers from Drizzle schema
+  - Supports queries, mutations, and subscriptions (placeholder)
+  - Respect auth context from BetterAuth
+  - Custom hooks for before/after mutations
+  - Error handling
+
+#### [`graphql/schema-generator.ts`](packages/core/src/graphql/schema-generator.ts)
+**Purpose:** Generates GraphQL schema from Drizzle ORM schema.
+- **Exports:** `generateGraphQLSchema`, `GraphQLGenerationConfig`
+- **Key Features:**
+  - Auto-generates GraphQL types from Drizzle schema
+  - Creates input types for mutations
+  - Generates query types for tables
+  - Supports custom type mappings
+  - Handles relationships and pagination
+
+#### [`graphql/sdl-exporter.ts`](packages/core/src/graphql/sdl-exporter.ts)
+**Purpose:** Exports GraphQL schema as SDL (Schema Definition Language) string.
+- **Exports:** `exportSDL`, `exportTypeSDL`, `saveSDL`
+- **Key Features:**
+  - Exports complete GraphQL schema as SDL
+  - Exports individual types as SDL
+  - Saves SDL to file
+  - Customizable output options (descriptions, sorting)
+
+#### [`graphql/server.ts`](packages/core/src/graphql/server.ts)
+**Purpose:** GraphQL HTTP server using graphql-yoga that integrates with Hono.
+- **Exports:** `createGraphQLServer`, `startGraphQLServer`, `GraphQLConfig`
+- **Key Features:**
+  - Creates Hono-compatible GraphQL server
+  - Supports authentication
+  - GraphQL Playground in development
+  - Subscriptions support
+  - Health check endpoint
+
+### middleware/
+
+#### [`middleware/index.ts`](packages/core/src/middleware/index.ts)
+**Purpose:** Middleware module exports.
+
+#### [`middleware/rls-session.ts`](packages/core/src/middleware/rls-session.ts)
+**Purpose:** RLS session middleware for Hono.
+- **Exports:** `rlsSession`, `requireRLS`, `clearRLS`, `getRLSUserId`, `isRLSSessionSet`
+- **Key Constants:** `RLS_USER_ID_KEY`, `RLS_SESSION_SET_KEY`
+- **Key Types:** `RLSCContext`
+- **Features:**
+  - Reads authenticated user from BetterAuth session
+  - Makes user ID available for RLS policies
+  - Idempotent operations (safe to call multiple times)
+  - Requires RLS to be set for protected routes
+  - Clears RLS context (e.g., on logout)
+
+### migration/
+
+#### [`migration/index.ts`](packages/core/src/migration/index.ts)
+**Purpose:** Migration module exports.
+
+#### [`migration/rls-migrator.ts`](packages/core/src/migration/rls-migrator.ts)
+**Purpose:** Applies RLS policies to the database.
+- **Exports:** `applyAuthFunction`, `dropAuthFunctionSQL`, `applyPolicies`, `dropPolicies`, `dropTableRLS`, `applyRLSMigration`, `getAppliedPolicies`
+- **Features:**
+  - Applies auth.uid() function to database
+  - Creates RLS policies from policy definitions
+  - Idempotent operations (safe to run multiple times)
+  - Drops RLS policies from database
+  - Disables RLS on tables
+  - Gets information about applied policies
+
+### providers/
+
+#### [`providers/index.ts`](packages/core/src/providers/index.ts)
+**Purpose:** Database providers module exports.
+- **Exports:** `resolveProvider`, `resolveProviderByType`, `getSupportedProviders`, `providerSupportsRLS`, `getProviderDialect`, `ManagedProviderNotSupportedError`
+
+#### [`providers/types.ts`](packages/core/src/providers/types.ts)
+**Purpose:** Provider interface definitions.
+- **Exports:** All provider types and interfaces
+- **Key Types:**
+  - `DatabaseDialect`: "postgres", "mysql", "sqlite"
+  - `ProviderConfig`: Configuration for connecting to a database provider
+  - `DatabaseConnection`: Database connection wrapper
+  - `DrizzleMigrationDriver`: Migration driver interface
+  - `ProviderAdapter`: Provider adapter interface
+- **Provider-Specific Types:**
+  - `NeonProviderConfig`, `NeonDatabaseConnection`, `NeonMigrationDriver`
+  - `TursoProviderConfig`, `TursoDatabaseConnection`, `TursoMigrationDriver`
+  - `PlanetScaleProviderConfig`, `PlanetScaleDatabaseConnection`, `PlanetScaleMigrationDriver`
+  - `SupabaseProviderConfig`, `SupabaseDatabaseConnection`, `SupabaseMigrationDriver`
+  - `PostgresProviderConfig`, `PostgresDatabaseConnection`, `PostgresMigrationDriver`
+  - `ManagedProviderConfig`
+
+#### [`providers/neon.ts`](packages/core/src/providers/neon.ts)
+**Purpose:** Neon database provider implementation.
+
+#### [`providers/planetscale.ts`](packages/core/src/providers/planetscale.ts)
+**Purpose:** PlanetScale database provider implementation.
+
+#### [`providers/postgres.ts`](packages/core/src/providers/postgres.ts)
+**Purpose:** PostgreSQL database provider implementation.
+
+#### [`providers/supabase.ts`](packages/core/src/providers/supabase.ts)
+**Purpose:** Supabase database provider implementation.
+
+#### [`providers/turso.ts`](packages/core/src/providers/turso.ts)
+**Purpose:** Turso database provider implementation.
+
+### rls/
+
+#### [`rls/index.ts`](packages/core/src/rls/index.ts)
+**Purpose:** RLS module exports.
+
+#### [`rls/auth-bridge.ts`](packages/core/src/rls/auth-bridge.ts)
+**Purpose:** Creates the auth.uid() PostgreSQL function for RLS policies.
+- **Exports:** `generateAuthFunction`, `generateAuthFunctionWithSetting`, `dropAuthFunction`, `setCurrentUserId`, `clearCurrentUserId`, `generateIsAuthenticatedCheck`, `dropIsAuthenticatedCheck`, `generateAllAuthFunctions`, `dropAllAuthFunctions`
+- **Key Features:**
+  - Generates SQL to create auth.uid() function
+  - Generates SQL to set/clear current user ID
+  - Generates is_authenticated() helper function
+  - Handles SQL injection protection
+  - Generates all auth bridge functions at once
+
+#### [`rls/generator.ts`](packages/core/src/rls/generator.ts)
+**Purpose:** RLS Policy SQL Generator.
+- **Exports:** `policyToSQL`, `dropPolicySQL`, `dropPolicyByName`, `disableRLS`, `hasPolicyConditions`, `policiesToSQL`, `dropPoliciesSQL`
+- **Key Types:** `PolicyOperation`
+- **Features:**
+  - Generates SQL to create RLS policies
+  - Generates SQL to drop RLS policies
+  - Handles policy operations (select, insert, update, delete)
+  - Checks if policy has conditions
+  - Converts policies to SQL statements
+
+#### [`rls/scanner.ts`](packages/core/src/rls/scanner.ts)
+**Purpose:** Scans a project for policy definition files and loads them.
+- **Exports:** `scanPolicies`, `scanPoliciesStrict`, `listPolicyFiles`, `getPolicyFileInfo`, `PolicyScanError`
+- **Key Types:** `ScanResult`, `PolicyFileInfo`
+- **Features:**
+  - Scans project for policy files (*.policy.ts)
+  - Loads policy definitions
+  - Handles errors gracefully
+  - Lists policy files without loading them
+  - Extracts metadata from policy files
+
+#### [`rls/types.ts`](packages/core/src/rls/types.ts)
+**Purpose:** RLS (Row Level Security) Policy Definition Types.
+- **Exports:** `definePolicy`, `isPolicyDefinition`, `mergePolicies`
+- **Key Types:** `PolicyDefinition`, `PolicyConfig`
+- **Features:**
+  - Helper function to create policy definitions
+  - Type guard to check if value is a valid PolicyDefinition
+  - Merges multiple policy configs for the same table
+
+### storage/
+
+#### [`storage/index.ts`](packages/core/src/storage/index.ts)
+**Purpose:** Storage Module - Fluent Builder API.
+- **Exports:** `createStorage`, `resolveStorageAdapter`, `Storage`
+- **Key Types:** `StorageFactory`, `BucketClient`, `StorageConfig`, `UploadOptions`, `SignedUrlOptions`, `UploadResult`, `StorageObject`
+- **Features:**
+  - Supabase-compatible storage API
+  - Fluent `.from(bucket)` API
+  - Resolves storage adapter based on provider
+  - Handles async operations with { data, error } pattern
+
+#### [`storage/s3-adapter.ts`](packages/core/src/storage/s3-adapter.ts)
+**Purpose:** S3-Compatible Storage Adapter Implementation.
+- **Exports:** `S3StorageAdapter`, `createS3Adapter`
+- **Key Features:**
+  - Implements StorageAdapter interface for S3-compatible services
+  - Supports AWS S3, Cloudflare R2, Backblaze B2, MinIO
+  - Handles upload, download, delete, list, signed URL operations
+  - Uses AWS SDK v3
+  - Converts ReadableStream to Buffer for Bun runtime
+
+#### [`storage/types.ts`](packages/core/src/storage/types.ts)
+**Purpose:** Storage Types for S3-Compatible Storage Adapter.
+- **Key Types:**
+  - `StorageProvider`: "s3", "r2", "backblaze", "minio", "managed"
+  - `StorageConfig`: Union of all storage provider config types
+  - `UploadOptions`: File upload options (contentType, metadata, isPublic)
+  - `SignedUrlOptions`: Signed URL options (expiresIn)
+  - `UploadResult`: Result of successful upload
+  - `StorageObject`: Represents a storage object
+  - `StorageAdapter`: Core storage adapter interface
+
+### webhooks/
+
+#### [`webhooks/index.ts`](packages/core/src/webhooks/index.ts)
+**Purpose:** Webhook module exports.
+
+#### [`webhooks/dispatcher.ts`](packages/core/src/webhooks/dispatcher.ts)
+**Purpose:** WebhookDispatcher handles sending webhook payloads to configured endpoints.
+- **Exports:** `WebhookDispatcher`
+- **Key Types:** `RetryConfig`, `WebhookDeliveryLog`
+- **Features:**
+  - Handles webhook dispatch with retry logic
+  - Tests webhooks by sending synthetic payload
+  - Tracks delivery logs
+  - Fire-and-forget pattern
+  - Retry with exponential backoff
+
+#### [`webhooks/integrator.ts`](packages/core/src/webhooks/integrator.ts)
+**Purpose:** Connects WebhookDispatcher to realtime event emitter.
+- **Exports:** `connectToRealtime`
+- **Features:**
+  - Listens for database change events
+  - Bridges Phase 6 (Realtime WebSockets) with Phase 13 (Webhooks)
+  - Handles 'db:change', 'db:insert', 'db:update', 'db:delete' events
+
+#### [`webhooks/signer.ts`](packages/core/src/webhooks/signer.ts)
+**Purpose:** Signs and verifies webhook payloads using HMAC-SHA256.
+- **Exports:** `signPayload`, `verifySignature`
+- **Features:**
+  - Signs payload with secret using HMAC-SHA256
+  - Verifies signatures using timing-safe comparison
+  - Prevents timing attacks
+  - Handles both string and object payloads
+
+#### [`webhooks/startup.ts`](packages/core/src/webhooks/startup.ts)
+**Purpose:** Initializes webhooks from configuration during server startup.
+- **Exports:** `initializeWebhooks`
+- **Key Features:**
+  - Loads webhooks from BetterBase config
+  - Resolves environment variable references
+  - Creates webhook dispatcher
+  - Connects to realtime emitter
+  - Handles missing environment variables
+
+#### [`webhooks/types.ts`](packages/core/src/webhooks/types.ts)
+**Purpose:** Webhook configuration and payload types.
+- **Key Types:**
+  - `WebhookConfig`: Webhook configuration (id, table, events, url, secret, enabled)
+  - `WebhookPayload`: Payload sent to webhook endpoint (id, webhook_id, table, type, record, old_record, timestamp)
+
+---
+
+## packages/client
+
+`@betterbase/client` - TypeScript SDK for BetterBase backends (like `@supabase/supabase-js`).
+
+### Client Modules
+
+#### [`src/auth.ts`](packages/client/src/auth.ts)
+**Purpose:** Authentication client for BetterAuth integration.
+- **Exports:** `AuthClient`, `authClient`, `createAuthClientInstance`
+- **Key Types:** `User`, `Session`, `StorageAdapter`
+- **Features:**
+  - Wraps BetterAuth client
+  - Handles sign up, sign in, sign out, get session
+  - Manages session token in localStorage
+  - On auth state change callback
+  - Fallback storage adapter
+
+#### [`src/client.ts`](packages/client/src/client.ts)
+**Purpose:** Main BetterBase client constructor.
+- **Exports:** `createClient`, `BetterBaseClient`
+- **Key Types:** `BetterBaseConfig`
+- **Features:**
+  - Configuration validation with Zod
+  - Initializes auth, realtime, and storage clients
+  - Manages authentication state
+  - Provides fetch method with authenticated headers
+  - Query builder support
+
+#### [`src/query-builder.ts`](packages/client/src/query-builder.ts)
+**Purpose:** Chainable query builder for database operations.
+- **Exports:** `QueryBuilder`
+- **Key Types:** `QueryBuilderOptions`, `QueryOptions`
+- **Methods:**
+  - `select(fields)`: Select fields to retrieve
+  - `eq(column, value)`: Add equality filter
+  - `in(column, values)`: Add IN filter
+  - `limit(count)`: Limit number of results
+  - `offset(count)`: Offset results
+  - `order(column, direction)`: Sort results
+  - `execute()`: Execute query
+  - `single(id)`: Get single record by ID
+  - `insert(data)`: Insert new record
+  - `update(id, data)`: Update record
+  - `delete(id)`: Delete record
+
+#### [`src/realtime.ts`](packages/client/src/realtime.ts)
+**Purpose:** Real-time subscription client for database changes.
+- **Exports:** `RealtimeClient`
+- **Key Types:** `RealtimeCallback`, `RealtimeSubscription`, `RealtimeEvent`
+- **Features:**
+  - WebSocket-based realtime updates
+  - Subscription management
+  - Reconnect logic with exponential backoff
+  - Event filtering
+  - Supports INSERT, UPDATE, DELETE, and * (all) events
+
+#### [`src/storage.ts`](packages/client/src/storage.ts)
+**Purpose:** Storage client for file operations.
+- **Exports:** `Storage`, `StorageBucketClient`
+- **Key Types:** `UploadOptions`, `SignedUrlOptions`, `StorageFile`, `UploadResult`, `PublicUrlResult`, `SignedUrlResult`, `RemoveResult`
+- **Features:**
+  - Supabase-compatible storage API
+  - Fluent `.from(bucket)` API
+  - Upload, download, remove, list operations
+  - Public URL and signed URL generation
+  - Handles File, Blob, and ArrayBuffer inputs
+  - Error handling with { data, error } pattern
+
+#### [`src/types.ts`](packages/client/src/types.ts)
+**Purpose:** TypeScript type definitions for client.
+- **Exports:** All client types and interfaces
+
+#### [`src/errors.ts`](packages/client/src/errors.ts)
+**Purpose:** Client-side error classes.
+- **Exports:** Custom error classes (AuthError, NetworkError, ValidationError, etc.)
+
+#### [`src/index.ts`](packages/client/src/index.ts)
+**Purpose:** Client package entry point.
+- **Exports:** All public APIs from the client package
+
+#### [`src/build.ts`](packages/client/src/build.ts)
+**Purpose:** Build configuration for client package.
+
+---
+
 ## packages/cli
 
 Canonical `@betterbase/cli` implementation - the `bb` command-line tool.
@@ -443,363 +894,75 @@ Canonical `@betterbase/cli` implementation - the `bb` command-line tool.
 
 ---
 
-## packages/client
-
-`@betterbase/client` - TypeScript SDK for BetterBase backends (like `@supabase/supabase-js`).
-
-### Client Modules
-
-#### [`src/auth.ts`](packages/client/src/auth.ts)
-**Purpose:** Authentication client for BetterAuth integration.
-- **Exports:** Auth client methods (signIn, signOut, getUser, etc.)
-- **Key Functions:** User authentication, session management, provider OAuth
-- **Usage Patterns:** Used by frontend applications to authenticate users.
-- **Implementation Details:** Wraps BetterAuth client for use in browser/Node.js environments.
-- **External Deps:** `better-auth`
-
-#### [`src/client.ts`](packages/client/src/client.ts)
-**Purpose:** Main BetterBase client constructor.
-- **Exports:** `createClient(options)` - client factory function
-- **Key Types:** `BetterBaseClientOptions`, `BetterBaseClient`
-- **Usage Patterns:** Primary entry point for creating a BetterBase client instance.
-- **Implementation Details:** Configures auth, storage, realtime, and database connections.
-
-#### [`src/query-builder.ts`](packages/client/src/query-builder.ts)
-**Purpose:** Chainable query builder for database operations.
-- **Exports:** Query builder class with chainable methods
-- **Key Methods:** `.select()`, `.insert()`, `.update()`, `.delete()`, `.from()`, `.where()`
-- **Usage Patterns:** Build type-safe database queries.
-- **Implementation Details:** Fluent API for constructing queries, returns typed results.
-- **External Deps:** `drizzle-orm`
-
-#### [`src/realtime.ts`](packages/client/src/realtime.ts)
-**Purpose:** Real-time subscription client for database changes.
-- **Exports:** Realtime client with subscription methods
-- **Key Methods:** `.subscribe()`, `.unsubscribe()`, `.on()`
-- **Usage Patterns:** Subscribe to database INSERT/UPDATE/DELETE events.
-- **Implementation Details:** Uses Server-Sent Events (SSE) or WebSocket for real-time updates.
-
-#### [`src/storage.ts`](packages/client/src/storage.ts)
-**Purpose:** Storage client for file operations.
-- **Exports:** Storage client with file upload/download methods
-- **Key Methods:** `.upload()`, `.download()`, `.delete()`, `.getPublicUrl()`
-- **Usage Patterns:** Manage files in storage buckets.
-- **Implementation Details:** Integrates with S3-compatible storage.
-
-#### [`src/types.ts`](packages/client/src/types.ts)
-**Purpose:** TypeScript type definitions for client.
-- **Exports:** All client types and interfaces
-- **Key Types:** `User`, `Session`, `StorageFile`, `RealtimeEvent`
-
-#### [`src/errors.ts`](packages/client/src/errors.ts)
-**Purpose:** Client-side error classes.
-- **Exports:** Custom error classes (AuthError, StorageError, etc.)
-
-#### [`src/index.ts`](packages/client/src/index.ts)
-**Purpose:** Client package entry point.
-- **Exports:** All public APIs from the client package
-
-#### [`src/build.ts`](packages/client/src/build.ts)
-**Purpose:** Build configuration for client package.
-
----
-
-## packages/core
-
-`@betterbase/core` - Core backend engine with all server-side functionality.
-
-### Core Modules
-
-#### [`src/index.ts`](packages/core/src/index.ts)
-**Purpose:** Core package entry point exporting all modules.
-
-### config/
-
-#### [`config/index.ts`](packages/core/src/config/index.ts)
-**Purpose:** Configuration module exports.
-
-#### [`config/schema.ts`](packages/core/src/config/schema.ts)
-**Purpose:** Project configuration schema validation.
-- **Key Types:** `BetterBaseConfig`, `DatabaseConfig`, `AuthConfig`
-- **Usage Patterns:** Validate project configuration files.
-
-#### [`config/drizzle-generator.ts`](packages/core/src/config/drizzle-generator.ts)
-**Purpose:** Drizzle configuration generator.
-- **Key Functions:** Generate drizzle.config.ts from project config.
-- **Usage Patterns:** Used during project initialization.
-
-### functions/
-
-#### [`functions/index.ts`](packages/core/src/functions/index.ts)
-**Purpose:** Serverless functions module exports.
-
-#### [`functions/bundler.ts`](packages/core/src/functions/bundler.ts)
-**Purpose:** Bundles serverless functions for deployment.
-- **Key Functions:** `bundleFunction()`, `bundleAll()`
-- **Usage Patterns:** Bundle functions for edge deployment.
-- **Implementation Details:** Uses esbuild for fast bundling.
-
-#### [`functions/deployer.ts`](packages/core/src/functions/deployer.ts)
-**Purpose:** Deploys serverless functions to edge.
-- **Key Functions:** `deployFunction()`, `deployAll()`
-- **Usage Patterns:** Deploy functions to cloud edge.
-
-### graphql/
-
-#### [`graphql/index.ts`](packages/core/src/graphql/index.ts)
-**Purpose:** GraphQL module exports.
-
-#### [`graphql/resolvers.ts`](packages/core/src/graphql/resolvers.ts)
-**Purpose:** GraphQL resolver implementations.
-- **Key Types:** Query resolvers, Mutation resolvers
-- **Usage Patterns:** Handle GraphQL operations against database.
-
-#### [`graphql/schema-generator.ts`](packages/core/src/graphql/schema-generator.ts)
-**Purpose:** Generates GraphQL schema from database.
-- **Key Functions:** `generateSchema()`, `introspectDatabase()`
-- **Usage Patterns:** Auto-generate GraphQL API from Drizzle schema.
-
-#### [`graphql/sdl-exporter.ts`](packages/core/src/graphql/sdl-exporter.ts)
-**Purpose:** Exports GraphQL schema as SDL.
-- **Key Functions:** `exportSDL()`, `writeSDL()`
-- **Usage Patterns:** Export GraphQL schema for external tools.
-
-#### [`graphql/server.ts`](packages/core/src/graphql/server.ts)
-**Purpose:** GraphQL HTTP server setup.
-- **Key Functions:** `createGraphQLServer()`, `createHandler()`
-- **Usage Patterns:** Run GraphQL server with Hono.
-
-### middleware/
-
-#### [`middleware/index.ts`](packages/core/src/middleware/index.ts)
-**Purpose:** Middleware module exports.
-
-#### [`middleware/rls-session.ts`](packages/core/src/middleware/rls-session.ts)
-**Purpose:** RLS session middleware for Hono.
-- **Key Functions:** `createRLSMiddleware()`, `attachSession()`
-- **Usage Patterns:** Attach user session to request context for RLS.
-- **Implementation Details:** Extracts session from auth, makes available for RLS checks.
-
-### migration/
-
-#### [`migration/index.ts`](packages/core/src/migration/index.ts)
-**Purpose:** Migration module exports.
-
-#### [`migration/rls-migrator.ts`](packages/core/src/migration/rls-migrator.ts)
-**Purpose:** Migrates RLS policies between versions.
-- **Key Functions:** `migrateRLS()`, `backupPolicies()`, `restorePolicies()`
-- **Usage Patterns:** Safely migrate RLS policies during schema changes.
-
-### providers/
-
-#### [`providers/index.ts`](packages/core/src/providers/index.ts)
-**Purpose:** Database providers module exports.
-
-#### [`providers/types.ts`](packages/core/src/providers/types.ts)
-**Purpose:** Provider interface definitions.
-- **Key Types:** `DatabaseProvider`, `ProviderConfig`
-- **Usage Patterns:** Interface for all database providers.
-
-#### [`providers/postgres.ts`](packages/core/src/providers/postgres.ts)
-**Purpose:** PostgreSQL database provider.
-- **Key Functions:** `createPostgresProvider()`, `getConnection()`
-- **Usage Patterns:** Connect to PostgreSQL databases.
-
-#### [`providers/supabase.ts`](packages/core/src/providers/supabase.ts)
-**Purpose:** Supabase-compatible provider.
-- **Key Functions:** `createSupabaseProvider()`
-- **Usage Patterns:** Connect to Supabase/PostgreSQL with Supabase features.
-
-#### [`providers/neon.ts`](packages/core/src/providers/neon.ts)
-**Purpose:** Neon serverless PostgreSQL provider.
-- **Key Functions:** `createNeonProvider()`
-- **Usage Patterns:** Connect to Neon serverless databases.
-
-#### [`providers/turso.ts`](packages/core/src/providers/turso.ts)
-**Purpose:** Turso libSQL provider.
-- **Key Functions:** `createTursoProvider()`
-- **Usage Patterns:** Connect to Turso databases.
-
-#### [`providers/planetscale.ts`](packages/core/src/providers/planetscale.ts)
-**Purpose:** PlanetScale MySQL provider.
-- **Key Functions:** `createPlanetscaleProvider()`
-- **Usage Patterns:** Connect to PlanetScale databases.
-
-### rls/
-
-#### [`rls/index.ts`](packages/core/src/rls/index.ts)
-**Purpose:** Row Level Security module exports.
-
-#### [`rls/types.ts`](packages/core/src/rls/types.ts)
-**Purpose:** RLS type definitions.
-- **Key Types:** `RLSPolicy`, `PolicyCondition`, `PolicyEffect`
-
-#### [`rls/scanner.ts`](packages/core/src/rls/scanner.ts)
-**Purpose:** Scans for RLS policies in schema.
-- **Key Functions:** `scanPolicies()`, `parsePolicy()`
-- **Usage Patterns:** Discover RLS policies in database.
-
-#### [`rls/generator.ts`](packages/core/src/rls/generator.ts)
-**Purpose:** Generates RLS policies from schema.
-- **Key Functions:** `generatePolicy()`, `generateAll()`
-- **Usage Patterns:** Auto-generate RLS policies for tables.
-
-#### [`rls/auth-bridge.ts`](packages/core/src/rls/auth-bridge.ts)
-**Purpose:** Bridge between auth and RLS.
-- **Key Functions:** `createAuthBridge()`, `checkAccess()`
-- **Usage Patterns:** Evaluate RLS policies with user context.
-
-### storage/
-
-#### [`storage/index.ts`](packages/core/src/storage/index.ts)
-**Purpose:** Storage module exports.
-
-#### [`storage/types.ts`](packages/core/src/storage/types.ts)
-**Purpose:** Storage type definitions.
-- **Key Types:** `StorageBucket`, `StorageFile`, `UploadOptions`
-
-#### [`storage/s3-adapter.ts`](packages/core/src/storage/s3-adapter.ts)
-**Purpose:** S3-compatible storage adapter.
-- **Key Functions:** `S3StorageAdapter`, `upload()`, `download()`, `delete()`
-- **Usage Patterns:** Interface for S3-compatible storage services.
-
-### webhooks/
-
-#### [`webhooks/index.ts`](packages/core/src/webhooks/index.ts)
-**Purpose:** Webhooks module exports.
-
-#### [`webhooks/types.ts`](packages/core/src/webhooks/types.ts)
-**Purpose:** Webhook type definitions.
-- **Key Types:** `Webhook`, `WebhookEvent`, `WebhookHandler`
-
-#### [`webhooks/dispatcher.ts`](packages/core/src/webhooks/dispatcher.ts)
-**Purpose:** Dispatches webhook events.
-- **Key Functions:** `dispatchWebhook()`, `queueEvent()`
-- **Usage Patterns:** Send webhook notifications on database events.
-
-#### [`webhooks/signer.ts`](packages/core/src/webhooks/signer.ts)
-**Purpose:** Signs and verifies webhook payloads.
-- **Key Functions:** `signPayload()`, `verifySignature()`
-- **Usage Patterns:** Secure webhook delivery verification.
-
-#### [`webhooks/integrator.ts`](packages/core/src/webhooks/integrator.ts)
-**Purpose:** Integrates webhooks with database events.
-- **Key Functions:** `registerHooks()`, `setupTriggers()`
-- **Usage Patterns:** Connect webhooks to database triggers.
-
-#### [`webhooks/startup.ts`](packages/core/src/webhooks/startup.ts)
-**Purpose:** Webhook server initialization.
-- **Key Functions:** `startWebhookServer()`, `registerEndpoints()`
-- **Usage Patterns:** Initialize webhook handling server.
-
----
-
-## packages/shared
-
-`@betterbase/shared` - Shared utilities, types, and constants across all packages.
-
-### Shared Modules
-
-#### [`src/constants.ts`](packages/shared/src/constants.ts)
-**Purpose:** Shared constants used across packages.
-- **Exports:** Error codes, HTTP status codes, default values
-
-#### [`src/errors.ts`](packages/shared/src/errors.ts)
-**Purpose:** Shared error classes.
-- **Exports:** `BetterBaseError`, `AuthError`, `DatabaseError`, `StorageError`
-
-#### [`src/types.ts`](packages/shared/src/types.ts)
-**Purpose:** Shared type definitions.
-- **Exports:** Common types used across packages
-
-#### [`src/utils.ts`](packages/shared/src/utils.ts)
-**Purpose:** Shared utility functions.
-- **Exports:** Common helper functions
-
-#### [`src/index.ts`](packages/shared/src/index.ts)
-**Purpose:** Shared package entry point.
-
----
-
-## apps/test-project
-
-Example and test project demonstrating BetterBase usage.
-
-### Project Files
-
-#### [`betterbase.config.ts`](apps/test-project/betterbase.config.ts)
-**Purpose:** Project configuration file.
-- **Key Fields:** Project name, database provider, auth settings
-- **Usage Patterns:** Defines project-wide configuration.
-
-#### [`drizzle.config.ts`](apps/test-project/drizzle.config.ts)
-**Purpose:** Drizzle ORM configuration.
-- **Usage Patterns:** Configures Drizzle for migrations.
-
-#### [`src/index.ts`](apps/test-project/src/index.ts)
-**Purpose:** Application entry point.
-- **Key Exports:** `app` - Hono application instance
-- **Usage Patterns:** Main application setup.
-
-#### [`src/db/schema.ts`](apps/test-project/src/db/schema.ts)
-**Purpose:** Database schema definition.
-- **Key Exports:** All Drizzle table definitions
-- **Usage Patterns:** Define database tables.
-
-#### [`src/db/index.ts`](apps/test-project/src/db/index.ts)
-**Purpose:** Database connection setup.
-- **Usage Patterns:** Initialize database connection.
-
-#### [`src/db/migrate.ts`](apps/test-project/src/db/migrate.ts)
-**Purpose:** Database migration runner.
-- **Usage Patterns:** Run pending migrations.
-
-#### [`src/auth/index.ts`](apps/test-project/src/auth/index.ts)
-**Purpose:** Auth module entry point.
-- **Usage Patterns:** Access BetterAuth instance.
-
-#### [`src/auth/types.ts`](apps/test-project/src/auth/types.ts)
-**Purpose:** Auth type definitions.
-
-#### [`src/middleware/auth.ts`](apps/test-project/src/middleware/auth.ts)
-**Purpose:** Authentication middleware.
-- **Usage Patterns:** Protect routes requiring auth.
-
-#### [`src/middleware/validation.ts`](apps/test-project/src/middleware/validation.ts)
-**Purpose:** Request validation middleware.
-
-#### [`src/lib/env.ts`](apps/test-project/src/lib/env.ts)
-**Purpose:** Environment variable handling.
-
-#### [`src/lib/realtime.ts`](apps/test-project/src/lib/realtime.ts)
-**Purpose:** Real-time event handling.
-- **Key Exports:** Event emitter for database changes
-- **Usage Patterns:** Subscribe to database events.
-
-#### [`src/routes/index.ts`](apps/test-project/src/routes/index.ts)
-**Purpose:** Routes registration.
-- **Usage Patterns:** Register all API routes.
-
-#### [`src/routes/health.ts`](apps/test-project/src/routes/health.ts)
-**Purpose:** Health check endpoint.
-
-#### [`src/routes/users.ts`](apps/test-project/src/routes/users.ts)
-**Purpose:** Users API routes (example CRUD).
-
-#### [`src/routes/storage.ts`](apps/test-project/src/routes/storage.ts)
+## templates/base
+
+Bun + Hono + Drizzle starter template.
+
+### Template Files
+
+#### [`src/index.ts`](templates/base/src/index.ts)
+**Purpose:** Main server entry point.
+- **Key Features:**
+  - Initializes Hono app
+  - Sets up WebSocket server for realtime
+  - Registers routes
+  - Mounts auth handler
+  - Enables GraphQL API if configured
+  - Initializes webhooks
+  - Starts server
+  - Handles shutdown signals
+
+#### [`src/db/schema.ts`](templates/base/src/db/schema.ts)
+**Purpose:** Database schema definitions using Drizzle ORM.
+- **Key Features:**
+  - User and posts tables
+  - Helper functions for timestamps, UUID, soft delete, status enum, money column, JSON column
+  - BetterAuth tables (user, session, account, verification)
+
+#### [`src/routes/index.ts`](templates/base/src/routes/index.ts)
+**Purpose:** Main route registration file.
+- **Key Features:**
+  - CORS middleware
+  - Logger middleware
+  - Error handler
+  - Health check endpoint
+  - Users API routes
+  - Storage API routes
+
+#### [`src/routes/storage.ts`](templates/base/src/routes/storage.ts)
 **Purpose:** Storage API routes.
+- **Key Features:**
+  - List files in bucket
+  - Delete files
+  - Upload file
+  - Download file
+  - Get public URL
+  - Create signed URL
+  - Authentication middleware
+  - Request validation with Zod
+  - Path sanitization
+  - Storage configuration from environment variables
 
----
+#### [`src/lib/realtime.ts`](templates/base/src/lib/realtime.ts)
+**Purpose:** Realtime server implementation.
+- **Key Features:**
+  - WebSocket server for realtime updates
+  - Client management
+  - Subscription management
+  - Event broadcasting
+  - Filtering
+  - Rate limiting
+  - Authentication and authorization
+  - Connection limits
 
-## cli-auth-page
+#### [`betterbase.config.ts`](templates/base/betterbase.config.ts)
+**Purpose:** BetterBase project configuration.
 
-Authentication page for CLI - provides a web-based UI for CLI authentication flows.
+#### [`drizzle.config.ts`](templates/base/drizzle.config.ts)
+**Purpose:** Drizzle ORM configuration.
 
-### Files
-
-#### [`index.html`](cli-auth-page/index.html)
-**Purpose:** Auth UI entry point.
-- **Usage Patterns:** Rendered when authenticating via CLI login command.
+#### [`package.json`](templates/base/package.json)
+**Purpose:** Project dependencies and scripts.
 
 ---
 
@@ -809,298 +972,433 @@ Auth template with BetterAuth integration.
 
 ### Template Files
 
-#### [`src/auth/index.ts`](templates/auth/src/auth/index.ts)
-**Purpose:** BetterAuth instance setup.
-- **Usage Patterns:** Initialize BetterAuth with configuration.
-
-#### [`src/auth/types.ts`](templates/auth/src/auth/types.ts)
-**Purpose:** Auth type definitions.
-
-#### [`src/db/schema.ts`](templates/auth/src/db/schema.ts)
-**Purpose:** Application schema with users.
-- **Usage Patterns:** Custom application tables.
-
-#### [`src/db/index.ts`](templates/auth/src/db/index.ts)
-**Purpose:** Database setup with auth schema.
-
-#### [`src/middleware/auth.ts`](templates/auth/src/middleware/auth.ts)
-**Purpose:** Auth middleware.
-
 #### [`src/routes/auth.ts`](templates/auth/src/routes/auth.ts)
-**Purpose:** Authentication API endpoints.
+**Purpose:** Authentication API routes.
+
+#### [`src/db/auth-schema.ts`](templates/auth/src/db/auth-schema.ts)
+**Purpose:** BetterAuth database schema.
 
 ---
 
-## CLI Commands Reference
+## Usage Examples
 
-```mermaid
-flowchart TD
-    A[bb init] --> B[Interactive Prompts]
-    B --> C[Project Name]
-    B --> D[Database Mode]
-    B --> E[Options]
-    C --> F[Generate Project Files]
-    D --> F
-    E --> F
-    F --> G[Install Dependencies]
-    G --> H[Initialize Git]
-    H --> I[Complete]
-    
-    J[bb dev] --> K[File Watcher]
-    K --> L[Schema Changes]
-    K --> M[Route Changes]
-    L --> N[Regenerate Context]
-    M --> N
-    N --> O[Write .betterbase-context.json]
-    
-    P[bb migrate] --> Q[Generate Migration]
-    Q --> R[Preview Changes]
-    R --> S{Confirm?}
-    S -->|Yes| T[Apply Migration]
-    S -->|No| U[Cancel]
-    T --> V[Backup Database]
-    V --> W[Execute SQL]
-    
-    X[bb generate crud] --> Y[Scan Schema]
-    Y --> Z[Get Table Name]
-    Z --> AA[Analyze Columns]
-    AA --> AB[Generate Routes]
-    AB --> AC[Update Routes Index]
+### Client SDK
+
+```typescript
+import { createClient } from '@betterbase/client';
+
+const client = createClient({
+  url: 'http://localhost:3000',
+  key: 'your-api-key',
+});
+
+// Authenticate user
+const { data, error } = await client.auth.signIn('user@example.com', 'password123');
+
+if (error) {
+  console.error('Sign in failed:', error);
+} else {
+  console.log('User signed in:', data?.user);
+}
+
+// Query data
+const users = await client.from('users').select('*').execute();
+console.log('Users:', users);
+
+// Upload file
+const file = new File(['hello world'], 'test.txt', { type: 'text/plain' });
+const uploadResult = await client.storage.from('bucket').upload('test.txt', file);
+console.log('Upload result:', uploadResult);
+
+// Subscribe to realtime updates
+const subscription = client.realtime.from('posts').on('INSERT', (payload) => {
+  console.log('New post:', payload);
+}).subscribe();
+
+// Cleanup subscription
+subscription.unsubscribe();
 ```
 
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `bb init` | Initialize new project | `bb init [name] [--template] [--db]` |
-| `bb dev` | Start dev server with watch | `bb dev [--port]` |
-| `bb migrate` | Run database migrations | `bb migrate [generate/apply]` |
-| `bb auth setup` | Setup authentication | `bb auth setup` |
-| `bb generate crud` | Generate CRUD routes | `bb generate crud <table>` |
-| `bb function` | Manage functions | `bb function [create/deploy/list]` |
-| `bb graphql` | GraphQL management | `bb graphql [generate/introspect]` |
-| `bb login` | Login to cloud | `bb login [--email]` |
-| `bb rls` | RLS policy management | `bb rls [enable/disable/list]` |
-| `bb storage` | Storage management | `bb storage [ls/rm/upload]` |
-| `bb webhook` | Webhook management | `bb webhook [create/list/test]` |
+### Server-Side with Hono
 
----
+```typescript
+import { Hono } from 'hono';
+import { auth } from './auth';
+import { db } from './db';
+import { users } from './db/schema';
 
-## Client SDK Request Flow
+const app = new Hono();
 
-```mermaid
-sequenceDiagram
-    participant Client as @betterbase/client
-    participant Auth as Auth Module
-    participant API as API Server
-    participant DB as Database
-    
-    Note over Client, DB: Query Flow
-    Client->>Client: createClient(options)
-    Client->>Auth: Initialize auth
-    Client->>API: GET /rest/v1/table
-    API->>Auth: Validate session
-    Auth->>API: Return user context
-    API->>DB: Execute query with RLS
-    DB->>API: Return filtered results
-    API->>Client: JSON response
-    
-    Note over Client, DB: Realtime Flow
-    Client->>Client: subscribe to table
-    Client->>API: SSE /rest/v1/table?realtime
-    API->>DB: Watch for changes
-    DB->>API: Push INSERT/UPDATE/DELETE
-    API->>Client: SSE event
-    Client->>Client: Trigger callback
+// Protected route
+app.get('/api/protected', async (c) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const userPosts = await db.select().from(users)
+    .where(eq(users.id, session.user.id));
+
+  return c.json(userPosts);
+});
+
+export default app;
 ```
 
----
+### RLS Policy Definition
 
-## Realtime Subscription Flow
+```typescript
+// src/db/policies/users.policy.ts
+import { definePolicy } from '@betterbase/core/rls';
 
-```mermaid
-flowchart TB
-    A[Client subscribes] --> B[Connect to SSE/WebSocket]
-    B --> C[Send subscription request]
-    C --> D{Server supports?}
-    D -->|Yes| E[Register listener]
-    D -->|No| F[Return error]
-    E --> G[Database trigger fires]
-    G --> H[Event published]
-    H --> I[Server receives event]
-    I --> J[Filter by RLS]
-    J --> K[Send to client]
-    K --> L[Client callback]
-    L --> M[Update UI state]
+export default definePolicy('users', {
+  select: 'auth.uid() = id',
+  update: 'auth.uid() = id',
+  delete: 'auth.uid() = id',
+  insert: 'auth.uid() = id',
+});
 ```
 
 ---
 
-## Key Interfaces & Types Index
-
-### CLI Types
-- `InitCommandOptions` - Options for init command
-- `MigrateCommandOptions` - Options for migrate command
-- `MigrationChange` - Represents a schema change
-- `ContextGenerator` - AI context generator class
-- `SchemaScanner` - Schema scanner class
-- `RouteScanner` - Route scanner class
-- `RouteInfo` - Route metadata
-- `TableInfo` - Table metadata
-- `ColumnInfo` - Column metadata
-
-### Client Types
-- `BetterBaseClientOptions` - Client configuration
-- `BetterBaseClient` - Main client interface
-- `User` - Authenticated user
-- `Session` - User session
-- `StorageFile` - Storage file object
-- `RealtimeEvent` - Realtime event
-
-### Core Types
-- `BetterBaseConfig` - Project config
-- `DatabaseProvider` - Provider interface
-- `RLSPolicy` - RLS policy definition
-- `StorageBucket` - Storage bucket
-- `Webhook` - Webhook definition
-- `WebhookEvent` - Webhook event
-
-### Shared Types
-- `BetterBaseError` - Base error class
-- `AuthError` - Authentication error
-- `DatabaseError` - Database error
-- `StorageError` - Storage error
-
----
-
-## Environment Variables Reference
-
-| Variable | Description | Required | Example |
-|----------|-------------|----------|---------|
-| `DATABASE_URL` | Database connection string | Yes | `file:local.db` or `postgresql://...` |
-| `BETTERBASE_SECRET` | JWT secret for auth | Yes | Random 32+ char string |
-| `BETTERBASE_URL` | Public API URL | Yes | `http://localhost:3000` |
-| `STORAGE_S3_BUCKET` | S3 bucket name | No | `my-bucket` |
-| `STORAGE_S3_REGION` | S3 region | No | `us-east-1` |
-| `STORAGE_S3_KEY` | S3 access key | No | - |
-| `STORAGE_S3_SECRET` | S3 secret | No | - |
-| `WEBHOOK_SECRET` | Webhook signing secret | No | - |
-
----
-
-## Error Handling Patterns
-
-### Error Hierarchy
-```
-BetterBaseError (base)
-├── AuthError
-│   ├── SessionExpiredError
-│   ├── InvalidCredentialsError
-│   └── ProviderError
-├── DatabaseError
-│   ├── ConnectionError
-│   ├── QueryError
-│   └── MigrationError
-├── StorageError
-│   ├── UploadError
-│   ├── DownloadError
-│   └── DeleteError
-└── WebhookError
-    ├── SignatureError
-    └── DeliveryError
-```
-
-### Error Codes
-| Code | Description |
-|------|-------------|
-| `AUTH_REQUIRED` | Authentication required |
-| `AUTH_INVALID` | Invalid credentials |
-| `SESSION_EXPIRED` | Session has expired |
-| `DB_CONNECTION` | Database connection failed |
-| `DB_QUERY` | Query execution failed |
-| `RLS_DENIED` | RLS policy denied access |
-| `STORAGE_UPLOAD` | File upload failed |
-| `WEBHOOK_SIGNATURE` | Invalid webhook signature |
-
----
-
-## Security Considerations
+## Architecture Decisions
 
 ### Authentication
-- All auth endpoints require valid session tokens
-- JWT tokens expire after configurable duration
-- Refresh tokens are rotation-enabled
+- **Choice:** BetterAuth for password and social authentication
+- **Rationale:** Lightweight, extensible, and compatible with Drizzle ORM
 
-### Row Level Security
-- RLS is enabled by default on all tables
-- Policies are evaluated with user context
-- Admin bypass requires explicit opt-in
+### Database
+- **Choice:** Drizzle ORM for database abstraction
+- **Rationale:** Type-safe, composable, and supports multiple dialects
 
-### Input Validation
-- All inputs validated with Zod schemas
-- SQL injection prevented via parameterization
-- XSS prevented via output encoding
+### Storage
+- **Choice:** S3-compatible storage with AWS SDK v3
+- **Rationale:** Wide support, compatibility with multiple providers
 
-### API Security
-- CORS configured for allowed origins
-- Rate limiting on auth endpoints
-- Request size limits enforced
+### Realtime
+- **Choice:** WebSocket-based realtime using Bun's WebSocket API
+- **Rationale:** Fast, lightweight, and built into Bun runtime
 
----
+### GraphQL
+- **Choice:** graphql-yoga for server, GraphQL.js for schema
+- **Rationale:** Simple setup, good integration with Hono
 
-## Performance Notes
+### Validation
+- **Choice:** Zod for schema validation
+- **Rationale:** Type-safe, easy to use, and integrates well with TypeScript
 
-### Startup Performance
-- Sub-100ms cold start with Bun + SQLite
-- Edge deployment ready (functions)
-- Lazy loading for optional features
-
-### Query Performance
-- Connection pooling for PostgreSQL
-- Prepared statements for repeated queries
-- Query result caching (configurable)
-
-### Realtime Performance
-- Server-Sent Events for broad compatibility
-- WebSocket for high-frequency updates
-- Event batching for bulk operations
+### CLI
+- **Choice:** Commander.js for CLI framework
+- **Rationale:** Mature, lightweight, and well-documented
 
 ---
 
-## Data Flow Diagrams
+## Development Workflow
 
-### Project Initialization Flow
-```mermaid
-flowchart LR
-    A[User runs bb init] --> B[Prompt for project name]
-    B --> C[Prompt for database provider]
-    C --> D[Prompt for additional options]
-    D --> E[Create directory structure]
-    E --> F[Copy template files]
-    F --> G[Generate config files]
-    G --> H[Install dependencies]
-    H --> I[Initialize git repo]
-    I --> J[Complete]
+### Creating a New Project
+
+```bash
+# Initialize new project
+bb init
+
+# Answer prompts for project name, database provider, etc.
+
+# Navigate to project directory
+cd my-project
+
+# Install dependencies
+bun install
+
+# Start development server
+bun run dev
 ```
 
-### Request Lifecycle
-```mermaid
-flowchart TB
-    A[HTTP Request] --> B[Middleware Chain]
-    B --> C{Auth required?}
-    C -->|Yes| D[Validate Session]
-    C -->|No| E[Continue]
-    D --> F{Valid?}
-    F -->|No| G[401 Unauthorized]
-    F -->|Yes| E
-    E --> H[Route Handler]
-    H --> I[Business Logic]
-    I --> J[Database Query]
-    J --> K{RLS enabled?}
-    K -->|Yes| L[Apply RLS]
-    K -->|No| M[Execute Query]
-    L --> M
-    M --> N[Return Response]
+### Adding Authentication
+
+```bash
+# Add BetterAuth integration
+bb auth setup
+
+# Run database migrations
+bun run db:push
+
+# Set auth secret in .env
+echo "AUTH_SECRET=your-secret-key" >> .env
+```
+
+### Generating CRUD Routes
+
+```bash
+# Generate CRUD routes for a table
+bb generate crud posts
+
+# Run GraphQL schema generation
+bb graphql generate
+```
+
+### Migrating Database
+
+```bash
+# Generate and apply migrations
+bb migrate
+
+# Preview migration without applying
+bb migrate preview
+
+# Apply migrations to production
+bb migrate production
 ```
 
 ---
 
-*This file is auto-generated. Do not edit manually.*
+## API Reference
+
+### Client SDK
+
+#### `createClient(config)`
+```typescript
+const client = createClient({
+  url: string;
+  key?: string;
+  schema?: string;
+  fetch?: typeof fetch;
+  storage?: StorageAdapter;
+});
+```
+
+#### `client.auth`
+```typescript
+client.auth.signUp(email: string, password: string, name: string): Promise<BetterBaseResponse<{ user: User; session: Session }>>;
+client.auth.signIn(email: string, password: string): Promise<BetterBaseResponse<{ user: User; session: Session }>>;
+client.auth.signOut(): Promise<BetterBaseResponse<null>>;
+client.auth.getSession(): Promise<BetterBaseResponse<{ user: User; session: Session }>>;
+client.auth.getToken(): string | null;
+client.auth.setToken(token: string | null): void;
+```
+
+#### `client.from(table)`
+```typescript
+const query = client.from('users');
+query.select(fields?: string): this;
+query.eq(column: string, value: unknown): this;
+query.in(column: string, values: unknown[]): this;
+query.limit(count: number): this;
+query.offset(count: number): this;
+query.order(column: string, direction?: 'asc' | 'desc'): this;
+query.execute(): Promise<BetterBaseResponse<T[]>>;
+query.single(id: string): Promise<BetterBaseResponse<T>>;
+query.insert(data: Partial<T>): Promise<BetterBaseResponse<T>>;
+query.update(id: string, data: Partial<T>): Promise<BetterBaseResponse<T>>;
+query.delete(id: string): Promise<BetterBaseResponse<T>>;
+```
+
+#### `client.realtime`
+```typescript
+client.realtime.from(table: string): {
+  on: <T = unknown>(
+    event: RealtimeEvent,
+    callback: RealtimeCallback<T>,
+  ) => {
+    subscribe: (filter?: Record<string, unknown>) => RealtimeSubscription;
+  };
+};
+```
+
+#### `client.storage`
+```typescript
+client.storage.from(bucket: string): StorageBucketClient;
+```
+
+#### `StorageBucketClient`
+```typescript
+bucket.upload(path: string, file: File | Blob | ArrayBuffer, options?: UploadOptions): Promise<BetterBaseResponse<UploadResult>>;
+bucket.download(path: string): Promise<BetterBaseResponse<Blob>>;
+bucket.getPublicUrl(path: string): Promise<BetterBaseResponse<PublicUrlResult>>;
+bucket.createSignedUrl(path: string, options?: SignedUrlOptions): Promise<BetterBaseResponse<SignedUrlResult>>;
+bucket.remove(paths: string[]): Promise<BetterBaseResponse<RemoveResult>>;
+bucket.list(prefix?: string): Promise<BetterBaseResponse<StorageFile[]>>;
+```
+
+---
+
+## Server-Side API
+
+### Hono App
+
+```typescript
+import { Hono } from 'hono';
+
+const app = new Hono();
+
+// Health check
+app.get('/health', (c) => {
+  return c.json({ status: 'ok' });
+});
+
+// Protected route
+app.get('/protected', requireAuth, (c) => {
+  const user = c.get('user');
+  return c.json({ user });
+});
+
+// Error handler
+app.onError((err, c) => {
+  return c.json({ error: err.message }, 500);
+});
+
+export default app;
+```
+
+### Auth Middleware
+
+```typescript
+import { requireAuth, optionalAuth } from './middleware/auth';
+
+// Require authentication for all routes
+app.use('*', requireAuth);
+
+// Optional authentication
+app.use('*', optionalAuth);
+
+// Get user from context
+const user = c.get('user');
+```
+
+### Realtime Broadcast
+
+```typescript
+import { realtime } from './lib/realtime';
+
+// Broadcast event
+realtime.broadcast('posts', 'INSERT', {
+  id: '1',
+  title: 'New Post',
+  content: 'Hello World',
+  createdAt: new Date(),
+});
+```
+
+---
+
+## Configuration
+
+### Project Configuration (`betterbase.config.ts`)
+
+```typescript
+import { defineConfig } from '@betterbase/core';
+
+export default defineConfig({
+  project: {
+    name: 'my-project',
+  },
+  provider: {
+    type: 'neon',
+    connectionString: process.env.DATABASE_URL,
+  },
+  storage: {
+    provider: 's3',
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+    accessKeyId: process.env.STORAGE_ACCESS_KEY,
+    secretAccessKey: process.env.STORAGE_SECRET_KEY,
+  },
+  webhooks: [
+    {
+      id: 'new-post',
+      table: 'posts',
+      events: ['INSERT'],
+      url: process.env.WEBHOOK_URL,
+      secret: process.env.WEBHOOK_SECRET,
+      enabled: true,
+    },
+  ],
+  graphql: {
+    enabled: true,
+  },
+});
+```
+
+### Environment Variables
+
+```bash
+# Database
+DATABASE_URL="postgres://user:password@localhost:5432/mydb"
+TURSO_URL="https://mydb.turso.io"
+TURSO_AUTH_TOKEN="my-turso-token"
+
+# Auth
+AUTH_SECRET="your-auth-secret"
+AUTH_URL="http://localhost:3000"
+
+# Storage
+STORAGE_PROVIDER="s3"
+STORAGE_BUCKET="my-bucket"
+STORAGE_REGION="us-east-1"
+STORAGE_ACCESS_KEY_ID="my-access-key"
+STORAGE_SECRET_ACCESS_KEY="my-secret-key"
+
+# Webhooks
+WEBHOOK_URL="https://example.com/webhook"
+WEBHOOK_SECRET="my-webhook-secret"
+
+# Server
+PORT=3000
+NODE_ENV="development"
+```
+
+---
+
+## Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+bun test
+
+# Run tests in watch mode
+bun test --watch
+
+# Run specific test file
+bun test packages/cli/test/smoke.test.ts
+```
+
+### Test Structure
+
+Tests are located in the `test/` directory of each package. The test files follow the pattern `*.test.ts`.
+
+---
+
+## Contributing
+
+### Development Setup
+
+```bash
+# Clone repository
+git clone https://github.com/your-username/betterbase.git
+cd betterbase
+
+# Install dependencies
+bun install
+
+# Build packages
+bun run build
+
+# Run tests
+bun test
+```
+
+### Development Workflow
+
+1. Create a new branch
+2. Make changes to the codebase
+3. Run tests
+4. Commit changes
+5. Push to remote repository
+6. Create a pull request
+
+---
+
+## License
+
+BetterBase is released under the MIT license.
