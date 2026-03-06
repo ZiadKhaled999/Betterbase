@@ -251,6 +251,13 @@ export async function runAuthSetupCommand(
 	const resolvedRoot = path.resolve(projectRoot);
 	const srcDir = path.join(resolvedRoot, "src");
 
+	// Check if auth is already set up (idempotency check)
+	const authIndexPath = path.join(srcDir, "auth", "index.ts");
+	if (existsSync(authIndexPath)) {
+		logger.info("✅ Auth is already set up!");
+		return;
+	}
+
 	logger.info("🔐 Setting up BetterAuth...");
 
 	// Install better-auth
@@ -272,8 +279,8 @@ export async function runAuthSetupCommand(
 
 	// Create src/auth/index.ts
 	logger.info("🔑 Creating auth instance...");
-	const authIndexPath = path.join(authDir, "index.ts");
-	writeFileSync(authIndexPath, AUTH_INSTANCE_FILE(provider));
+	const authIndexFilePath = path.join(authDir, "index.ts");
+	writeFileSync(authIndexFilePath, AUTH_INSTANCE_FILE(provider));
 
 	// Create src/auth/types.ts
 	logger.info("📋 Creating auth types...");
