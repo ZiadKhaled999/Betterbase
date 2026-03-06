@@ -4,7 +4,22 @@
 
 ## Project Identity
 
-**BetterBase** is an AI-native Backend-as-a-Service (BaaS) platform inspired by Supabase. It provides a TypeScript-first developer experience with a focus on AI context generation, Docker-less local development, and zero lock-in. The stack is built on **Bun** (runtime), **Turborepo** (monorepo), **Hono** (API framework), **Drizzle ORM** (database), and **BetterAuth** (authentication: AI-first context). The philosophy emphasizes generation via `.betterbase-context.json`, sub-100ms startup with `bun:sqlite`, user-owned schemas, and strict TypeScript with Zod validation everywhere.
+**BetterBase** is an AI-native Backend-as-a-Service (BaaS) platform built with Bun that provides a TypeScript-first developer experience. It includes database management via Drizzle ORM, authentication via BetterAuth, realtime subscriptions, S3-compatible storage, and serverless functions. The platform is designed with a focus on AI context generation, Docker-less local development, and zero vendor lock-in.
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Rationale |
+|-------|------------|-----------|
+| **Runtime** | Bun | Fast startup (<100ms), native TypeScript support, built-in package manager |
+| **Monorepo** | Turborepo | Efficient caching, parallel execution, workspace management |
+| **API Framework** | Hono | Lightweight, fast, edge-compatible, middleware-based |
+| **Database ORM** | Drizzle ORM | Type-safe, SQL-like syntax, lightweight, migrations support |
+| **Database Providers** | PostgreSQL, MySQL, SQLite | Multiple provider support (Neon, PlanetScale, Supabase, Turso) |
+| **Authentication** | BetterAuth | TypeScript-first, extensible, AI-friendly context |
+| **Validation** | Zod | Schema validation, TypeScript inference |
+| **Storage** | S3-compatible | Universal storage interface (AWS S3, MinIO, etc.) |
 
 ---
 
@@ -34,38 +49,38 @@ graph TB
     end
     
     subgraph packages
-        CLI[packages/cli<br/>11 commands<br/>6 utils]
-        Client[packages/client<br/>8 modules]
+        CLI[packages/cli<br/>11 commands<br/>7 utils]
+        Client[packages/client<br/>9 modules]
         Core[packages/core<br/>9 modules]
         Shared[packages/shared<br/>5 utilities]
     end
     
-    subgraph templates
-        Base[templates/base]
-        Auth[templates/auth]
+    subgraph apps
+        TestProject[apps/test-project<br/>Example project]
+    end
+    
+    subgraph external
+        CliAuth[cli-auth-page<br/>Auth UI]
+        AuthTemplate[templates/auth<br/>Auth template]
     end
     
     Root --> CLI
     Root --> Client
     Root --> Core
     Root --> Shared
-    Root --> Base
-    Root --> Auth
+    Root --> TestProject
 ```
 
 ```
 betterbase/
-├── package.json                    # Root workspace config
+├── package.json                    # Root workspace config (name: "betterbase")
 ├── turbo.json                      # Turborepo task configuration
-├── tsconfig.base.json             # Shared TypeScript config
+├── tsconfig.base.json              # Shared TypeScript config (ES2022, strict)
 ├── bun.lock                        # Bun lockfile
 ├── CODEBASE_MAP.md                 # This file
 ├── README.md                       # Project documentation
 ├── .gitignore                      # Git ignore patterns
 ├── .npmignore                      # npm ignore patterns
-├── betterbase_auth_refactor.md     # Auth refactoring notes
-├── betterbase_backend_rebuild.md   # Backend rebuild notes
-├── betterbase_blueprint_v3.md      # Blueprint v3
 │
 ├── packages/
 │   ├── cli/                        # @betterbase/cli - CLI tool (bb command)
@@ -73,67 +88,159 @@ betterbase/
 │   │   ├── tsconfig.json
 │   │   ├── src/
 │   │   │   ├── index.ts            # Main CLI entry point
-│   │   │   ├── build.ts           # Build script
+│   │   │   ├── build.ts            # Build script
 │   │   │   ├── constants.ts       # Shared constants
 │   │   │   ├── commands/          # CLI commands (11 files)
+│   │   │   │   ├── auth.ts        # bb auth setup - BetterAuth integration
+│   │   │   │   ├── dev.ts         # bb dev - Development server with watch
+│   │   │   │   ├── function.ts    # bb function - Serverless function management
+│   │   │   │   ├── generate.ts    # bb generate crud - CRUD route generation
+│   │   │   │   ├── graphql.ts      # bb graphql - GraphQL management
+│   │   │   │   ├── init.ts        # bb init - Project initialization
+│   │   │   │   ├── login.ts       # bb login - Cloud authentication
+│   │   │   │   ├── migrate.ts     # bb migrate - Database migrations
+│   │   │   │   ├── rls.ts         # bb rls - Row Level Security management
+│   │   │   │   ├── storage.ts     # bb storage - Storage bucket management
+│   │   │   │   └── webhook.ts     # bb webhook - Webhook management
 │   │   │   └── utils/             # CLI utilities (7 files)
-│   │   └── test/                  # CLI tests (4 files)
+│   │   │       ├── context-generator.ts   # Generates .betterbase-context.json
+│   │   │       ├── logger.ts              # Colored console logging
+│   │   │       ├── prompts.ts             # Interactive prompts (Inquirer)
+│   │   │       ├── provider-prompts.ts    # Database provider selection
+│   │   │       ├── route-scanner.ts       # Hono route scanning
+│   │   │       ├── schema-scanner.ts      # Drizzle schema scanning
+│   │   │       └── scanner.ts             # Schema scanner core
+│   │   └── test/                  # CLI tests (14+ test files)
 │   │
-│   ├── client/                     # @betterbase/client - Client SDK
+│   ├── client/                     # @betterbase/client - TypeScript SDK
 │   │   ├── package.json
 │   │   ├── tsconfig.json
 │   │   ├── tsconfig.test.json
-│   │   ├── src/                    # Client SDK (9 files)
-│   │   └── test/                   # Client tests (1 file)
+│   │   ├── README.md
+│   │   ├── src/                    # Client SDK source
+│   │   │   ├── index.ts           # Package exports
+│   │   │   ├── auth.ts            # Authentication client
+│   │   │   ├── build.ts           # Build configuration
+│   │   │   ├── client.ts          # Main client factory
+│   │   │   ├── errors.ts          # Client error classes
+│   │   │   ├── query-builder.ts   # Chainable query builder
+│   │   │   ├── realtime.ts        # Realtime subscription client
+│   │   │   ├── storage.ts         # Storage client
+│   │   │   └── types.ts           # TypeScript definitions
+│   │   └── test/                   # Client tests (6+ test files)
 │   │
 │   ├── core/                       # @betterbase/core - Core backend engine
 │   │   ├── package.json
+│   │   ├── README.md
 │   │   ├── tsconfig.json
 │   │   └── src/
-│   │       ├── index.ts            # Core exports
+│   │       ├── index.ts           # Core exports
 │   │       ├── config/            # Configuration modules
+│   │       │   ├── index.ts      # Config exports
+│   │       │   ├── schema.ts     # Project config schema (Zod)
+│   │       │   └── drizzle-generator.ts  # Drizzle config generator
 │   │       ├── functions/         # Serverless functions
+│   │       │   ├── index.ts      # Functions exports
+│   │       │   ├── bundler.ts    # Function bundler (esbuild)
+│   │       │   └── deployer.ts   # Function deployer
 │   │       ├── graphql/           # GraphQL server
-│   │       ├── middleware/        # Middleware (RLS session)
-│   │       ├── migration/         # Database migrations
-│   │       ├── providers/         # Database providers
-│   │       ├── rls/               # Row Level Security
-│   │       ├── storage/           # Storage adapter
-│   │       └── webhooks/          # Webhook handling
+│   │       │   ├── index.ts      # GraphQL exports
+│   │       │   ├── resolvers.ts  # GraphQL resolvers
+│   │       │   ├── schema-generator.ts  # Schema from DB
+│   │       │   ├── sdl-exporter.ts     # SDL export
+│   │       │   └── server.ts    # GraphQL HTTP server
+│   │       ├── middleware/        # Middleware
+│   │       │   ├── index.ts      # Middleware exports
+│   │       │   └── rls-session.ts  # RLS session middleware
+│   │       ├── migration/        # Database migrations
+│   │       │   ├── index.ts      # Migration exports
+│   │       │   └── rls-migrator.ts  # RLS policy migration
+│   │       ├── providers/        # Database providers
+│   │       │   ├── index.ts      # Provider exports
+│   │       │   ├── types.ts      # Provider interfaces
+│   │       │   ├── neon.ts      # Neon serverless PostgreSQL
+│   │       │   ├── planetscale.ts  # PlanetScale MySQL
+│   │       │   ├── postgres.ts   # PostgreSQL
+│   │       │   ├── supabase.ts   # Supabase-compatible
+│   │       │   └── turso.ts      # Turso libSQL
+│   │       ├── rls/              # Row Level Security
+│   │       │   ├── index.ts      # RLS exports
+│   │       │   ├── types.ts      # RLS type definitions
+│   │       │   ├── scanner.ts    # RLS policy scanner
+│   │       │   ├── generator.ts # RLS policy generator
+│   │       │   └── auth-bridge.ts  # Auth-RLS bridge
+│   │       ├── storage/          # Storage adapter
+│   │       │   ├── index.ts      # Storage exports
+│   │       │   ├── types.ts      # Storage types
+│   │       │   └── s3-adapter.ts # S3-compatible adapter
+│   │       └── webhooks/         # Webhook handling
+│   │           ├── index.ts      # Webhook exports
+│   │           ├── types.ts      # Webhook types
+│   │           ├── dispatcher.ts # Event dispatcher
+│   │           ├── integrator.ts # DB trigger integration
+│   │           ├── signer.ts     # Payload signing
+│   │           └── startup.ts    # Server initialization
 │   │
-│   └── shared/                     # @betterbase/shared - Shared utilities
+│   └── shared/                    # @betterbase/shared - Shared utilities
 │       ├── package.json
+│       ├── README.md
 │       ├── tsconfig.json
 │       └── src/
-│           ├── index.ts
-│           ├── constants.ts
-│           ├── errors.ts
-│           ├── types.ts
-│           └── utils.ts
+│           ├── index.ts          # Package exports
+│           ├── constants.ts      # Shared constants
+│           ├── errors.ts         # Error classes
+│           ├── types.ts          # Shared types
+│           └── utils.ts          # Utility functions
+│
+├── apps/
+│   └── test-project/              # Example/test project
+│       ├── betterbase.config.ts  # Project configuration
+│       ├── drizzle.config.ts     # Drizzle configuration
+│       ├── package.json
+│       ├── tsconfig.json
+│       ├── README.md
+│       ├── src/
+│       │   ├── index.ts          # App entry point
+│       │   ├── auth/
+│       │   │   ├── index.ts     # Auth module
+│       │   │   └── types.ts     # Auth types
+│       │   ├── db/
+│       │   │   ├── index.ts     # Database setup
+│       │   │   ├── migrate.ts   # Migration runner
+│       │   │   ├── schema.ts    # Database schema
+│       │   │   └── policies/     # RLS policies
+│       │   │       └── .gitkeep
+│       │   ├── functions/       # Serverless functions
+│       │   │   └── .gitkeep
+│       │   ├── lib/
+│       │   │   ├── env.ts       # Environment vars
+│       │   │   └── realtime.ts  # Realtime events
+│       │   ├── middleware/
+│       │   │   ├── auth.ts      # Auth middleware
+│       │   │   └── validation.ts # Validation middleware
+│       │   └── routes/
+│       │       ├── index.ts    # Routes registration
+│       │       ├── health.ts   # Health check
+│       │       ├── storage.ts  # Storage routes
+│       │       ├── users.ts    # User CRUD routes
+│       │       └── graphql.d.ts # GraphQL types
+│       └── test/                 # Project tests
+│           ├── crud.test.ts
+│           └── health.test.ts
+│
+├── cli-auth-page/                 # Authentication page for CLI
+│   ├── .gitignore
+│   ├── index.html                # Auth UI entry
+│   └── .vercel/                  # Vercel config
 │
 └── templates/
-    ├── base/                       # Bun + Hono + Drizzle starter
-    │   ├── package.json
-    │   ├── betterbase.config.ts
-    │   ├── drizzle.config.ts
-    │   ├── tsconfig.json
-    │   ├── README.md
-    │   └── src/
-    │       ├── index.ts
-    │       ├── auth/              # Auth module
-    │       ├── db/                # Database schema & migrate
-    │       ├── functions/        # Serverless functions
-    │       ├── lib/               # Utilities (env, realtime)
-    │       ├── middleware/        # Route middleware
-    │       └── routes/            # API routes
-    │
-    └── auth/                       # Auth template with BetterAuth
+    └── auth/                      # Auth template with BetterAuth
         ├── README.md
         └── src/
-            ├── auth/              # Auth setup
+            ├── auth/             # Auth setup
             ├── db/               # Auth schema
-            ├── middleware/        # Auth middleware
-            └── routes/           # Auth routes
+            ├── middleware/       # Auth middleware
+            └── routes/          # Auth routes
 ```
 
 ---
@@ -142,14 +249,15 @@ betterbase/
 
 ### [`package.json`](package.json)
 **Purpose:** Root workspace configuration for Turborepo monorepo.
-- **Key Fields:** `name: "betterbase"`, workspaces: `["packages/*", "templates/*"]`
+- **Key Fields:** `name: "betterbase"`, workspaces: `["packages/*", "templates/*", "apps/*"]`
 - **Scripts:** Build, test, and dev scripts using turbo
-- **Dependencies:** `turbo@^2.3.0`
+- **Dependencies:** `turbo@^2.3.0`, `bun` (package manager)
 
 ### [`turbo.json`](turbo.json)
 **Purpose:** Turborepo task configuration defining build pipelines.
 - **Tasks:** `build`, `test`, `lint` with cache settings
 - **Dependencies:** Build depends on ^build, test depends on ^test
+- **Cache:** Remote caching enabled for CI/CD
 
 ### [`tsconfig.base.json`](tsconfig.base.json)
 **Purpose:** Shared TypeScript configuration for all packages.
@@ -609,7 +717,7 @@ Canonical `@betterbase/cli` implementation - the `bb` command-line tool.
 - **Usage Patterns:** Typically called by developers starting a new project. Uses interactive prompts to gather project name, database mode, and options. Creates a complete project structure with sensible defaults.
 - **Implementation Details:** Uses Inquirer for interactive prompts, writes files synchronously using fs module. Supports three database modes: local (SQLite), neon (PostgreSQL), turso (LibSQL). Generates Zod-validated config. Implements file templating with template literals for code generation.
 - **External Deps:** `inquirer`, `zod`, `chalk`
-- **Cross-Ref:** [`packages/cli/src/utils/prompts.ts`](packages/cli/src/utils/prompts.ts), [`templates/base/`](templates/base/)
+- **Cross-Ref:** [`packages/cli/src/utils/prompts.ts`](packages/cli/src/utils/prompts.ts), [`apps/test-project/`](apps/test-project/)
 
 #### [`commands/dev.ts`](packages/cli/src/commands/dev.ts)
 **Purpose:** `bb dev` command - watches schema/routes and regenerates context.

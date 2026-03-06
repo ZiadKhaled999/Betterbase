@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BetterBase CLI Login</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 400px; margin: 80px auto; padding: 0 20px; }
+    input { width: 100%; padding: 12px; margin: 8px 0 16px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+    button { width: 100%; padding: 12px; background: #000; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: 600; }
+    button:disabled { opacity: 0.6; }
+    #status { margin-top: 16px; font-size: 14px; }
+    .code { font-family: monospace; font-size: 24px; letter-spacing: 2px; background: #f4f4f5; padding: 12px 24px; border-radius: 8px; display: inline-block; margin: 16px 0; }
+    .success { color: #16a34a; }
+    .error { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <h2>BetterBase CLI Login</h2>
+  <p style="color:#666;font-size:14px">Enter your credentials to authorize this device.</p>
+  <div>Device code: <div class="code" id="code"></div></div>
+  <input type="email" id="email" placeholder="Email address" />
+  <input type="password" id="password" placeholder="Password" />
+  <button id="btn" onclick="login()">Sign In</button>
+  <div id="status"></div>
+
+  <script>
+    const SUPABASE_URL = "https://gzmqjmgomlkpwntbivox.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6bXFqbWdvbWxrcHdudGJpdm94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0OTk1NzgsImV4cCI6MjA4ODA3NTU3OH0.1ijVEm4595ZNMjffe6M8YQBZgUPMDK92KgUQVpldCgE";
+
+    const code = new URLSearchParams(window.location.search).get("code") || "";
+    document.getElementById("code").textContent = code;
+
+    async function login() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const btn = document.getElementById("btn");
+      const status = document.getElementById("status");
+
+      if (!email || !password) { status.textContent = "Enter email and password."; status.className = "error"; return; }
+
+      btn.disabled = true;
+      btn.textContent = "Signing in...";
+
+      try {
+        const authRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${SUPABASE_ANON_KEY}` },
+          body: JSON.stringify({ email, password })
+        });
+        const authData = await authRes.json();
+        if (!authRes.ok) throw new Error(authData.error_description || "Login failed");
+
+        const initRes = await fetch(`${SUPABASE_URL}/functions/v1/cli-auth-init`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, token: authData.access_token, email: authData.user.email, userId: authData.user.id })
+        });
+
+        if (initRes.ok) {
+          status.textContent = "✓ Authenticated. You can close this window.";
+          status.className = "success";
+          btn.textContent = "Done";
+        } else {
+          const err = await initRes.json().catch(() => ({}));
+          throw new Error(err.message || "Handoff failed");
+        }
+      } catch (e) {
+        status.textContent = e.message;
+        status.className = "error";
+        btn.disabled = false;
+        btn.textContent = "Sign In";
+      }
+    }
+  </script>
+</body>
+</html>
