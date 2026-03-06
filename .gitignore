@@ -12,6 +12,8 @@ dist
 .vscode/
 .idea/
 
+cli-auth-page/
+
 .env
 .env.*
 !.env.example
