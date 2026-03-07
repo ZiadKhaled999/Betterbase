@@ -622,6 +622,96 @@ export class AuthClient {
 			};
 		}
 	}
+
+	// Phone / SMS Authentication methods
+	async sendPhoneOtp(phone: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/phone/send`, {
+				method: "POST",
+				headers: this.headers,
+				body: JSON.stringify({ phone }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to send SMS", data),
+				};
+			}
+
+			return {
+				data: { message: "SMS code sent successfully" },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async verifyPhoneOtp(phone: string, code: string): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/phone/verify`, {
+				method: "POST",
+				headers: this.headers,
+				body: JSON.stringify({ phone, code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid or expired code", data),
+				};
+			}
+
+			if (data.token) {
+				this.storage?.setItem("betterbase_session", data.token);
+				this.onAuthStateChange?.(data.token);
+			}
+
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: data.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: data.user?.id ?? "",
+			};
+			const user: User = {
+				id: data.user?.id ?? "",
+				name: data.user?.name ?? "",
+				email: data.user?.email ?? "",
+				emailVerified: data.user?.emailVerified ?? false,
+				image: data.user?.image ?? null,
+				createdAt: data.user?.createdAt ? new Date(data.user.createdAt) : new Date(),
+				updatedAt: data.user?.updatedAt ? new Date(data.user.updatedAt) : new Date(),
+			};
+
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
 }
 
 export function createAuthClientInstance(config: BetterBaseClientConfig): BetterAuthClient {

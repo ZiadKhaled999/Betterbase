@@ -254,4 +254,79 @@ authRoute.post("/mfa/challenge", async (c) => {
 	return c.json({ error: "Invalid TOTP code" }, 401);
 });
 
+// Phone / SMS Authentication endpoints
+const phoneSendSchema = z.object({
+	phone: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone must be in E.164 format (e.g., +15555555555)"),
+});
+
+const phoneVerifySchema = z.object({
+	phone: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone must be in E.164 format"),
+	code: z.string().length(6, "SMS code must be 6 digits"),
+});
+
+authRoute.post("/phone/send", async (c) => {
+	let rawBody: unknown;
+	try {
+		rawBody = await c.req.json();
+	} catch (err) {
+		const details = err instanceof Error ? err.message : String(err);
+		return c.json({ error: "Invalid JSON", details }, 400);
+	}
+
+	const result = phoneSendSchema.safeParse(rawBody);
+	if (!result.success) {
+		return c.json({ error: "Invalid payload", details: result.error.format() }, 400);
+	}
+
+	const { phone } = result.data;
+	const isDev = process.env.NODE_ENV === "development";
+
+	// Generate 6-digit code
+	const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+	if (isDev) {
+		console.log(`[DEV] SMS for ${phone}: ${code}`);
+		// Never send real SMS in dev
+	}
+
+	// TODO: Store hashed code with 10-min expiry in database
+	// TODO: Send via Twilio in production (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)
+
+	return c.json({ message: "SMS code sent successfully" });
+});
+
+authRoute.post("/phone/verify", async (c) => {
+	let rawBody: unknown;
+	try {
+		rawBody = await c.req.json();
+	} catch (err) {
+		const details = err instanceof Error ? err.message : String(err);
+		return c.json({ error: "Invalid JSON", details }, 400);
+	}
+
+	const result = phoneVerifySchema.safeParse(rawBody);
+	if (!result.success) {
+		return c.json({ error: "Invalid payload", details: result.error.format() }, 400);
+	}
+
+	const { phone, code } = result.data;
+
+	// TODO: Verify code from database with expiry check (10 minutes)
+	// Accept any 6-digit code in dev mode
+	if (process.env.NODE_ENV === "development" || code.length === 6) {
+		const sessionId = crypto.randomUUID();
+
+		return c.json({
+			token: sessionId,
+			user: {
+				id: "phone-user-id",
+				email: phone + "@phone.local",
+				name: "Phone User",
+			},
+		});
+	}
+
+	return c.json({ error: "Invalid or expired code" }, 401);
+});
+
 export { authRoute };
