@@ -5,6 +5,7 @@ import { z } from "zod";
 
 export interface Subscription {
 	table: string;
+	event: "INSERT" | "UPDATE" | "DELETE" | "*";
 	filter?: Record<string, unknown>;
 }
 
@@ -33,11 +34,13 @@ const messageSchema = z.union([
 	z.object({
 		type: z.literal("subscribe"),
 		table: z.string().min(1).max(255),
+		event: z.enum(["INSERT", "UPDATE", "DELETE", "*"]).default("*"),
 		filter: z.record(z.string(), z.unknown()).optional(),
 	}),
 	z.object({
 		type: z.literal("unsubscribe"),
 		table: z.string().min(1).max(255),
+		event: z.enum(["INSERT", "UPDATE", "DELETE", "*"]).default("*"),
 	}),
 ]);
 
@@ -53,6 +56,10 @@ export class RealtimeServer {
 	private config: RealtimeConfig;
 	// CDC event handler for automatic database change events
 	private cdcCallback: ((event: DBEvent) => void) | null = null;
+
+	// Map to track subscriptions by table+event for efficient filtering
+	// Key format: "table:event" (e.g., "users:INSERT")
+	private tableEventSubscribers = new Map<string, Set<ServerWebSocket<unknown>>>();
 
 	constructor(config?: Partial<RealtimeConfig>) {
 		if (process.env.NODE_ENV !== "development" && process.env.ENABLE_DEV_AUTH !== "true") {
@@ -89,11 +96,42 @@ export class RealtimeServer {
 
 	/**
 	 * Process a CDC event and broadcast to WebSocket clients
-	 * Also emit events that webhooks/integrator.ts expects
+	 * Server-side filtering: only delivers to clients with matching subscriptions
 	 */
 	processCDCEvent(event: DBEvent): void {
-		// Broadcast to WebSocket clients
+		// Broadcast to WebSocket clients with server-side filtering
 		this.broadcast(event.table, event.type, event.record);
+	}
+
+	/**
+	 * Get subscribers for a specific table and event type
+	 * This enables server-side filtering
+	 */
+	private getSubscribersForEvent(
+		table: string,
+		event: "INSERT" | "UPDATE" | "DELETE",
+	): Set<ServerWebSocket<unknown>> {
+		const subscribers = new Set<ServerWebSocket<unknown>>();
+		
+		// Get exact match subscribers (table + event)
+		const exactKey = `${table}:${event}`;
+		const exactSubs = this.tableEventSubscribers.get(exactKey);
+		if (exactSubs) {
+			for (const ws of exactSubs) {
+				subscribers.add(ws);
+			}
+		}
+		
+		// Get wildcard subscribers (table + *)
+		const wildcardKey = `${table}:*`;
+		const wildcardSubs = this.tableEventSubscribers.get(wildcardKey);
+		if (wildcardSubs) {
+			for (const ws of wildcardSubs) {
+				subscribers.add(ws);
+			}
+		}
+		
+		return subscribers;
 	}
 
 	authenticate(token: string | undefined): { userId: string; claims: string[] } | null {
@@ -171,11 +209,11 @@ export class RealtimeServer {
 
 		const data = result.data;
 		if (data.type === "subscribe") {
-			this.subscribe(ws, data.table, data.filter);
+			this.subscribe(ws, data.table, data.event, data.filter);
 			return;
 		}
 
-		this.unsubscribe(ws, data.table);
+		this.unsubscribe(ws, data.table, data.event);
 	}
 
 	handleClose(ws: ServerWebSocket<unknown>): void {
@@ -183,12 +221,13 @@ export class RealtimeServer {
 
 		const client = this.clients.get(ws);
 		if (client) {
-			for (const table of client.subscriptions.keys()) {
-				const subscribers = this.tableSubscribers.get(table);
-				subscribers?.delete(ws);
-
-				if (subscribers && subscribers.size === 0) {
-					this.tableSubscribers.delete(table);
+			// Clean up all subscriptions for this client
+			for (const [subscriptionKey, subscription] of client.subscriptions.entries()) {
+				const tableEventKey = `${subscription.table}:${subscription.event}`;
+				const tableEventSubs = this.tableEventSubscribers.get(tableEventKey);
+				tableEventSubs?.delete(ws);
+				if (tableEventSubs && tableEventSubs.size === 0) {
+					this.tableEventSubscribers.delete(tableEventKey);
 				}
 			}
 		}
@@ -197,8 +236,10 @@ export class RealtimeServer {
 	}
 
 	broadcast(table: string, event: RealtimeUpdatePayload["event"], data: unknown): void {
-		const subscribers = this.tableSubscribers.get(table);
-		if (!subscribers || subscribers.size === 0) {
+		// Server-side filtering: get only subscribers for this specific event type
+		const subscribers = this.getSubscribersForEvent(table, event);
+		
+		if (subscribers.size === 0) {
 			return;
 		}
 
@@ -230,6 +271,7 @@ export class RealtimeServer {
 	private subscribe(
 		ws: ServerWebSocket<unknown>,
 		table: string,
+		event: "INSERT" | "UPDATE" | "DELETE" | "*" = "*",
 		filter?: Record<string, unknown>,
 	): void {
 		const client = this.clients.get(ws);
@@ -245,7 +287,9 @@ export class RealtimeServer {
 			return;
 		}
 
-		const existingSubscription = client.subscriptions.has(table);
+		// Create subscription key that includes event type
+		const subscriptionKey = `${table}:${event}`;
+		const existingSubscription = client.subscriptions.has(subscriptionKey);
 		if (
 			!existingSubscription &&
 			client.subscriptions.size >= this.config.maxSubscriptionsPerClient
@@ -255,37 +299,46 @@ export class RealtimeServer {
 			return;
 		}
 
-		const tableSet = this.tableSubscribers.get(table) ?? new Set<ServerWebSocket<unknown>>();
-		const alreadyInTableSet = tableSet.has(ws);
-		if (!alreadyInTableSet && tableSet.size >= this.config.maxSubscribersPerTable) {
-			realtimeLogger.warn(`Table subscriber cap reached for ${table}`);
+		// Track subscribers by table+event for efficient filtering
+		const tableEventKey = `${table}:${event}`;
+		const tableEventSet = this.tableEventSubscribers.get(tableEventKey) ?? new Set<ServerWebSocket<unknown>>();
+		if (!tableEventSet.has(ws) && tableEventSet.size >= this.config.maxSubscribersPerTable) {
+			realtimeLogger.warn(`Table event subscriber cap reached for ${tableEventKey}`);
 			this.safeSend(ws, { error: "Table subscription limit reached" });
 			return;
 		}
 
-		client.subscriptions.set(table, { table, filter });
-		tableSet.add(ws);
-		this.tableSubscribers.set(table, tableSet);
+		client.subscriptions.set(subscriptionKey, { table, event, filter });
+		tableEventSet.add(ws);
+		this.tableEventSubscribers.set(tableEventKey, tableEventSet);
 
-		this.safeSend(ws, { type: "subscribed", table, filter });
-		realtimeLogger.debug(`Client subscribed to ${table}`);
+		this.safeSend(ws, { type: "subscribed", table, event, filter });
+		realtimeLogger.debug(`Client subscribed to ${table} for ${event} events`);
 	}
 
-	private unsubscribe(ws: ServerWebSocket<unknown>, table: string): void {
+	private unsubscribe(
+		ws: ServerWebSocket<unknown>,
+		table: string,
+		event: "INSERT" | "UPDATE" | "DELETE" | "*" = "*",
+	): void {
 		const client = this.clients.get(ws);
 		if (!client) {
 			return;
 		}
 
-		client.subscriptions.delete(table);
-		const subscribers = this.tableSubscribers.get(table);
-		subscribers?.delete(ws);
-
-		if (subscribers && subscribers.size === 0) {
-			this.tableSubscribers.delete(table);
+		// Remove subscription with specific event type
+		const subscriptionKey = `${table}:${event}`;
+		client.subscriptions.delete(subscriptionKey);
+		
+		// Clean up table+event subscriber tracking
+		const tableEventKey = `${table}:${event}`;
+		const tableEventSubs = this.tableEventSubscribers.get(tableEventKey);
+		tableEventSubs?.delete(ws);
+		if (tableEventSubs && tableEventSubs.size === 0) {
+			this.tableEventSubscribers.delete(tableEventKey);
 		}
 
-		this.safeSend(ws, { type: "unsubscribed", table });
+		this.safeSend(ws, { type: "unsubscribed", table, event });
 	}
 
 	private matchesFilter(filter: Record<string, unknown> | undefined, payload: unknown): boolean {
