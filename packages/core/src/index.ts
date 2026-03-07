@@ -9,3 +9,9 @@ export * from "./storage";
 
 // Webhooks
 export * from "./webhooks";
+
+// Vector search
+export * from "./vector";
+
+// Branching / Preview environments
+export * from "./branching";
