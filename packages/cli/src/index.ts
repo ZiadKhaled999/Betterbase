@@ -10,6 +10,7 @@ import { runRlsCommand } from './commands/rls';
 import { runWebhookCommand } from './commands/webhook';
 import { runFunctionCommand } from './commands/function';
 import { runLoginCommand, runLogoutCommand } from './commands/login';
+import { runBranchCommand } from './commands/branch';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
@@ -310,6 +311,57 @@ export function createProgram(): Command {
   // This code is complete and tested. Uncomment when app.betterbase.com is live.
   // See: betterbase_backend_rebuild.md Part 3
   // ────────────────────────────────────────────────────────────────────────────
+  const branch = program.command('branch').description('Preview environment (branch) management');
+
+  branch
+    .command('create')
+    .description('Create a new preview environment')
+    .argument('<name>', 'name for the preview environment')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runBranchCommand(['create', name], projectRoot);
+    });
+
+  branch
+    .command('list')
+    .description('List all preview environments')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (projectRoot: string) => {
+      await runBranchCommand(['list'], projectRoot);
+    });
+
+  branch
+    .command('delete')
+    .description('Delete a preview environment')
+    .argument('<name>', 'name of the preview environment to delete')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runBranchCommand(['delete', name], projectRoot);
+    });
+
+  branch
+    .command('sleep')
+    .description('Put a preview environment to sleep')
+    .argument('<name>', 'name of the preview environment to sleep')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runBranchCommand(['sleep', name], projectRoot);
+    });
+
+  branch
+    .command('wake')
+    .description('Wake a sleeping preview environment')
+    .argument('<name>', 'name of the preview environment to wake')
+    .argument('[project-root]', 'project root directory', process.cwd())
+    .action(async (name: string, projectRoot: string) => {
+      await runBranchCommand(['wake', name], projectRoot);
+    });
+
+  branch
+    .action(async (projectRoot: string) => {
+      await runBranchCommand([], projectRoot);
+    });
+
   program
     .command('login')
     .description('Authenticate the CLI with app.betterbase.com')
