@@ -286,6 +286,187 @@ export class AuthClient {
 		}
 		this.onAuthStateChange?.(token);
 	}
+
+	async sendMagicLink(email: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			// Make direct API call since better-auth client may not have the plugin typed
+			const response = await this.fetchImpl(`${this.url}/api/auth/magic-link/send`, {
+				method: "POST",
+				headers: this.headers,
+				body: JSON.stringify({ email }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to send magic link", data),
+				};
+			}
+
+			return {
+				data: { message: "Magic link sent successfully" },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async verifyMagicLink(token: string): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			// Make direct API call to verify magic link
+			const response = await this.fetchImpl(`${this.url}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`, {
+				method: "GET",
+				headers: this.headers,
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid or expired token", data),
+				};
+			}
+
+			if (data.token) {
+				this.storage?.setItem("betterbase_session", data.token);
+				this.onAuthStateChange?.(data.token);
+			}
+
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: data.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: data.user?.id ?? "",
+			};
+			const user: User = {
+				id: data.user?.id ?? "",
+				name: data.user?.name ?? "",
+				email: data.user?.email ?? "",
+				emailVerified: data.user?.emailVerified ?? false,
+				image: data.user?.image ?? null,
+				createdAt: data.user?.createdAt ? new Date(data.user.createdAt) : new Date(),
+				updatedAt: data.user?.updatedAt ? new Date(data.user.updatedAt) : new Date(),
+			};
+
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async sendOtp(email: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			// Make direct API call
+			const response = await this.fetchImpl(`${this.url}/api/auth/otp/send`, {
+				method: "POST",
+				headers: this.headers,
+				body: JSON.stringify({ email }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to send OTP", data),
+				};
+			}
+
+			return {
+				data: { message: "OTP sent successfully" },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async verifyOtp(email: string, code: string): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			// Make direct API call to verify OTP
+			const response = await this.fetchImpl(`${this.url}/api/auth/otp/verify`, {
+				method: "POST",
+				headers: this.headers,
+				body: JSON.stringify({ email, code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid or expired OTP", data),
+				};
+			}
+
+			if (data.token) {
+				this.storage?.setItem("betterbase_session", data.token);
+				this.onAuthStateChange?.(data.token);
+			}
+
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: data.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: data.user?.id ?? "",
+			};
+			const user: User = {
+				id: data.user?.id ?? "",
+				name: data.user?.name ?? "",
+				email: data.user?.email ?? "",
+				emailVerified: data.user?.emailVerified ?? false,
+				image: data.user?.image ?? null,
+				createdAt: data.user?.createdAt ? new Date(data.user.createdAt) : new Date(),
+				updatedAt: data.user?.updatedAt ? new Date(data.user.updatedAt) : new Date(),
+			};
+
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
 }
 
 export function createAuthClientInstance(config: BetterBaseClientConfig): BetterAuthClient {
