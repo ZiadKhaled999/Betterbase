@@ -1,6 +1,6 @@
 # BetterBase — Complete Codebase Map
 
-> Last updated: 2026-03-06
+> Last updated: 2026-03-07
 
 ## Project Identity
 
@@ -357,6 +357,7 @@ betterbase/
   - `DatabaseConnection`: Database connection wrapper
   - `DrizzleMigrationDriver`: Migration driver interface
   - `ProviderAdapter`: Provider adapter interface
+  - `onchange()`: CDC (Change Data Capture) callback for database changes
 - **Provider-Specific Types:**
   - `NeonProviderConfig`, `NeonDatabaseConnection`, `NeonMigrationDriver`
   - `TursoProviderConfig`, `TursoDatabaseConnection`, `TursoMigrationDriver`
@@ -426,6 +427,16 @@ betterbase/
   - Type guard to check if value is a valid PolicyDefinition
   - Merges multiple policy configs for the same table
 
+#### [`rls/evaluator.ts`](packages/core/src/rls/evaluator.ts)
+**Purpose:** RLS Policy Evaluator for enforcing row-level security.
+- **Exports:** `evaluatePolicy`, `applyRLSSelect`, `applyRLSInsert`, `applyRLSUpdate`, `applyRLSDelete`
+- **Key Features:**
+  - Evaluates RLS policies for database operations
+  - Supports SELECT, INSERT, UPDATE, DELETE operations
+  - SQLite-compatible policy evaluation
+  - `evaluatePolicy()` function for evaluating policy expressions
+  - Applies RLS policies to Drizzle queries
+
 ### storage/
 
 #### [`storage/index.ts`](packages/core/src/storage/index.ts)
@@ -458,6 +469,121 @@ betterbase/
   - `UploadResult`: Result of successful upload
   - `StorageObject`: Represents a storage object
   - `StorageAdapter`: Core storage adapter interface
+  - `AllowedMimeTypes`: Array of allowed MIME types for uploads
+  - `BucketConfig`: Bucket configuration with size limits and allowed types
+
+#### [`storage/policy-engine.ts`](packages/core/src/storage/policy-engine.ts)
+**Purpose:** Storage Policy Engine for evaluating access policies.
+- **Exports:** `evaluateStoragePolicy`, `checkStorageAccess`, `StoragePolicy`
+- **Key Features:**
+  - Evaluates storage access policies
+  - Supports path-based access control
+  - Integrates with RLS user context
+  - New: `evaluateStoragePolicy()` function for policy evaluation
+
+### vector/
+
+Vector Search module for pgvector support in PostgreSQL.
+
+#### [`vector/types.ts`](packages/core/src/vector/types.ts)
+**Purpose:** Vector Search Type Definitions.
+- **Key Types:**
+  - `EmbeddingProvider`: "openai" | "cohere" | "huggingface" | "custom"
+  - `SimilarityMetric`: "cosine" | "euclidean" | "inner_product"
+  - `EmbeddingConfig`: Configuration for embedding generation
+  - `EmbeddingInput`: Input for generating an embedding
+  - `EmbeddingResult`: Generated embedding result
+  - `SearchOptions`: Options for vector search
+  - `VectorSearchResult`: Search result with similarity score
+
+#### [`vector/embeddings.ts`](packages/core/src/vector/embeddings.ts)
+**Purpose:** Embedding Generation Providers.
+- **Exports:** `generateEmbedding`, `generateEmbeddings`, `normalizeVector`, `computeCosineSimilarity`, `createEmbeddingConfig`, `EmbeddingProviderBase`, `OpenAIEmbeddingProvider`, `CohereEmbeddingProvider`, `createEmbeddingProvider`, `DEFAULT_EMBEDDING_CONFIGS`, `validateEmbeddingDimensions`
+- **Key Features:**
+  - OpenAI embeddings provider (text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002)
+  - Cohere embeddings provider (embed-english-v3.0, embed-multilingual-v3.0)
+  - Vector normalization utilities
+  - Cosine similarity computation
+  - Configurable embedding dimensions
+
+#### [`vector/search.ts`](packages/core/src/vector/search.ts)
+**Purpose:** Vector Similarity Search Functions.
+- **Exports:** `VECTOR_OPERATORS`, `vectorDistance`, `cosineDistance`, `euclideanDistance`, `innerProduct`, `vectorSearch`, `createVectorIndex`
+- **Key Features:**
+  - pgvector operator mappings for PostgreSQL
+  - Cosine distance calculation
+  - Euclidean distance calculation
+  - Inner product calculation
+  - Vector search with filtering and pagination
+  - Drizzle ORM integration for type-safe queries
+
+#### [`vector/index.ts`](packages/core/src/vector/index.ts)
+**Purpose:** Vector Module - Main entry point.
+- **Exports:** All types and functions from the vector module
+- **Key Features:**
+  - Unified API for embedding generation and vector search
+  - Support for multiple embedding providers
+  - Type-safe vector operations with Drizzle ORM
+
+### branching/
+
+Preview Environments module for creating isolated development branches.
+
+#### [`branching/types.ts`](packages/core/src/branching/types.ts)
+**Purpose:** Branching/Preview Environment Types.
+- **Key Types:**
+  - `BranchStatus`: Enum (ACTIVE, SLEEPING, DELETED)
+  - `BranchConfig`: Configuration for a preview environment
+  - `PreviewEnvironment`: Complete preview environment definition
+  - `CreateBranchOptions`: Options for creating a new branch
+  - `BranchingConfig`: Global branching configuration
+  - `BranchOperationResult`: Result of branch operations
+  - `BranchListResult`: List of branches with pagination
+
+#### [`branching/database.ts`](packages/core/src/branching/database.ts)
+**Purpose:** Database Branching for Preview Environments.
+- **Exports:** `DatabaseBranching`, `createDatabaseBranching`, `buildBranchConfig`
+- **Key Features:**
+  - Creates isolated database copies for preview environments
+  - Supports PostgreSQL database cloning
+  - Manages connection strings for branch databases
+  - Handles database cleanup on branch deletion
+
+#### [`branching/storage.ts`](packages/core/src/branching/storage.ts)
+**Purpose:** Storage Branching for Preview Environments.
+- **Exports:** `StorageBranching`, `createStorageBranching`
+- **Key Features:**
+  - Creates isolated storage buckets for preview environments
+  - Supports S3-compatible storage backends
+  - Manages storage namespace per branch
+  - Handles storage cleanup on branch deletion
+
+#### [`branching/index.ts`](packages/core/src/branching/index.ts)
+**Purpose:** Branching Module - Main Orchestration.
+- **Exports:** `BranchManager`, `createBranchManager`, `getAllBranches`, `clearAllBranches`
+- **Key Features:**
+  - Orchestrates database and storage branching together
+  - Creates and manages preview environments
+  - Handles branch sleep/wake cycles
+  - Provides unified API for branch operations
+
+### auto-rest.ts
+
+#### [`auto-rest.ts`](packages/core/src/auto-rest.ts)
+**Purpose:** Automatic CRUD Route Generation from Drizzle Schema.
+- **Exports:** `mountAutoRest`, `AutoRestOptions`, `DrizzleTable`, `DrizzleDB`
+- **Key Features:**
+  - Runtime route registration for all tables in schema
+  - Auto-generates full CRUD operations
+  - Configurable base path (default: /api)
+  - Supports table exclusion
+  - RLS enforcement option
+  - Generated Routes:
+    - `GET /api/:table` - List all rows (paginated)
+    - `GET /api/:table/:id` - Get single row by ID
+    - `POST /api/:table` - Insert new row
+    - `PATCH /api/:table/:id` - Update existing row
+    - `DELETE /api/:table/:id` - Delete row
 
 ### webhooks/
 
@@ -526,6 +652,17 @@ betterbase/
   - Manages session token in localStorage
   - On auth state change callback
   - Fallback storage adapter
+  - **New Authentication Methods:**
+    - `sendMagicLink(email)` - Send magic link for passwordless login
+    - `verifyMagicLink(email, code)` - Verify magic link code
+    - `sendOtp(email)` - Send one-time password
+    - `verifyOtp(email, code)` - Verify OTP code
+    - `mfa.enable()` - Enable multi-factor authentication
+    - `mfa.verify(code)` - Verify MFA code
+    - `mfa.disable()` - Disable MFA
+    - `mfa.challenge()` - Challenge MFA
+    - `sendPhoneVerification(phone)` - Send phone verification SMS
+    - `verifyPhone(phone, code)` - Verify phone number
 
 #### [`src/client.ts`](packages/client/src/client.ts)
 **Purpose:** Main BetterBase client constructor.
@@ -701,6 +838,27 @@ Canonical `@betterbase/cli` implementation - the `bb` command-line tool.
 - **Internal Deps:** `../utils/logger`
 - **Usage Patterns:** Register and manage webhooks for database events.
 - **Implementation Details:** Handles webhook registration and event dispatch.
+- **External Deps:** `chalk`
+
+#### [`commands/branch.ts`](packages/cli/src/commands/branch.ts)
+**Purpose:** `bb branch` command - Preview Environment management.
+- **Exports:** `runBranchCreateCommand`, `runBranchDeleteCommand`, `runBranchListCommand`, `runBranchStatusCommand`, `runBranchWakeCommand`, `runBranchSleepCommand`
+- **Key Functions:**
+  - `runBranchCreateCommand` - Creates a new preview environment
+  - `runBranchDeleteCommand` - Deletes a preview environment
+  - `runBranchListCommand` - Lists all preview environments
+  - `runBranchStatusCommand` - Checks branch status
+  - `runBranchWakeCommand` - Wakes a sleeping preview
+  - `runBranchSleepCommand` - Puts a preview to sleep
+- **Key Features:**
+  - `bb branch create <name>` - Create preview environment
+  - `bb branch delete <name>` - Delete preview environment
+  - `bb branch list` - List all preview environments
+  - `bb branch status <name>` - Check branch status
+  - `bb branch wake <name>` - Wake sleeping preview
+  - `bb branch sleep <name>` - Sleep preview
+- **Internal Deps:** `../utils/logger`, `@betterbase/shared`, `@betterbase/core/branching`
+- **Usage Patterns:** Manage preview environments for development branches.
 - **External Deps:** `chalk`
 
 ### CLI Utilities

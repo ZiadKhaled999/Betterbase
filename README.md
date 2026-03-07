@@ -53,6 +53,12 @@ BetterBase aims to be the most developer-friendly BaaS platform by:
 | **Serverless Functions** | Deploy custom API functions |
 | **Storage API** | S3-compatible object storage |
 | **Webhooks** | Event-driven architecture with signed payloads |
+| **Vector Search** | pgvector-powered similarity search with embeddings support |
+| **Branching/Preview Environments** | Create isolated development environments for each branch |
+| **Auto-REST** | Automatic CRUD route generation from Drizzle schema |
+| **Magic Link Auth** | Passwordless authentication via email magic links |
+| **MFA** | Multi-factor authentication support |
+| **Phone Auth** | Phone number verification via SMS/OTP |
 
 ---
 
@@ -511,6 +517,67 @@ bun run dev
 
 Your server is now running at `http://localhost:3000`.
 
+### Configuration Options
+
+BetterBase can be configured using `betterbase.config.ts`:
+
+```typescript
+import { defineConfig } from '@betterbase/core';
+
+export default defineConfig({
+  // Auto-REST: Automatic CRUD route generation
+  autoRest: {
+    enabled: true,
+    excludeTables: ['internal_logs', 'migrations'],
+  },
+  
+  // Storage policies for access control
+  storagePolicies: [
+    {
+      bucket: 'avatars',
+      allow: { public: true },
+      maxFileSize: 1024 * 1024 * 2, // 2MB
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    },
+  ],
+  
+  // Branching: Preview Environments configuration
+  branching: {
+    enabled: true,
+    maxPreviews: 10,
+    defaultSleepTimeout: 3600, // seconds
+  },
+  
+  // Vector search configuration
+  vector: {
+    provider: 'openai',
+    model: 'text-embedding-3-small',
+    dimensions: 1536,
+  },
+});
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Server port | `3000` |
+| `NODE_ENV` | Environment (development/production) | `development` |
+| `DB_PATH` | SQLite database path | `local.db` |
+| `DATABASE_URL` | PostgreSQL/MySQL connection string | — |
+| `STORAGE_PROVIDER` | Storage provider (s3, r2, backblaze, minio) | `s3` |
+| `STORAGE_BUCKET` | Default storage bucket name | `storage` |
+| `STORAGE_ALLOWED_MIME_TYPES` | Comma-separated allowed MIME types | — |
+| `STORAGE_MAX_FILE_SIZE` | Maximum file size in bytes | 10485760 |
+| `SMTP_HOST` | SMTP server host | — |
+| `SMTP_PORT` | SMTP server port | 587 |
+| `SMTP_USER` | SMTP username | — |
+| `SMTP_PASS` | SMTP password | — |
+| `SMTP_FROM` | SMTP from email address | — |
+| `TWILIO_ACCOUNT_SID` | Twilio Account SID | — |
+| `TWILIO_AUTH_TOKEN` | Twilio Auth Token | — |
+| `TWILIO_PHONE_NUMBER` | Twilio phone number | — |
+
 ---
 
 ## CLI Reference
@@ -671,6 +738,30 @@ bb webhook list
 bb webhook delete webhook-id
 ```
 
+#### `bb branch`
+
+Manage preview environments (branches) for isolated development.
+
+```bash
+# Create a new preview environment
+bb branch create my-feature
+
+# Delete a preview environment
+bb branch delete my-feature
+
+# List all preview environments
+bb branch list
+
+# Check branch status
+bb branch status my-feature
+
+# Wake a sleeping preview
+bb branch wake my-feature
+
+# Sleep a preview to save resources
+bb branch sleep my-feature
+```
+
 ---
 
 ## Client SDK
@@ -796,6 +887,15 @@ const { error } = await client.auth.signOut();
 | `.signIn(email, password)` | `string, string` | Sign in with credentials |
 | `.signOut()` | — | End current session |
 | `.getSession()` | — | Get current session |
+| `.sendMagicLink(email)` | `string` | Send magic link for passwordless login |
+| `.verifyMagicLink(email, code)` | `string, string` | Verify magic link code |
+| `.sendOtp(email)` | `string` | Send one-time password |
+| `.verifyOtp(email, code)` | `string, string` | Verify OTP code |
+| `.mfa.enable()` | — | Enable multi-factor authentication |
+| `.mfa.verify(code)` | `string` | Verify MFA code |
+| `.mfa.disable()` | — | Disable MFA |
+| `.sendPhoneVerification(phone)` | `string` | Send phone verification SMS |
+| `.verifyPhone(phone, code)` | `string, string` | Verify phone number |
 
 ### Realtime Subscriptions
 
@@ -864,6 +964,26 @@ const { error } = await client.storage.delete('avatars/user123.png');
 | `POST` | `/api/auth/signout` | Sign out user |
 | `GET` | `/api/auth/session` | Get current session |
 | `POST` | `/api/auth/refresh` | Refresh session |
+| `POST` | `/api/auth/magic-link` | Send magic link email |
+| `GET` | `/api/auth/magic-link/verify` | Verify magic link |
+| `POST` | `/api/auth/otp/send` | Send OTP |
+| `POST` | `/api/auth/otp/verify` | Verify OTP |
+| `POST` | `/api/auth/mfa/enable` | Enable MFA |
+| `POST` | `/api/auth/mfa/verify` | Verify MFA |
+| `POST` | `/api/auth/mfa/disable` | Disable MFA |
+| `POST` | `/api/auth/mfa/challenge` | MFA challenge |
+| `POST` | `/api/auth/phone/send` | Send SMS verification |
+| `POST` | `/api/auth/phone/verify` | Verify SMS code |
+
+#### Auto-REST (Automatic CRUD)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/:table` | List all records (paginated) |
+| `GET` | `/api/:table/:id` | Get single record by ID |
+| `POST` | `/api/:table` | Create new record |
+| `PATCH` | `/api/:table/:id` | Update record |
+| `DELETE` | `/api/:table/:id` | Delete record |
 
 #### Storage
 
