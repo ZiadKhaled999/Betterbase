@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { magicLink } from "better-auth/plugins/magic-link";
+import { twoFactor } from "better-auth/plugins/two-factor";
 import { db } from "../db";
 import * as schema from "../db/schema";
 
@@ -36,6 +37,7 @@ export const auth = betterAuth({
 				console.log(`[PROD] Magic Link would be sent to ${email}: ${url}`);
 			},
 		}),
+		twoFactor(),
 	],
 });
 

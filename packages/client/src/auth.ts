@@ -26,6 +26,7 @@ export interface Session {
 	ipAddress: string | null;
 	userAgent: string | null;
 	userId: string;
+	requiresMFA?: boolean;
 }
 
 interface StorageAdapter {
@@ -425,6 +426,160 @@ export class AuthClient {
 				return {
 					data: null,
 					error: new AuthError(data.error?.message ?? "Invalid or expired OTP", data),
+				};
+			}
+
+			if (data.token) {
+				this.storage?.setItem("betterbase_session", data.token);
+				this.onAuthStateChange?.(data.token);
+			}
+
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: data.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: data.user?.id ?? "",
+			};
+			const user: User = {
+				id: data.user?.id ?? "",
+				name: data.user?.name ?? "",
+				email: data.user?.email ?? "",
+				emailVerified: data.user?.emailVerified ?? false,
+				image: data.user?.image ?? null,
+				createdAt: data.user?.createdAt ? new Date(data.user.createdAt) : new Date(),
+				updatedAt: data.user?.updatedAt ? new Date(data.user.updatedAt) : new Date(),
+			};
+
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	// Two-Factor Authentication methods
+	async mfaEnable(code: string): Promise<BetterBaseResponse<{ qrUri: string; backupCodes: string[] }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/enable`, {
+				method: "POST",
+				headers: this.headers,
+				body: JSON.stringify({ code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to enable MFA", data),
+				};
+			}
+
+			return {
+				data: { qrUri: data.qrUri, backupCodes: data.backupCodes },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async mfaVerify(code: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/verify`, {
+				method: "POST",
+				headers: this.headers,
+				body: JSON.stringify({ code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid TOTP code", data),
+				};
+			}
+
+			return {
+				data: { message: data.message },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async mfaDisable(code: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/disable`, {
+				method: "POST",
+				headers: this.headers,
+				body: JSON.stringify({ code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to disable MFA", data),
+				};
+			}
+
+			return {
+				data: { message: data.message },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async mfaChallenge(code: string): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/challenge`, {
+				method: "POST",
+				headers: this.headers,
+				body: JSON.stringify({ code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid TOTP code", data),
 				};
 			}
 
