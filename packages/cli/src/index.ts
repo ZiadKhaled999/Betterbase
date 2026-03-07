@@ -14,6 +14,32 @@ import { runBranchCommand } from './commands/branch';
 import * as logger from './utils/logger';
 import packageJson from '../package.json';
 
+// Commands that don't require authentication
+const PUBLIC_COMMANDS = ['login', 'logout', 'version', 'help'];
+
+/**
+ * Check if the user is authenticated before running a command.
+ */
+async function checkAuthHook(): Promise<void> {
+  const commandName = process.argv[2];
+  
+  // Skip auth check for public commands
+  if (PUBLIC_COMMANDS.includes(commandName)) {
+    return;
+  }
+  
+  // Check authentication status
+  const authenticated = await isAuthenticated();
+  if (!authenticated) {
+    logger.error(
+      "Not logged in. Run: bb login\n" +
+      "This connects your CLI with BetterBase so your project\n" +
+      "can be registered and managed from the dashboard."
+    );
+    process.exit(1);
+  }
+}
+
 /**
  * Create and configure the BetterBase CLI program.
  */
@@ -24,7 +50,8 @@ export function createProgram(): Command {
     .name('bb')
     .description('BetterBase CLI')
     .version(packageJson.version, '-v, --version', 'display the CLI version')
-    .exitOverride();
+    .exitOverride()
+    .hook('preAction', checkAuthHook);
 
   program
     .command('init')

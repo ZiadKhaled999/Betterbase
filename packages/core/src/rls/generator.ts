@@ -84,7 +84,7 @@ function generatePolicyStatement(
 }
 
 /**
- * Convert a PolicyDefinition to an array of SQL statements
+ * Convert a PolicyDefinition to SQL statements
  * @param policy - The policy definition
  * @returns Array of SQL statements to apply the policy
  *

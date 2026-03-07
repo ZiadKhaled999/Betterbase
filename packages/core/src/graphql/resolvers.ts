@@ -464,8 +464,12 @@ export function generateResolvers(
 	const resolvers: Resolvers = {
 		Query: {},
 		Mutation: {},
-		Subscription: {},
 	};
+
+	// Only include Subscription if enabled in config
+	if (mergedConfig.subscriptions) {
+		resolvers.Subscription = {};
+	}
 
 	// Generate resolvers for each table
 	for (const [tableName, table] of Object.entries(tables)) {

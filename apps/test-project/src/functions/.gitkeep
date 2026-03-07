@@ -1,0 +1,21 @@
+# Edge Functions
+
+This directory contains your edge functions. Each subdirectory represents a single function.
+
+## Creating a Function
+
+```bash
+bb function create my-function
+```
+
+This creates:
+- `src/functions/my-function/index.ts` - The function code
+- `src/functions/my-function/config.ts` - Function configuration
+
+## Available Commands
+
+- `bb function create <name>` - Create a new edge function
+- `bb function dev <name>` - Run function locally with hot reload
+- `bb function build <name>` - Bundle function for deployment
+- `bb function list` - List all functions
+- `bb function deploy <name>` - Deploy to Cloudflare Workers or Vercel Edge
