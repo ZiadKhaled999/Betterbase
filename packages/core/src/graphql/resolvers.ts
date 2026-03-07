@@ -7,6 +7,10 @@
 
 import { and, eq } from "drizzle-orm";
 
+// Vector search imports
+import { vectorSearch, validateEmbedding } from "../vector/search";
+import { generateEmbedding } from "../vector/embeddings";
+
 /**
  * Type for database connection - using any for flexibility
  */
@@ -584,5 +588,151 @@ export function requireAuth(resolver: GraphQLResolver): GraphQLResolver {
 			throw new Error("Authentication required");
 		}
 		return resolver(parent, args, context, info);
+	};
+}
+
+/**
+ * Configuration for vector search resolvers
+ */
+export interface VectorSearchResolverConfig {
+	/** The name of the vector column in the table */
+	vectorColumn: string;
+	/** Optional: Text column to generate embedding from */
+	textColumn?: string;
+	/** Embedding configuration */
+	embeddingConfig?: {
+		provider: "openai" | "cohere" | "huggingface" | "custom";
+		model?: string;
+		dimensions?: number;
+		apiKey?: string;
+	};
+	/** Default search options */
+	defaultOptions?: {
+		limit?: number;
+		threshold?: number;
+		metric?: "cosine" | "euclidean" | "inner_product";
+	};
+}
+
+/**
+ * Generate a vector search resolver for a table
+ *
+ * @param tableName - Name of the table to search
+ * @param table - The Drizzle table definition
+ * @param db - The Drizzle database connection
+ * @param config - Vector search configuration
+ * @returns A resolver function for vector search
+ *
+ * @example
+ * ```typescript
+ * import { generateVectorSearchResolver } from './resolvers';
+ *
+ * const vectorResolvers = generateVectorSearchResolver(
+ *   'documents',
+ *   documents,
+ *   db,
+ *   {
+ *     vectorColumn: 'embedding',
+ *     textColumn: 'content',
+ *     embeddingConfig: { provider: 'openai' },
+ *   }
+ * );
+ *
+ * // Add to your resolvers
+ * const resolvers = {
+ *   Query: {
+ *     searchDocuments: vectorResolvers.search,
+ *   },
+ * };
+ * ```
+ */
+export function generateVectorSearchResolver<T = Record<string, unknown>>(
+	tableName: string,
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	table: any,
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	db: any,
+	config: VectorSearchResolverConfig,
+) {
+	return {
+		/**
+		 * Search by embedding vector directly
+		 */
+		searchByVector: async (
+			_parent: unknown,
+			args: Record<string, unknown>,
+			_context: GraphQLContext,
+		): Promise<Array<{ item: T; score: number }>> => {
+			try {
+				const embedding = args.embedding as number[];
+				const limit = (args.limit as number) || config.defaultOptions?.limit || 10;
+				const threshold = args.threshold as number | undefined;
+				const metric = (args.metric as "cosine" | "euclidean" | "inner_product") ||
+					config.defaultOptions?.metric || "cosine";
+				const filter = args.filter as Record<string, unknown> | undefined;
+
+				if (!embedding || !Array.isArray(embedding)) {
+					throw new Error("embedding is required and must be an array");
+				}
+
+				validateEmbedding(embedding);
+
+				const results = await vectorSearch(db, table, config.vectorColumn, embedding, {
+					limit,
+					threshold,
+					metric,
+					filter,
+					includeScore: true,
+				});
+
+				return results as Array<{ item: T; score: number }>;
+			} catch (error) {
+				console.error(`[Vector Search Error]: ${error}`);
+				throw new Error(`Vector search failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+			}
+		},
+
+		/**
+		 * Search by text (generates embedding automatically)
+		 */
+		searchByText: async (
+			_parent: unknown,
+			args: Record<string, unknown>,
+			_context: GraphQLContext,
+		): Promise<Array<{ item: T; score: number }>> => {
+			try {
+				const text = args.text as string;
+				const limit = (args.limit as number) || config.defaultOptions?.limit || 10;
+				const threshold = args.threshold as number | undefined;
+				const metric = (args.metric as "cosine" | "euclidean" | "inner_product") ||
+					config.defaultOptions?.metric || "cosine";
+				const filter = args.filter as Record<string, unknown> | undefined;
+
+				if (!text || typeof text !== "string") {
+					throw new Error("text is required and must be a string");
+				}
+
+				// Generate embedding from text
+				const embeddingResult = await generateEmbedding(text, {
+					provider: config.embeddingConfig?.provider || "openai",
+					model: config.embeddingConfig?.model,
+					dimensions: config.embeddingConfig?.dimensions,
+					apiKey: config.embeddingConfig?.apiKey,
+				});
+
+				const results = await vectorSearch(db, table, config.vectorColumn, embeddingResult.embedding, {
+					limit,
+					threshold,
+					metric,
+					filter,
+					includeScore: true,
+				});
+
+				return results as Array<{ item: T; score: number }>;
+			} catch (error) {
+				console.error(`[Vector Search Error]: ${error}`);
+				throw new Error(`Vector search failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+			}
+		},
 	};
 }
