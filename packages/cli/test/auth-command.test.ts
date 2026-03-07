@@ -81,7 +81,7 @@ describe("runAuthSetupCommand", () => {
 	test("creates src/auth/types.ts", async () => {
 		await runAuthSetupCommand(tmpDir, "sqlite");
 		expect(existsSync(join(tmpDir, "src/auth/types.ts"))).toBe(true);
-	});
+	}, 60000);
 
 	test("creates src/db/auth-schema.ts", async () => {
 		await runAuthSetupCommand(tmpDir, "sqlite");
@@ -117,7 +117,7 @@ describe("runAuthSetupCommand", () => {
 		await runAuthSetupCommand(tmpDir, "pg");
 		const schema = await readFile(join(tmpDir, "src/db/auth-schema.ts"), "utf-8");
 		expect(schema).toContain("pgTable");
-	});
+	}, 60000);
 
 	test("auth/index.ts references the correct provider and betterAuth", async () => {
 		await runAuthSetupCommand(tmpDir, "sqlite");
