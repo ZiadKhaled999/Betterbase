@@ -1,4 +1,4 @@
-import type { ProviderType } from "@betterbase/shared";
+import type { ProviderType, DBEvent } from "@betterbase/shared";
 import { z } from "zod";
 
 /**
@@ -113,6 +113,12 @@ export interface DatabaseConnection {
 	close(): Promise<void>;
 	/** Get the connection status */
 	isConnected(): boolean;
+	/**
+	 * Register a callback for database change events (CDC)
+	 * This enables automatic event emission for INSERT, UPDATE, DELETE operations
+	 * @param callback - Function to call when a database change occurs
+	 */
+	onchange?(callback: (event: DBEvent) => void): void;
 }
 
 /**

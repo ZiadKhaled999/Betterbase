@@ -1,4 +1,4 @@
-import type { ProviderType } from "@betterbase/shared";
+import type { ProviderType, DBEvent } from "@betterbase/shared";
 import postgres from "postgres";
 import type {
 	DatabaseConnection,
@@ -15,6 +15,7 @@ type PostgresClient = ReturnType<typeof postgres>;
 /**
  * Supabase-specific database connection implementation
  * Uses direct Postgres connection (NOT @supabase/supabase-js)
+ * Includes CDC (Change Data Capture) using LISTEN/NOTIFY
  */
 class SupabaseConnection implements SupabaseDatabaseConnection {
 	readonly provider = "supabase" as const;
@@ -22,6 +23,8 @@ class SupabaseConnection implements SupabaseDatabaseConnection {
 	// Store the drizzle-compatible client for use with drizzle-orm
 	readonly drizzle: PostgresClient;
 	private _isConnected = false;
+	private _changeCallbacks: ((event: DBEvent) => void)[] = [];
+	private _listening = false;
 
 	constructor(connectionString: string) {
 		this.postgres = postgres(connectionString);
@@ -29,13 +32,60 @@ class SupabaseConnection implements SupabaseDatabaseConnection {
 		this._isConnected = true;
 	}
 
+	/**
+	 * Start listening for database change notifications
+	 * Supabase uses PostgreSQL LISTEN/NOTIFY
+	 */
+	private async _startListening(): Promise<void> {
+		if (this._listening) return;
+		
+		try {
+			await this.postgres.listen("db_changes", (payload: string) => {
+				try {
+					const data = JSON.parse(payload);
+					const event: DBEvent = {
+						table: data.table,
+						type: data.type,
+						record: data.record,
+						old_record: data.old_record,
+						timestamp: data.timestamp || new Date().toISOString(),
+					};
+					
+					for (const callback of this._changeCallbacks) {
+						callback(event);
+					}
+				} catch (error) {
+					console.error("[CDC] Failed to parse notification payload:", error);
+				}
+			});
+			this._listening = true;
+		} catch (error) {
+			console.error("[CDC] Failed to start listening:", error);
+		}
+	}
+
 	async close(): Promise<void> {
 		await this.postgres.end();
 		this._isConnected = false;
+		this._changeCallbacks = [];
+		this._listening = false;
 	}
 
 	isConnected(): boolean {
 		return this._isConnected;
+	}
+
+	/**
+	 * Register a callback for database change events (CDC)
+	 */
+	onchange(callback: (event: DBEvent) => void): void {
+		this._changeCallbacks.push(callback);
+		
+		if (!this._listening) {
+			this._startListening().catch((error) => {
+				console.error("[CDC] Failed to initialize LISTEN:", error);
+			});
+		}
 	}
 }
 

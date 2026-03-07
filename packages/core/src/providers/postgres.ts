@@ -1,4 +1,4 @@
-import type { ProviderType } from "@betterbase/shared";
+import type { ProviderType, DBEvent, DBEventType } from "@betterbase/shared";
 import postgres from "postgres";
 import type {
 	DatabaseConnection,
@@ -14,6 +14,7 @@ type PostgresClient = ReturnType<typeof postgres>;
 
 /**
  * Standard Postgres-specific database connection implementation
+ * Includes CDC (Change Data Capture) using LISTEN/NOTIFY
  */
 class PostgresConnection implements PostgresDatabaseConnection {
 	readonly provider = "postgres" as const;
@@ -21,6 +22,8 @@ class PostgresConnection implements PostgresDatabaseConnection {
 	// Store the drizzle-compatible client for use with drizzle-orm
 	readonly drizzle: PostgresClient;
 	private _isConnected = false;
+	private _changeCallbacks: ((event: DBEvent) => void)[] = [];
+	private _listening = false;
 
 	constructor(connectionString: string) {
 		this.postgres = postgres(connectionString);
@@ -28,13 +31,64 @@ class PostgresConnection implements PostgresDatabaseConnection {
 		this._isConnected = true;
 	}
 
+	/**
+	 * Start listening for database change notifications
+	 * This sets up the LISTEN command for pg_notify
+	 */
+	private async _startListening(): Promise<void> {
+		if (this._listening) return;
+		
+		try {
+			await this.postgres.listen("db_changes", (payload: string) => {
+				try {
+					const data = JSON.parse(payload);
+					const event: DBEvent = {
+						table: data.table,
+						type: data.type as DBEventType,
+						record: data.record,
+						old_record: data.old_record,
+						timestamp: data.timestamp || new Date().toISOString(),
+					};
+					
+					// Notify all registered callbacks
+					for (const callback of this._changeCallbacks) {
+						callback(event);
+					}
+				} catch (error) {
+					console.error("[CDC] Failed to parse notification payload:", error);
+				}
+			});
+			this._listening = true;
+		} catch (error) {
+			console.error("[CDC] Failed to start listening:", error);
+		}
+	}
+
 	async close(): Promise<void> {
 		await this.postgres.end();
 		this._isConnected = false;
+		this._changeCallbacks = [];
+		this._listening = false;
 	}
 
 	isConnected(): boolean {
 		return this._isConnected;
+	}
+
+	/**
+	 * Register a callback for database change events (CDC)
+	 * This enables automatic event emission for INSERT, UPDATE, DELETE operations
+	 * Uses PostgreSQL LISTEN/NOTIFY pattern
+	 */
+	onchange(callback: (event: DBEvent) => void): void {
+		this._changeCallbacks.push(callback);
+		
+		// Start listening on first callback registration
+		if (!this._listening) {
+			this._startListening().catch((error) => {
+				console.error("[CDC] Failed to initialize LISTEN:", error);
+			});
+		}
 	}
 }
 

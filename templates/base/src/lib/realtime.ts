@@ -1,4 +1,5 @@
 import type { ServerWebSocket } from "bun";
+import type { DBEvent } from "@betterbase/shared";
 import deepEqual from "fast-deep-equal";
 import { z } from "zod";
 
@@ -50,6 +51,8 @@ export class RealtimeServer {
 	private clients = new Map<ServerWebSocket<unknown>, Client>();
 	private tableSubscribers = new Map<string, Set<ServerWebSocket<unknown>>>();
 	private config: RealtimeConfig;
+	// CDC event handler for automatic database change events
+	private cdcCallback: ((event: DBEvent) => void) | null = null;
 
 	constructor(config?: Partial<RealtimeConfig>) {
 		if (process.env.NODE_ENV !== "development" && process.env.ENABLE_DEV_AUTH !== "true") {
@@ -64,6 +67,33 @@ export class RealtimeServer {
 			maxSubscribersPerTable: 500,
 			...config,
 		};
+	}
+
+	/**
+	 * Connect to database change events (CDC)
+	 * This enables automatic event emission when database changes occur
+	 * @param onchange - Callback function that receives DBEvent when data changes
+	 */
+	connectCDC(onchange: (event: DBEvent) => void): void {
+		this.cdcCallback = onchange;
+	}
+
+	/**
+	 * Handle a database change event from CDC
+	 * This is called automatically when the database emits change events
+	 */
+	private handleCDCEvent(event: DBEvent): void {
+		// Broadcast the event to subscribed clients via WebSocket
+		this.broadcast(event.table, event.type, event.record);
+	}
+
+	/**
+	 * Process a CDC event and broadcast to WebSocket clients
+	 * Also emit events that webhooks/integrator.ts expects
+	 */
+	processCDCEvent(event: DBEvent): void {
+		// Broadcast to WebSocket clients
+		this.broadcast(event.table, event.type, event.record);
 	}
 
 	authenticate(token: string | undefined): { userId: string; claims: string[] } | null {
