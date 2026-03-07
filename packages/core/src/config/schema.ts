@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { StoragePolicy } from "../storage/types";
+import type { VectorConfig } from "../vector/types";
 
 /**
  * Supported database provider types in BetterBase
@@ -69,10 +70,28 @@ export const BetterBaseConfigSchema = z
 				enabled: z.boolean().default(true),
 			})
 			.optional(),
+		vector: z
+			.object({
+				enabled: z.boolean().default(false),
+				provider: z.enum(["openai", "cohere", "huggingface", "custom"]).default("openai"),
+				apiKey: z.string().optional(),
+				model: z.string().optional(),
+				dimensions: z.number().optional(),
+				endpoint: z.string().optional(),
+			})
+			.optional(),
 		autoRest: z
 			.object({
 				enabled: z.boolean().default(true),
 				excludeTables: z.array(z.string()).default([]),
+			})
+			.optional(),
+		branching: z
+			.object({
+				enabled: z.boolean().default(true),
+				maxPreviews: z.number().min(1).max(50).default(10),
+				defaultSleepTimeout: z.number().min(60).default(3600),
+				storageEnabled: z.boolean().default(true),
 			})
 			.optional(),
 	})
