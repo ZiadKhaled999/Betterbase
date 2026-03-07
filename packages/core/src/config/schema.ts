@@ -63,6 +63,12 @@ export const BetterBaseConfigSchema = z
 				enabled: z.boolean().default(true),
 			})
 			.optional(),
+		autoRest: z
+			.object({
+				enabled: z.boolean().default(true),
+				excludeTables: z.array(z.string()).default([]),
+			})
+			.optional(),
 	})
 	.superRefine(
 		(

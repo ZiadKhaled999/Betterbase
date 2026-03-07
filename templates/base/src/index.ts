@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { initializeWebhooks } from "@betterbase/core/webhooks";
+import { mountAutoRest, type AutoRestOptions } from "@betterbase/core";
 import { Hono } from "hono";
 import { upgradeWebSocket, websocket } from "hono/bun";
 import config from "../betterbase.config";
@@ -7,6 +8,7 @@ import { auth } from "./auth";
 import { env } from "./lib/env";
 import { realtime } from "./lib/realtime";
 import { registerRoutes } from "./routes";
+import { db } from "./db";
 
 const app = new Hono();
 
@@ -65,6 +67,31 @@ if (graphqlEnabled) {
 		// GraphQL route not generated yet
 		if (env.NODE_ENV === "development") {
 			console.log('ℹ️  Run "bb graphql generate" to enable GraphQL API');
+		}
+	}
+}
+
+// Mount Auto-REST API if enabled
+const autoRestEnabled = config.autoRest?.enabled ?? true;
+if (autoRestEnabled) {
+	try {
+		// Dynamic import to handle case where db module may not exist
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const dbModule = require("./db");
+		const schema = dbModule.schema;
+		
+		if (schema) {
+			mountAutoRest(app, dbModule.db, schema, {
+				enabled: true,
+				excludeTables: config.autoRest?.excludeTables ?? [],
+				basePath: "/api",
+				enableRLS: true,
+			});
+			console.log("⚡ Auto-REST API enabled");
+		}
+	} catch (error) {
+		if (env.NODE_ENV === "development") {
+			console.log("ℹ️  Auto-REST requires a database schema to be defined");
 		}
 	}
 }
