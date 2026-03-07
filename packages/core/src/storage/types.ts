@@ -48,6 +48,30 @@ export interface StorageObject {
 }
 
 /**
+ * Allowed MIME types configuration for a bucket
+ */
+export interface AllowedMimeTypes {
+	/** List of allowed MIME types (e.g., ['image/jpeg', 'image/png']) */
+	allow?: string[];
+	/** List of denied MIME types */
+	deny?: string[];
+	/** If true, only allow MIME types in the allow list */
+	allowListOnly?: boolean;
+}
+
+/**
+ * Bucket configuration options
+ */
+export interface BucketConfig {
+	/** Maximum file size in bytes */
+	maxFileSize?: number;
+	/** Allowed MIME types configuration */
+	allowedMimeTypes?: AllowedMimeTypes;
+	/** Allowed file extensions (e.g., ['jpg', 'png']) */
+	allowedExtensions?: string[];
+}
+
+/**
  * AWS S3 storage configuration
  */
 export interface S3Config {

@@ -36,6 +36,8 @@ export type {
 	UploadResult,
 	StorageObject,
 	StoragePolicy,
+	AllowedMimeTypes,
+	BucketConfig,
 } from "./types";
 export { createS3Adapter } from "./s3-adapter";
 export { checkStorageAccess, getPolicyDenialMessage } from "./policy-engine";
