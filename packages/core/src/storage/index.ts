@@ -35,8 +35,10 @@ export type {
 	SignedUrlOptions,
 	UploadResult,
 	StorageObject,
+	StoragePolicy,
 } from "./types";
 export { createS3Adapter } from "./s3-adapter";
+export { checkStorageAccess, getPolicyDenialMessage } from "./policy-engine";
 
 /**
  * Fluent API client bound to a specific bucket.

@@ -1,11 +1,19 @@
-import { type StorageFactory, createStorage } from "@betterbase/core/storage";
-import type { StorageConfig } from "@betterbase/core/storage";
+import { type StorageFactory, createStorage, type StoragePolicy, type StorageConfig, checkStorageAccess, getPolicyDenialMessage } from "@betterbase/core/storage";
 import type { Context, Next } from "hono";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { ZodError, z } from "zod";
 import { auth } from "../auth";
 import { parseBody } from "../middleware/validation";
+
+// Type for user from auth
+type AuthUser = { id: string; [key: string]: unknown };
+
+// Extended context type for storage operations
+interface StorageContext extends Context {
+	get(key: "user"): AuthUser | undefined;
+	get(key: "session"): unknown;
+}
 
 // Get storage config from environment variables
 function getStorageConfig(): StorageConfig | null {
@@ -62,9 +70,29 @@ function getStorageConfig(): StorageConfig | null {
 	}
 }
 
+// Get storage policies from environment variables
+function getStoragePolicies(): StoragePolicy[] {
+	const policiesJson = process.env.STORAGE_POLICIES;
+	if (!policiesJson) {
+		return [];
+	}
+
+	try {
+		const parsed = JSON.parse(policiesJson);
+		if (Array.isArray(parsed)) {
+			return parsed;
+		}
+		return [];
+	} catch {
+		console.warn("[Storage] Invalid STORAGE_POLICIES JSON, ignoring");
+		return [];
+	}
+}
+
 // Initialize storage factory
 const storageConfig = getStorageConfig();
 const storage: StorageFactory | null = storageConfig ? createStorage(storageConfig) : null;
+const storagePolicies = getStoragePolicies();
 
 // Validate bucket access - only allow configured bucket
 function validateBucket(bucket: string): void {
@@ -73,6 +101,25 @@ function validateBucket(bucket: string): void {
 	}
 	if (bucket !== storageConfig.bucket) {
 		throw new HTTPException(403, { message: "Invalid bucket access" });
+	}
+}
+
+// Check storage policy for an operation
+function checkPolicy(
+	operation: "upload" | "download" | "list" | "delete",
+	userId: string | null,
+	bucket: string,
+	path: string,
+): void {
+	// Fail-closed: if no policies are configured, deny by default
+	if (storagePolicies.length === 0) {
+		console.log(`[Storage Policy] No policies configured, denying ${operation} on ${path}`);
+		throw new HTTPException(403, { message: getPolicyDenialMessage(operation, path) });
+	}
+
+	const allowed = checkStorageAccess(storagePolicies, userId, bucket, operation, path);
+	if (!allowed) {
+		throw new HTTPException(403, { message: getPolicyDenialMessage(operation, path) });
 	}
 }
 
@@ -134,7 +181,7 @@ storageRouter.use("/*", async (c, next) => {
 });
 
 // GET /api/storage/:bucket - List files
-storageRouter.get("/:bucket", async (c) => {
+storageRouter.get("/:bucket", async (c: StorageContext) => {
 	try {
 		const bucket = c.req.param("bucket");
 		validateBucket(bucket);
@@ -143,7 +190,12 @@ storageRouter.get("/:bucket", async (c) => {
 			return c.json({ error: "Storage not configured" }, 503);
 		}
 
-		const prefix = c.req.query("prefix");
+		// Check list policy (allow public access if policy is 'true')
+		const user = c.get("user") as AuthUser | undefined;
+		const userId = user?.id || null;
+		const prefix = c.req.query("prefix") || "";
+		checkPolicy("list", userId, bucket, prefix);
+
 		const sanitizedPrefix = prefix ? sanitizePath(prefix) : undefined;
 		const result = await storage.from(bucket).list(sanitizedPrefix);
 
@@ -168,7 +220,7 @@ storageRouter.get("/:bucket", async (c) => {
 });
 
 // DELETE /api/storage/:bucket - Delete files
-storageRouter.delete("/:bucket", async (c) => {
+storageRouter.delete("/:bucket", async (c: StorageContext) => {
 	try {
 		const bucket = c.req.param("bucket");
 		validateBucket(bucket);
@@ -177,10 +229,20 @@ storageRouter.delete("/:bucket", async (c) => {
 			return c.json({ error: "Storage not configured" }, 503);
 		}
 
+		const user = c.get("user") as AuthUser | undefined;
+		if (!user) {
+			return c.json({ error: "Unauthorized" }, 401);
+		}
+
 		const body = await c.req.json().catch(() => ({}));
 		const parsed = parseBody(deleteFilesSchema, body);
 
-		// Validate all paths before deletion
+		// Validate all paths and check delete policy
+		for (const p of parsed.paths) {
+			const sanitizedPath = validatePath(p);
+			checkPolicy("delete", user.id, bucket, sanitizedPath);
+		}
+
 		const sanitizedPaths = parsed.paths.map((p: string) => validatePath(p));
 
 		const result = await storage.from(bucket).remove(sanitizedPaths);
@@ -211,13 +273,18 @@ storageRouter.delete("/:bucket", async (c) => {
 });
 
 // POST /api/storage/:bucket/upload - Upload a file
-storageRouter.post("/:bucket/upload", async (c) => {
+storageRouter.post("/:bucket/upload", async (c: StorageContext) => {
 	try {
 		const bucket = c.req.param("bucket");
 		validateBucket(bucket);
 
 		if (!storage) {
 			return c.json({ error: "Storage not configured" }, 503);
+		}
+
+		const user = c.get("user") as AuthUser | undefined;
+		if (!user) {
+			return c.json({ error: "Unauthorized" }, 401);
 		}
 
 		// Get content type from headers or form
@@ -239,6 +306,9 @@ storageRouter.post("/:bucket/upload", async (c) => {
 		// Extract and validate path from query param or use default
 		const pathInput = c.req.query("path") || `uploads/${Date.now()}-file`;
 		const path = validatePath(pathInput);
+
+		// Check upload policy before uploading
+		checkPolicy("upload", user.id, bucket, path);
 
 		const result = await storage.from(bucket).upload(path, body, {
 			contentType,
@@ -266,7 +336,7 @@ storageRouter.post("/:bucket/upload", async (c) => {
 });
 
 // GET /api/storage/:bucket/:key - Download a file
-storageRouter.get("/:bucket/:key", async (c) => {
+storageRouter.get("/:bucket/:key", async (c: StorageContext) => {
 	try {
 		const bucket = c.req.param("bucket");
 		const keyInput = c.req.param("key");
@@ -276,6 +346,11 @@ storageRouter.get("/:bucket/:key", async (c) => {
 		if (!storage) {
 			return c.json({ error: "Storage not configured" }, 503);
 		}
+
+		// Check download policy
+		const user = c.get("user") as AuthUser | undefined;
+		const userId = user?.id || null;
+		checkPolicy("download", userId, bucket, key);
 
 		const result = await storage.from(bucket).download(key);
 
@@ -310,7 +385,7 @@ storageRouter.get("/:bucket/:key", async (c) => {
 });
 
 // GET /api/storage/:bucket/:key/public - Get public URL
-storageRouter.get("/:bucket/:key/public", async (c) => {
+storageRouter.get("/:bucket/:key/public", async (c: StorageContext) => {
 	try {
 		const bucket = c.req.param("bucket");
 		const keyInput = c.req.param("key");
@@ -320,6 +395,11 @@ storageRouter.get("/:bucket/:key/public", async (c) => {
 		if (!storage) {
 			return c.json({ error: "Storage not configured" }, 503);
 		}
+
+		// Check download policy (allows anonymous if policy is 'true')
+		const user = c.get("user") as AuthUser | undefined;
+		const userId = user?.id || null;
+		checkPolicy("download", userId, bucket, key);
 
 		const publicUrl = storage.from(bucket).getPublicUrl(key);
 
@@ -334,7 +414,7 @@ storageRouter.get("/:bucket/:key/public", async (c) => {
 });
 
 // POST /api/storage/:bucket/:key/sign - Create signed URL
-storageRouter.post("/:bucket/:key/sign", async (c) => {
+storageRouter.post("/:bucket/:key/sign", async (c: StorageContext) => {
 	try {
 		const bucket = c.req.param("bucket");
 		const keyInput = c.req.param("key");
@@ -344,6 +424,11 @@ storageRouter.post("/:bucket/:key/sign", async (c) => {
 		if (!storage) {
 			return c.json({ error: "Storage not configured" }, 503);
 		}
+
+		// Check download policy for signing
+		const user = c.get("user") as AuthUser | undefined;
+		const userId = user?.id || null;
+		checkPolicy("download", userId, bucket, key);
 
 		const body = await c.req.json().catch(() => ({}));
 		const parsed = parseBody(signUrlSchema, body);

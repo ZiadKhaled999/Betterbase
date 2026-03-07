@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { StoragePolicy } from "../storage/types";
 
 /**
  * Supported database provider types in BetterBase
@@ -38,6 +39,11 @@ export const BetterBaseConfigSchema = z
 				bucket: z.string(),
 				region: z.string().optional(),
 				endpoint: z.string().optional(),
+				policies: z.array(z.object({
+					bucket: z.string(),
+					operation: z.enum(["upload", "download", "list", "delete", "*"]),
+					expression: z.string(),
+				})).default([]) as z.ZodType<StoragePolicy[]>,
 			})
 			.optional(),
 		webhooks: z

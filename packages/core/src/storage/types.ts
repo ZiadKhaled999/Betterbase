@@ -110,6 +110,30 @@ export interface ManagedConfig {
 export type StorageConfig = S3Config | R2Config | BackblazeConfig | MinioConfig | ManagedConfig;
 
 /**
+ * Storage policy for bucket operations
+ * Similar to RLS policies but for storage operations
+ */
+export interface StoragePolicy {
+	/** The bucket name this policy applies to */
+	bucket: string;
+	/** The operation this policy applies to */
+	operation: "upload" | "download" | "list" | "delete" | "*";
+	/** The policy expression to evaluate */
+	expression: string;
+}
+
+/**
+ * Helper function to create a StoragePolicy
+ */
+export function defineStoragePolicy(
+	bucket: string,
+	operation: StoragePolicy["operation"],
+	expression: string,
+): StoragePolicy {
+	return { bucket, operation, expression };
+}
+
+/**
  * Core storage adapter interface for S3-compatible storage services
  *
  * This interface defines the contract for interacting with any S3-compatible
