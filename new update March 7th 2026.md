@@ -243,7 +243,6 @@ This document provides a comprehensive summary of all changes implemented in the
 
 **Acceptance Criteria Met:**
 - ✅ User can enable TOTP MFA and receive valid QR code URI
- enable TOTP MFA and receive valid QR code URI
 - ✅ After enabling MFA, signIn() returns requiresMFA: true without session
 - ✅ mfa.challenge(validCode) completes login and returns full session
 - ✅ Invalid TOTP code returns 401

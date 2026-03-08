@@ -532,14 +532,20 @@ export default defineConfig({
   },
   
   // Storage policies for access control
-  storagePolicies: [
-    {
-      bucket: 'avatars',
-      allow: { public: true },
-      maxFileSize: 1024 * 1024 * 2, // 2MB
-      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
-    },
-  ],
+  storage: {
+    policies: [
+      {
+        bucket: 'avatars',
+        operation: 'upload',
+        expression: 'auth.uid() != null', // Allow authenticated users
+      },
+      {
+        bucket: 'avatars',
+        operation: 'download',
+        expression: 'true', // Allow public read
+      },
+    ],
+  },
   
   // Branching: Preview Environments configuration
   branching: {
@@ -550,6 +556,7 @@ export default defineConfig({
   
   // Vector search configuration
   vector: {
+    enabled: true,
     provider: 'openai',
     model: 'text-embedding-3-small',
     dimensions: 1536,

@@ -508,7 +508,7 @@ Vector Search module for pgvector support in PostgreSQL.
 
 #### [`vector/search.ts`](packages/core/src/vector/search.ts)
 **Purpose:** Vector Similarity Search Functions.
-- **Exports:** `VECTOR_OPERATORS`, `vectorDistance`, `cosineDistance`, `euclideanDistance`, `innerProduct`, `vectorSearch`, `createVectorIndex`
+- **Exports:** `VECTOR_OPERATORS`, `vectorDistance`, `cosineDistance`, `euclideanDistance`, `innerProductDistance`, `vectorSearch`, `createVectorIndex`
 - **Key Features:**
   - pgvector operator mappings for PostgreSQL
   - Cosine distance calculation
