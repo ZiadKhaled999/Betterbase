@@ -38,29 +38,39 @@ class PostgresConnection implements PostgresDatabaseConnection {
 	private async _startListening(): Promise<void> {
 		if (this._listening) return;
 		
+		// Set flag immediately before attempting to listen
+		this._listening = true;
+		
 		try {
 			await this.postgres.listen("db_changes", (payload: string) => {
+				let data: Record<string, unknown>;
 				try {
-					const data = JSON.parse(payload);
-					const event: DBEvent = {
-						table: data.table,
-						type: data.type as DBEventType,
-						record: data.record,
-						old_record: data.old_record,
-						timestamp: data.timestamp || new Date().toISOString(),
-					};
-					
-					// Notify all registered callbacks
-					for (const callback of this._changeCallbacks) {
-						callback(event);
-					}
+					data = JSON.parse(payload);
 				} catch (error) {
 					console.error("[CDC] Failed to parse notification payload:", error);
+					return;
+				}
+				
+				const event: DBEvent = {
+					table: data.table as string,
+					type: data.type as DBEventType,
+					record: data.record as Record<string, unknown>,
+					old_record: data.old_record as Record<string, unknown>,
+					timestamp: (data.timestamp as string) || new Date().toISOString(),
+				};
+				
+				// Notify all registered callbacks - each in its own try/catch
+				for (const callback of this._changeCallbacks) {
+					try {
+						callback(event);
+					} catch (callbackError) {
+						console.error("[CDC] Callback error:", callbackError);
+					}
 				}
 			});
-			this._listening = true;
 		} catch (error) {
 			console.error("[CDC] Failed to start listening:", error);
+			this._listening = false;
 		}
 	}
 

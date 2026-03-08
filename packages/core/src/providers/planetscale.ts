@@ -22,7 +22,6 @@ class PlanetScaleConnectionImpl implements PlanetScaleDatabaseConnection {
 	// Store the drizzle-compatible client for use with drizzle-orm
 	readonly drizzle: PlanetScaleClient;
 	private _isConnected = false;
-	private _changeCallbacks: ((event: DBEvent) => void)[] = [];
 
 	constructor(connectionString: string) {
 		this.planetscale = connect({
@@ -35,7 +34,6 @@ class PlanetScaleConnectionImpl implements PlanetScaleDatabaseConnection {
 	async close(): Promise<void> {
 		// PlanetScale connections are HTTP-based and don't need explicit closing
 		this._isConnected = false;
-		this._changeCallbacks = [];
 	}
 
 	isConnected(): boolean {
@@ -47,7 +45,7 @@ class PlanetScaleConnectionImpl implements PlanetScaleDatabaseConnection {
 	 * Note: PlanetScale does not support CDC natively - this is a no-op placeholder
 	 */
 	onchange(callback: (event: DBEvent) => void): void {
-		this._changeCallbacks.push(callback);
+		// PlanetScale does not support CDC - callbacks are not stored or invoked
 		console.warn("[CDC] PlanetScale does not support native CDC. Events will not be emitted.");
 	}
 }

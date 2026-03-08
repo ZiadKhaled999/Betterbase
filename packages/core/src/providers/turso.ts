@@ -115,9 +115,13 @@ class TursoConnection implements TursoDatabaseConnection {
 						timestamp: new Date().toISOString(),
 					};
 					
-					// Notify all registered callbacks
+					// Notify all registered callbacks - each in its own try/catch
 					for (const callback of self._changeCallbacks) {
-						callback(event);
+						try {
+							callback(event);
+						} catch (callbackError) {
+							console.error("[CDC] Callback error:", callbackError, "Event:", event);
+						}
 					}
 				}
 			}
