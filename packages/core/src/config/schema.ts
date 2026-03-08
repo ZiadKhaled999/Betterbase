@@ -76,7 +76,7 @@ export const BetterBaseConfigSchema = z
 				provider: z.enum(["openai", "cohere", "huggingface", "custom"]).default("openai"),
 				apiKey: z.string().optional(),
 				model: z.string().optional(),
-				dimensions: z.number().optional(),
+				dimensions: z.number().int().min(1).optional(),
 				endpoint: z.string().optional(),
 			})
 			.optional(),
@@ -89,8 +89,8 @@ export const BetterBaseConfigSchema = z
 		branching: z
 			.object({
 				enabled: z.boolean().default(true),
-				maxPreviews: z.number().min(1).max(50).default(10),
-				defaultSleepTimeout: z.number().min(60).default(3600),
+				maxPreviews: z.number().int().min(1).max(50).default(10),
+				defaultSleepTimeout: z.number().int().min(60).default(3600),
 				storageEnabled: z.boolean().default(true),
 			})
 			.optional(),

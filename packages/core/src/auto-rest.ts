@@ -3,11 +3,15 @@
  * 
  * This module provides runtime route registration that automatically
  * exposes full CRUD operations for all tables in the Drizzle schema.
+ * 
+ * SECURITY: When enableRLS is true, all routes require authentication and
+ * apply RLS filtering. Unauthenticated access is rejected.
  */
 
-import type { Hono } from "hono";
+import type { Context } from "hono";
+import { Hono } from "hono";
 import type { BetterBaseResponse } from "@betterbase/shared";
-import { getRLSUserId } from "./middleware/rls-session";
+import { getRLSUserId, isRLSSessionSet } from "./middleware/rls-session";
 
 // Type for Drizzle table
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,6 +33,91 @@ export interface AutoRestOptions {
 	basePath?: string;
 	/** Enable RLS enforcement (default: true) */
 	enableRLS?: boolean;
+	/** Columns that are allowed to be modified via API (default: all columns) */
+	writableColumns?: string[];
+	/** Column to use for RLS user ownership check (e.g., 'userId', 'owner_id') */
+	ownerColumn?: string;
+}
+
+/**
+ * Error response for unauthorized requests
+ */
+function unauthorizedResponse(c: Context, message = "Unauthorized: authentication required"): Response {
+	return c.json({
+		data: null,
+		error: message,
+	} as BetterBaseResponse<null>, 401);
+}
+
+/**
+ * Error response for forbidden requests
+ */
+function forbiddenResponse(c: Context, message = "Forbidden: insufficient permissions"): Response {
+	return c.json({
+		data: null,
+		error: message,
+	} as BetterBaseResponse<null>, 403);
+}
+
+/**
+ * Sanitize input body to only include allowed columns
+ * @param body - Raw request body
+ * @param allowedColumns - Array of allowed column names
+ * @returns Sanitized body with only allowed columns
+ */
+function sanitizeInputBody(body: Record<string, unknown>, allowedColumns: string[]): Record<string, unknown> {
+	const sanitized: Record<string, unknown> = {};
+	const allowedSet = new Set(allowedColumns);
+	
+	for (const [key, value] of Object.entries(body)) {
+		if (allowedSet.has(key)) {
+			sanitized[key] = value;
+		}
+	}
+	
+	return sanitized;
+}
+
+/**
+ * Get all column names from a Drizzle table
+ * @param table - Drizzle table instance
+ * @returns Array of column names
+ */
+function getTableColumns(table: DrizzleTable): string[] {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	table as any;
+	const columns: string[] = [];
+	
+	// Try to get columns from table metadata
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const tableConfig = (table as any).config;
+	if (tableConfig?.columns) {
+		for (const col of tableConfig.columns) {
+			columns.push(col.name);
+		}
+	}
+	
+	return columns;
+}
+
+/**
+ * Check if RLS is enforced and user is authenticated
+ * @param c - Hono context
+ * @param enableRLS - Whether RLS is enabled
+ * @returns User ID if authenticated and RLS is enforced, null otherwise
+ */
+function checkRLSAuth(c: Context, enableRLS: boolean): string | null {
+	if (!enableRLS) {
+		return null; // No RLS required
+	}
+	
+	// Check if RLS session is set (user is authenticated)
+	if (!isRLSSessionSet(c)) {
+		return null;
+	}
+	
+	const userId = getRLSUserId(c);
+	return userId || null;
 }
 
 /**
@@ -45,6 +134,8 @@ export interface AutoRestOptions {
  * - POST /api/:table - Insert new row
  * - PATCH /api/:table/:id - Update existing row
  * - DELETE /api/:table/:id - Delete row
+ * 
+ * SECURITY: When enableRLS is true, all routes require authentication.
  */
 export function mountAutoRest(
 	app: Hono,
@@ -57,11 +148,18 @@ export function mountAutoRest(
 		excludeTables = [],
 		basePath = "/api",
 		enableRLS = true,
+		writableColumns,
+		ownerColumn,
 	} = options;
 
 	if (!enabled) {
 		console.log("[Auto-REST] Disabled - skipping route registration");
 		return;
+	}
+
+	// Security check: if enableRLS is true, we should have a warning
+	if (enableRLS) {
+		console.log("[Auto-REST] RLS enforcement enabled - all routes require authentication");
 	}
 
 	console.log("[Auto-REST] Starting automatic CRUD route generation...");
@@ -81,8 +179,22 @@ export function mountAutoRest(
 			continue;
 		}
 
+		// Get table columns for input sanitization
+		const tableColumns = getTableColumns(table);
+		const allowedWriteColumns = writableColumns || tableColumns;
+
 		// Register routes for this table
-		registerTableRoutes(app, db, tableName, table, primaryKey, basePath, enableRLS);
+		registerTableRoutes(
+			app,
+			db,
+			tableName,
+			table,
+			primaryKey,
+			basePath,
+			enableRLS,
+			allowedWriteColumns,
+			ownerColumn,
+		);
 	}
 
 	console.log("[Auto-REST] Automatic CRUD route generation complete");
@@ -113,6 +225,10 @@ function getPrimaryKey(table: DrizzleTable): string | null {
 
 /**
  * Register CRUD routes for a single table
+ * 
+ * SECURITY: When enableRLS is true, all routes require authentication and apply:
+ * - Per-row filtering using ownerColumn (if specified)
+ * - Column whitelisting for insert/update operations
  */
 function registerTableRoutes(
 	app: Hono,
@@ -122,23 +238,35 @@ function registerTableRoutes(
 	primaryKey: string,
 	basePath: string,
 	enableRLS: boolean,
+	writableColumns: string[],
+	ownerColumn?: string,
 ): void {
 	const routePath = `${basePath}/${tableName}`;
 
 	// GET /api/:table - List all rows (paginated)
 	app.get(routePath, async (c) => {
-		// Check RLS if enabled
-		if (enableRLS) {
-			const userId = getRLSUserId(c);
-			// TODO: Apply RLS policies for SELECT
+		// Security: Check RLS authentication
+		const userId = checkRLSAuth(c, enableRLS);
+		if (enableRLS && !userId) {
+			return unauthorizedResponse(c);
 		}
 
 		const limit = Math.min(parseInt(c.req.query("limit") || "20", 10), 100);
 		const offset = parseInt(c.req.query("offset") || "0", 10);
 
 		try {
+			// Build query with RLS filtering if enabled and owner column specified
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const rows = await db.select().from(table).limit(limit).offset(offset);
+			let query = db.select().from(table).limit(limit).offset(offset);
+			
+			if (enableRLS && userId && ownerColumn) {
+				// Apply per-row RLS filtering
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				query = query.where((table as any)[ownerColumn].eq(userId));
+			}
+			
+			const rows = await query;
+			
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const countResult = await db.select({ count: () => 0 }).from(table).limit(1);
 			const total = countResult.length; // This is approximate
@@ -168,15 +296,24 @@ function registerTableRoutes(
 	app.get(`${routePath}/:id`, async (c) => {
 		const id = c.req.param("id");
 
-		// Check RLS if enabled
-		if (enableRLS) {
-			const userId = getRLSUserId(c);
-			// TODO: Apply RLS policies for SELECT
+		// Security: Check RLS authentication
+		const userId = checkRLSAuth(c, enableRLS);
+		if (enableRLS && !userId) {
+			return unauthorizedResponse(c);
 		}
 
 		try {
+			// Build query with RLS filtering if enabled
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const rows = await db.select().from(table).where((table as any)[primaryKey].eq(id)).limit(1);
+			let query = db.select().from(table).where((table as any)[primaryKey].eq(id)).limit(1);
+			
+			if (enableRLS && userId && ownerColumn) {
+				// Apply per-row RLS filtering
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				query = query.where((table as any)[ownerColumn].eq(userId));
+			}
+			
+			const rows = await query;
 			
 			if (rows.length === 0) {
 				const response: BetterBaseResponse<null> = {
@@ -203,17 +340,33 @@ function registerTableRoutes(
 
 	// POST /api/:table - Insert new row
 	app.post(routePath, async (c) => {
+		// Security: Check RLS authentication
+		const userId = checkRLSAuth(c, enableRLS);
+		if (enableRLS && !userId) {
+			return unauthorizedResponse(c);
+		}
+
 		const body = await c.req.json();
 
-		// Check RLS if enabled
-		if (enableRLS) {
-			const userId = getRLSUserId(c);
-			// TODO: Apply RLS policies for INSERT
+		if (!body || typeof body !== "object") {
+			const response: BetterBaseResponse<null> = {
+				data: null,
+				error: "Invalid request body",
+			};
+			return c.json(response, 400);
+		}
+
+		// Security: Sanitize input to only include allowed columns
+		const sanitizedBody = sanitizeInputBody(body as Record<string, unknown>, writableColumns);
+
+		// Security: If owner column is specified and we have a user, auto-set it
+		if (ownerColumn && userId && !sanitizedBody[ownerColumn]) {
+			sanitizedBody[ownerColumn] = userId;
 		}
 
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const result = await db.insert(table).values(body).returning();
+			const result = await db.insert(table).values(sanitizedBody).returning();
 			
 			const response: BetterBaseResponse<typeof result[0]> = {
 				data: result[0] || null,
@@ -233,17 +386,46 @@ function registerTableRoutes(
 	// PATCH /api/:table/:id - Update existing row
 	app.patch(`${routePath}/:id`, async (c) => {
 		const id = c.req.param("id");
+
+		// Security: Check RLS authentication
+		const userId = checkRLSAuth(c, enableRLS);
+		if (enableRLS && !userId) {
+			return unauthorizedResponse(c);
+		}
+
 		const body = await c.req.json();
 
-		// Check RLS if enabled
-		if (enableRLS) {
-			const userId = getRLSUserId(c);
-			// TODO: Apply RLS policies for UPDATE
+		if (!body || typeof body !== "object") {
+			const response: BetterBaseResponse<null> = {
+				data: null,
+				error: "Invalid request body",
+			};
+			return c.json(response, 400);
+		}
+
+		// Security: Sanitize input to only include allowed columns
+		const sanitizedBody = sanitizeInputBody(body as Record<string, unknown>, writableColumns);
+
+		// Security: Never allow updating owner column through API
+		if (ownerColumn && sanitizedBody[ownerColumn]) {
+			delete sanitizedBody[ownerColumn];
 		}
 
 		try {
+			// Build update query with RLS filtering if enabled
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const result = await db.update(table).set(body).where((table as any)[primaryKey].eq(id)).returning();
+			let query = db.update(table).set(sanitizedBody).where((table as any)[primaryKey].eq(id)).returning();
+			
+			if (enableRLS && userId && ownerColumn) {
+				// Apply per-row RLS filtering - only update rows owned by user
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				query = db.update(table)
+					.set(sanitizedBody)
+					.where((table as any)[primaryKey].eq(id).and((table as any)[ownerColumn].eq(userId)))
+					.returning();
+			}
+			
+			const result = await query;
 			
 			if (result.length === 0) {
 				const response: BetterBaseResponse<null> = {
@@ -272,15 +454,26 @@ function registerTableRoutes(
 	app.delete(`${routePath}/:id`, async (c) => {
 		const id = c.req.param("id");
 
-		// Check RLS if enabled
-		if (enableRLS) {
-			const userId = getRLSUserId(c);
-			// TODO: Apply RLS policies for DELETE
+		// Security: Check RLS authentication
+		const userId = checkRLSAuth(c, enableRLS);
+		if (enableRLS && !userId) {
+			return unauthorizedResponse(c);
 		}
 
 		try {
+			// Build delete query with RLS filtering if enabled
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const result = await db.delete(table).where((table as any)[primaryKey].eq(id)).returning();
+			let query = db.delete(table).where((table as any)[primaryKey].eq(id)).returning();
+			
+			if (enableRLS && userId && ownerColumn) {
+				// Apply per-row RLS filtering - only delete rows owned by user
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				query = db.delete(table)
+					.where((table as any)[primaryKey].eq(id).and((table as any)[ownerColumn].eq(userId)))
+					.returning();
+			}
+			
+			const result = await query;
 			
 			if (result.length === 0) {
 				const response: BetterBaseResponse<null> = {
