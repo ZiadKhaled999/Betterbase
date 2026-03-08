@@ -109,9 +109,33 @@ export function createVectorColumnSQL(
 		default?: number[];
 	} = {},
 ): string {
+	// Validate columnName is a valid SQL identifier
+	if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName)) {
+		throw new Error(`Invalid column name: ${columnName}. Column names must start with a letter or underscore and contain only alphanumeric characters and underscores.`);
+	}
+	
+	// Validate dimensions is a positive integer
+	if (!Number.isInteger(dimensions) || dimensions <= 0) {
+		throw new Error(`Invalid dimensions: ${dimensions}. Dimensions must be a positive integer.`);
+	}
+	
 	const nullable = options.nullable ? "" : "NOT NULL";
-	const defaultVal = options.default 
-		? `DEFAULT '[${options.default.join(",")}]'::vector` 
-		: "";
-	return `${columnName} vector(${dimensions}) ${nullable} ${defaultVal}`.trim();
+	
+	// Validate and sanitize default array elements
+	let defaultVal = "";
+	if (options.default) {
+		const sanitizedDefaults = options.default.map((val) => {
+			if (typeof val !== "number" || Number.isNaN(val)) {
+				throw new Error(`Invalid default value: ${val}. Default values must be numbers.`);
+			}
+			return val;
+		});
+		// Verify the number of default values matches dimensions
+		if (sanitizedDefaults.length !== dimensions) {
+			throw new Error(`Default array length (${sanitizedDefaults.length}) must match dimensions (${dimensions}).`);
+		}
+		defaultVal = `DEFAULT '[${sanitizedDefaults.join(",")}]'::vector`;
+	}
+	
+	return `"${columnName}" vector(${dimensions}) ${nullable} ${defaultVal}`.trim();
 }

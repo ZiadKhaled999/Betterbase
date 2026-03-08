@@ -161,11 +161,13 @@ export abstract class EmbeddingProviderBase {
 export class OpenAIEmbeddingProvider extends EmbeddingProviderBase {
 	private apiKey: string;
 	private endpoint: string;
+	private timeout: number;
 
 	constructor(config: EmbeddingConfig) {
 		super(createEmbeddingConfig({ ...config, provider: "openai" }));
 		this.apiKey = config.apiKey || process.env.OPENAI_API_KEY || "";
 		this.endpoint = config.endpoint || "https://api.openai.com/v1";
+		this.timeout = config.timeout || 60000; // Default 60 second timeout
 	}
 
 	async generate(input: EmbeddingInput): Promise<EmbeddingResult> {
@@ -175,40 +177,54 @@ export class OpenAIEmbeddingProvider extends EmbeddingProviderBase {
 			throw new Error("OpenAI API key is required. Set OPENAI_API_KEY environment variable.");
 		}
 
-		const response = await fetch(`${this.endpoint}/embeddings`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: `Bearer ${this.apiKey}`,
-			},
-			body: JSON.stringify({
-				input: input.text,
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+		try {
+			const response = await fetch(`${this.endpoint}/embeddings`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${this.apiKey}`,
+				},
+				body: JSON.stringify({
+					input: input.text,
+					model: this.config.model,
+				}),
+				signal: controller.signal,
+			});
+
+			clearTimeout(timeoutId);
+
+			if (!response.ok) {
+				const error = await response.text();
+				throw new Error(`OpenAI API error: ${error}`);
+			}
+
+			const data = await response.json() as {
+				data: Array<{ embedding: number[] }>;
+			};
+
+			const embedding = data.data[0]?.embedding;
+			if (!embedding) {
+				throw new Error("No embedding returned from OpenAI");
+			}
+
+			validateEmbeddingDimensions(embedding, this.config.dimensions);
+
+			return {
+				embedding,
+				dimensions: this.config.dimensions,
 				model: this.config.model,
-			}),
-		});
-
-		if (!response.ok) {
-			const error = await response.text();
-			throw new Error(`OpenAI API error: ${error}`);
+				metadata: input.metadata,
+			};
+		} catch (error) {
+			clearTimeout(timeoutId);
+			if (error instanceof Error && error.name === "AbortError") {
+				throw new Error(`Embedding request timed out after ${this.timeout}ms`);
+			}
+			throw error;
 		}
-
-		const data = await response.json() as {
-			data: Array<{ embedding: number[] }>;
-		};
-
-		const embedding = data.data[0]?.embedding;
-		if (!embedding) {
-			throw new Error("No embedding returned from OpenAI");
-		}
-
-		validateEmbeddingDimensions(embedding, this.config.dimensions);
-
-		return {
-			embedding,
-			dimensions: this.config.dimensions,
-			model: this.config.model,
-			metadata: input.metadata,
-		};
 	}
 
 	async generateBatch(inputs: EmbeddingInput[]): Promise<BatchEmbeddingResult> {
@@ -288,11 +304,13 @@ export class OpenAIEmbeddingProvider extends EmbeddingProviderBase {
 export class CohereEmbeddingProvider extends EmbeddingProviderBase {
 	private apiKey: string;
 	private endpoint: string;
+	private timeout: number;
 
 	constructor(config: EmbeddingConfig) {
 		super(createEmbeddingConfig({ ...config, provider: "cohere" }));
 		this.apiKey = config.apiKey || process.env.COHERE_API_KEY || "";
 		this.endpoint = config.endpoint || "https://api.cohere.ai/v1";
+		this.timeout = config.timeout || 60000; // Default 60 second timeout
 	}
 
 	async generate(input: EmbeddingInput): Promise<EmbeddingResult> {
@@ -343,56 +361,100 @@ export class CohereEmbeddingProvider extends EmbeddingProviderBase {
 		const embeddings: EmbeddingResult[] = [];
 		const errors: Array<{ index: number; message: string }> = [];
 
+		// Cohere API limit is 96 texts per request
+		const CHUNK_SIZE = 96;
+
 		try {
 			if (!this.apiKey) {
 				throw new Error("Cohere API key is required");
 			}
 
-			const response = await fetch(`${this.endpoint}/embed`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${this.apiKey}`,
-				},
-				body: JSON.stringify({
-					texts: inputs.map((i) => i.text),
-					model: this.config.model,
-					input_type: "search_document",
-				}),
-			});
+			// Split inputs into chunks of at most 96
+			for (let chunkStart = 0; chunkStart < inputs.length; chunkStart += CHUNK_SIZE) {
+				const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, inputs.length);
+				const chunkInputs = inputs.slice(chunkStart, chunkEnd);
 
-			if (!response.ok) {
-				const error = await response.text();
-				throw new Error(`Cohere API error: ${error}`);
-			}
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-			const data = await response.json() as {
-				embeddings: number[][];
-			};
-
-			for (let i = 0; i < inputs.length; i++) {
-				const embedding = data.embeddings?.[i];
-				if (embedding) {
-					validateEmbeddingDimensions(embedding, this.config.dimensions);
-					embeddings.push({
-						embedding,
-						dimensions: this.config.dimensions,
-						model: this.config.model,
-						metadata: inputs[i].metadata,
+				try {
+					const response = await fetch(`${this.endpoint}/embed`, {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Bearer ${this.apiKey}`,
+						},
+						body: JSON.stringify({
+							texts: chunkInputs.map((i) => i.text),
+							model: this.config.model,
+							input_type: "search_document",
+						}),
+						signal: controller.signal,
 					});
-				} else {
-					errors.push({
-						index: i,
-						message: "No embedding returned",
-					});
+
+					clearTimeout(timeoutId);
+
+					if (!response.ok) {
+						const error = await response.text();
+						// Add errors for all items in this chunk
+						for (let i = chunkStart; i < chunkEnd; i++) {
+							errors.push({
+								index: i,
+								message: `Cohere API error: ${error}`,
+							});
+						}
+						continue;
+					}
+
+					const data = await response.json() as {
+						embeddings: number[][];
+					};
+
+					for (let i = 0; i < chunkInputs.length; i++) {
+						const originalIndex = chunkStart + i;
+						const embedding = data.embeddings?.[i];
+						if (embedding) {
+							validateEmbeddingDimensions(embedding, this.config.dimensions);
+							embeddings.push({
+								embedding,
+								dimensions: this.config.dimensions,
+								model: this.config.model,
+								metadata: chunkInputs[i].metadata,
+							});
+						} else {
+							errors.push({
+								index: originalIndex,
+								message: "No embedding returned",
+							});
+						}
+					}
+				} catch (chunkError) {
+					clearTimeout(timeoutId);
+					if (chunkError instanceof Error && chunkError.name === "AbortError") {
+						for (let i = chunkStart; i < chunkEnd; i++) {
+							errors.push({
+								index: i,
+								message: `Embedding request timed out after ${this.timeout}ms`,
+							});
+						}
+					} else {
+						for (let i = chunkStart; i < chunkEnd; i++) {
+							errors.push({
+								index: i,
+								message: chunkError instanceof Error ? chunkError.message : "Unknown error",
+							});
+						}
+					}
 				}
 			}
-		} catch (error) {
+		} catch (err) {
 			for (let i = 0; i < inputs.length; i++) {
-				errors.push({
-					index: i,
-					message: error instanceof Error ? error.message : "Unknown error",
-				});
+				if (!errors.find((e) => e.index === i)) {
+					errors.push({
+						index: i,
+						message: err instanceof Error ? err.message : "Unknown error",
+					});
+				}
 			}
 		}
 

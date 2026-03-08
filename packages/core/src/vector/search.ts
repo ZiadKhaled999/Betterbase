@@ -61,10 +61,20 @@ export function vectorDistance(
 ) {
 	const column = table.columns[vectorColumn];
 	const operator = VECTOR_OPERATORS[metric];
-	const embeddingStr = `[${queryEmbedding.join(",")}]`;
 
+	// Validate that every item is a finite number
+	for (let i = 0; i < queryEmbedding.length; i++) {
+		if (!Number.isFinite(queryEmbedding[i])) {
+			throw new Error(`Invalid embedding value at index ${i}: must be a finite number`);
+		}
+	}
+
+	// Use parameterized values with sql.join to safely pass embedding values
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return sql<any>`${column} ${sql.raw(operator)} ${sql.raw(embeddingStr)}::vector`;
+	return sql<any>`${column} ${sql.raw(operator)} (${sql.join(
+		queryEmbedding.map((v) => sql`${v}::float8`),
+		", "
+	)})::vector`;
 }
 
 /**
@@ -196,14 +206,15 @@ export async function vectorSearch<TItem = Record<string, unknown>>(
 		.filter((result: VectorSearchResult<TItem>) => {
 			if (threshold === undefined) return true;
 
-			// For cosine and euclidean, threshold is typically 0-1 for similarity
-			// For inner product, interpretation depends on normalized vectors
-			if (metric === "cosine" || metric === "euclidean") {
-				// Distance metrics: lower is better, so we check if distance <= threshold
-				// But often users want similarity, so let's invert the logic
-				// Actually, let's interpret threshold as minimum similarity (1 - distance)
-				const similarity = 1 - Math.abs(result.score);
+			// For cosine, threshold is minimum similarity (0-1)
+			if (metric === "cosine") {
+				const similarity = 1 - result.score;
 				return similarity >= threshold;
+			}
+
+			// For euclidean, threshold is max distance
+			if (metric === "euclidean") {
+				return result.score <= threshold;
 			}
 
 			// For inner product, higher (less negative) is more similar

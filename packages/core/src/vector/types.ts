@@ -29,6 +29,8 @@ export interface EmbeddingConfig {
 	apiKey?: string;
 	/** Custom endpoint URL (for self-hosted models) */
 	endpoint?: string;
+	/** Timeout for embedding requests in milliseconds */
+	timeout?: number;
 }
 
 /**
