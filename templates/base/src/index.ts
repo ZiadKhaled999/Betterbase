@@ -8,7 +8,6 @@ import { auth } from "./auth";
 import { env } from "./lib/env";
 import { realtime } from "./lib/realtime";
 import { registerRoutes } from "./routes";
-import { db } from "./db";
 
 const app = new Hono();
 
@@ -74,25 +73,45 @@ if (graphqlEnabled) {
 // Mount Auto-REST API if enabled
 const autoRestEnabled = config.autoRest?.enabled ?? true;
 if (autoRestEnabled) {
+	let dbModule: { schema?: unknown; db?: unknown } | null = null;
+	let schema: unknown;
+	
 	try {
 		// Dynamic import to handle case where db module may not exist
 		// eslint-disable-next-line @typescript-eslint/no-var-requires
-		const dbModule = require("./db");
-		const schema = dbModule.schema;
-		
-		if (schema) {
-			mountAutoRest(app, dbModule.db, schema, {
-				enabled: true,
-				excludeTables: config.autoRest?.excludeTables ?? [],
-				basePath: "/api",
-				enableRLS: true,
-			});
-			console.log("⚡ Auto-REST API enabled");
-		}
+		dbModule = require("./db");
+		schema = dbModule?.schema;
 	} catch (error) {
+		// Module doesn't exist - this is expected in development without DB setup
 		if (env.NODE_ENV === "development") {
 			console.log("ℹ️  Auto-REST requires a database schema to be defined");
 		}
+		dbModule = null;
+	}
+	
+	// Check if schema is absent/undefined after module loaded
+	if (!schema && dbModule === null) {
+		// Module missing - expected in some configurations
+		if (env.NODE_ENV === "development") {
+			console.log("ℹ️  Auto-REST requires a database schema to be defined");
+		}
+	} else if (!schema) {
+		// Schema is undefined - expected when db module exists but has no schema
+		if (env.NODE_ENV === "development") {
+			console.log("ℹ️  Auto-REST requires a database schema to be defined");
+		}
+	} else if (dbModule?.db && schema) {
+		// Both db and schema exist - mount Auto-REST
+		mountAutoRest(app, dbModule.db, schema, {
+			enabled: true,
+			excludeTables: config.autoRest?.excludeTables ?? [],
+			basePath: "/api",
+			enableRLS: true,
+		});
+		console.log("⚡ Auto-REST API enabled");
+	} else {
+		// db module exists but db or schema is missing - rethrow
+		throw new Error("Database module or schema not properly configured");
 	}
 }
 

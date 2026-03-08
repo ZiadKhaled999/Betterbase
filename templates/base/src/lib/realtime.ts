@@ -90,6 +90,8 @@ export class RealtimeServer {
 	 * This is called automatically when the database emits change events
 	 */
 	private handleCDCEvent(event: DBEvent): void {
+		// Invoke the CDC callback if registered
+		this.cdcCallback?.(event);
 		// Broadcast the event to subscribed clients via WebSocket
 		this.broadcast(event.table, event.type, event.record);
 	}
@@ -99,6 +101,8 @@ export class RealtimeServer {
 	 * Server-side filtering: only delivers to clients with matching subscriptions
 	 */
 	processCDCEvent(event: DBEvent): void {
+		// Invoke the CDC callback if registered
+		this.cdcCallback?.(event);
 		// Broadcast to WebSocket clients with server-side filtering
 		this.broadcast(event.table, event.type, event.record);
 	}
