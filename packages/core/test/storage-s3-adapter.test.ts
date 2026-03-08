@@ -123,9 +123,8 @@ describe("S3 Adapter", () => {
 			const adapter = createS3Adapter(config);
 			const url = adapter.getPublicUrl("my-bucket", "path with spaces/file.txt");
 
-			// The implementation doesn't URL-encode, so spaces remain as-is
-			// This is a limitation of the current implementation
-			expect(url).toContain("path with spaces/file.txt");
+			// URL-encode special characters in the path
+			expect(url).toContain("path%20with%20spaces/file.txt");
 		});
 	});
 

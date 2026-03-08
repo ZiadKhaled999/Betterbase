@@ -203,7 +203,7 @@ export default definePolicy('comments', {
 			await mkdir(policiesDir, { recursive: true });
 
 			await writeFile(join(policiesDir, "users.policy.ts"), `export default {};`);
-			await writeFile(join(policiesDir, "utils.ts"), `export const = 'bar';`);
+			await writeFile(join(policiesDir, "utils.ts"), `export const foo = 'bar';`);
 		await writeFile(join(policiesDir, "schema.ts"), `export const schema = {};`);
 
 			const files = await listPolicyFiles(testDir);

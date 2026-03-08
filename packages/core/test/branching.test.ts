@@ -58,12 +58,6 @@ function createMockStorageAdapter(): StorageAdapter & {
 		async upload(bucket: string, key: string, body: Buffer | globalThis.ReadableStream) {
 			// Handle both Buffer and ReadableStream
 			const buffer = body instanceof Buffer ? body : Buffer.alloc(0);
-			if (body instanceof Buffer) {
-				uploadedFiles.set(`${bucket}/${key}`, body);
-			} else {
-				// For ReadableStream, use empty buffer (tests won't actually use streams)
-				uploadedFiles.set(`${bucket}/${key}`, Buffer.alloc(0));
-			}
 			uploadedFiles.set(`${bucket}/${key}`, buffer);
 			return {
 				key,

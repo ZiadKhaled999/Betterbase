@@ -179,11 +179,7 @@ describe("GraphQL Resolvers", () => {
 			};
 
 			// The requireAuth wrapper should throw when user is missing
-			try {
-				await wrappedResolver(null, {}, contextWithoutUser, null);
-			} catch (error: any) {
-				expect(error.message.toLowerCase()).toContain("auth");
-			}
+			await expect(wrappedResolver(null, {}, contextWithoutUser, null)).rejects.toThrow(/auth/i);
 		});
 
 		test("wrapped resolver should call original when user present", async () => {

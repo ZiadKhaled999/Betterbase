@@ -142,9 +142,13 @@ describe("SDL Exporter", () => {
 
 		test("should export specific Input type", () => {
 			const schema = createTestSchema();
-			// The type name is pluralized
-			// Note: This test exposes a bug in sdl-exporter where field.args is undefined for Input types
-			expect(() => exportTypeSDL(schema, "CreateUsersInput")).toThrow();
+			// Export the Input type and verify it contains the expected SDL
+			const typeSdl = exportTypeSDL(schema, "CreateUsersInput");
+			
+			expect(typeSdl).toBeDefined();
+			expect(typeSdl).toContain("input CreateUsersInput");
+			expect(typeSdl).toContain("name");
+			expect(typeSdl).toContain("email");
 		});
 
 		test("should throw error for non-existent type", () => {

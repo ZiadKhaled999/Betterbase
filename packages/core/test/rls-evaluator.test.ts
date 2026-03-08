@@ -378,7 +378,7 @@ describe("RLS Evaluator", () => {
 				}).not.toThrow();
 			});
 
-			test("should throw when policy denies", () => {
+			test("should allow insert when policy is true", () => {
 				// Insert policy is "true", so should always pass
 				expect(() => {
 					middleware.insert({ id: 2, content: "test2" });
