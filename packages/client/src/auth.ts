@@ -52,17 +52,28 @@ export class AuthClient {
 	private storage: StorageAdapter | null;
 	private onAuthStateChange?: (token: string | null) => void;
 	private fetchImpl: typeof fetch;
+	private _headers: Record<string, string>;
 
 	constructor(
 		private url: string,
-		private headers: Record<string, string>,
+		headers: Record<string, string>,
 		onAuthStateChange?: (token: string | null) => void,
 		fetchImpl: typeof fetch = fetch,
 		storage?: StorageAdapter | null,
 	) {
 		this.fetchImpl = fetchImpl;
 		this.storage = storage ?? getStorage();
-		this.onAuthStateChange = onAuthStateChange;
+		this._headers = { ...headers };
+
+		// Store wrapped callback that updates headers when auth state changes
+		this.onAuthStateChange = (token) => {
+			if (token) {
+				this._headers.Authorization = `Bearer ${token}`;
+			} else {
+				delete this._headers.Authorization;
+			}
+			onAuthStateChange?.(token);
+		};
 
 		this.authClient = createAuthClient({
 			baseURL: this.url,
@@ -293,7 +304,7 @@ export class AuthClient {
 			// Make direct API call since better-auth client may not have the plugin typed
 			const response = await this.fetchImpl(`${this.url}/api/auth/magic-link/send`, {
 				method: "POST",
-				headers: this.headers,
+				headers: this._headers,
 				body: JSON.stringify({ email }),
 			});
 
@@ -326,7 +337,7 @@ export class AuthClient {
 			// Make direct API call to verify magic link
 			const response = await this.fetchImpl(`${this.url}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`, {
 				method: "GET",
-				headers: this.headers,
+				headers: this._headers,
 			});
 
 			const data = await response.json();
@@ -383,7 +394,7 @@ export class AuthClient {
 			// Make direct API call
 			const response = await this.fetchImpl(`${this.url}/api/auth/otp/send`, {
 				method: "POST",
-				headers: this.headers,
+				headers: this._headers,
 				body: JSON.stringify({ email }),
 			});
 
@@ -416,7 +427,7 @@ export class AuthClient {
 			// Make direct API call to verify OTP
 			const response = await this.fetchImpl(`${this.url}/api/auth/otp/verify`, {
 				method: "POST",
-				headers: this.headers,
+				headers: this._headers,
 				body: JSON.stringify({ email, code }),
 			});
 
@@ -474,7 +485,7 @@ export class AuthClient {
 		try {
 			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/enable`, {
 				method: "POST",
-				headers: this.headers,
+				headers: this._headers,
 				body: JSON.stringify({ code }),
 			});
 
@@ -506,7 +517,7 @@ export class AuthClient {
 		try {
 			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/verify`, {
 				method: "POST",
-				headers: this.headers,
+				headers: this._headers,
 				body: JSON.stringify({ code }),
 			});
 
@@ -538,7 +549,7 @@ export class AuthClient {
 		try {
 			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/disable`, {
 				method: "POST",
-				headers: this.headers,
+				headers: this._headers,
 				body: JSON.stringify({ code }),
 			});
 
@@ -570,7 +581,7 @@ export class AuthClient {
 		try {
 			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/challenge`, {
 				method: "POST",
-				headers: this.headers,
+				headers: this._headers,
 				body: JSON.stringify({ code }),
 			});
 
@@ -628,7 +639,7 @@ export class AuthClient {
 		try {
 			const response = await this.fetchImpl(`${this.url}/api/auth/phone/send`, {
 				method: "POST",
-				headers: this.headers,
+				headers: this._headers,
 				body: JSON.stringify({ phone }),
 			});
 
@@ -660,7 +671,7 @@ export class AuthClient {
 		try {
 			const response = await this.fetchImpl(`${this.url}/api/auth/phone/verify`, {
 				method: "POST",
-				headers: this.headers,
+				headers: this._headers,
 				body: JSON.stringify({ phone, code }),
 			});
 

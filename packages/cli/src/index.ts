@@ -358,7 +358,9 @@ export function createProgram(): Command {
     });
 
   branch
-    .action(async (projectRoot: string) => {
+    .option('-p, --project-root <path>', 'project root directory', process.cwd())
+    .action(async (options) => {
+      const projectRoot = options.projectRoot || process.cwd();
       await runBranchCommand([], projectRoot);
     });
 
