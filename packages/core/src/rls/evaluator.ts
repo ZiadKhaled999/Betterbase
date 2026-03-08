@@ -90,13 +90,11 @@ export function applyRLSSelect(
 		return rows;
 	}
 
-	// Find the SELECT policy for this table
-	const selectPolicy = policies.find((p) => p.select || p.using);
+	// Find all SELECT policies for this table
+	const selectPolicies = policies.filter((p) => p.select || p.using);
 
-	// If no SELECT policy, check if there's a USING clause
-	const policyExpr = selectPolicy?.select || selectPolicy?.using;
-
-	if (!policyExpr) {
+	// If no SELECT policies, check if there are any policies
+	if (selectPolicies.length === 0) {
 		// No policy defined - apply default based on authentication
 		if (userId === null) {
 			return []; // Deny anonymous by default
@@ -104,9 +102,13 @@ export function applyRLSSelect(
 		return rows;
 	}
 
-	// Filter rows through the policy
+	// Filter rows through all policies - rows pass if ANY policy allows
 	return rows.filter((row) => {
-		return evaluatePolicy(policyExpr, userId, "select", row);
+		// If ANY policy allows access, the row passes
+		return selectPolicies.some((policy) => {
+			const policyExpr = policy.select || policy.using;
+			return evaluatePolicy(policyExpr!, userId, "select", row);
+		});
 	});
 }
 

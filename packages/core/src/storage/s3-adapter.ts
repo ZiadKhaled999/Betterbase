@@ -269,30 +269,31 @@ export class S3StorageAdapter implements StorageAdapter {
 	 * Get the public URL for a file
 	 */
 	getPublicUrl(bucket: string, key: string): string {
+		const encodedKey = encodeURIComponent(key);
 		switch (this.config.provider) {
 			case "s3": {
 				const s3Config = this.config as S3Config;
-				return `https://${bucket}.s3.${s3Config.region}.amazonaws.com/${key}`;
+				return `https://${bucket}.s3.${s3Config.region}.amazonaws.com/${encodedKey}`;
 			}
 
 			case "r2": {
 				const r2Config = this.config as R2Config;
 				if (r2Config.endpoint) {
-					return `${r2Config.endpoint}/${bucket}/${key}`;
+					return `${r2Config.endpoint}/${bucket}/${encodedKey}`;
 				}
-				return `https://${bucket}.${r2Config.accountId}.r2.cloudflarestorage.com/${key}`;
+				return `https://${bucket}.${r2Config.accountId}.r2.cloudflarestorage.com/${encodedKey}`;
 			}
 
 			case "backblaze": {
 				const bzConfig = this.config as BackblazeConfig;
-				return `https://${bucket}.s3.${bzConfig.region}.backblazeb2.com/${key}`;
+				return `https://${bucket}.s3.${bzConfig.region}.backblazeb2.com/${encodedKey}`;
 			}
 
 			case "minio": {
 				const minioConfig = this.config as MinioConfig;
 				const protocol = minioConfig.useSSL !== false ? "https" : "http";
 				const port = minioConfig.port || (minioConfig.useSSL !== false ? 443 : 9000);
-				return `${protocol}://${minioConfig.endpoint}:${port}/${bucket}/${key}`;
+				return `${protocol}://${minioConfig.endpoint}:${port}/${bucket}/${encodedKey}`;
 			}
 
 			default:
