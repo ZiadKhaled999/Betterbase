@@ -40,7 +40,7 @@
 	"bugs": {
 		"url": "https://github.com/betterbase/betterbase/issues"
 	},
-	"workspaces": ["apps/*", "packages/*","templates/*"],
+	"workspaces": ["apps/*", "packages/*", "templates/*"],
 	"files": [".", "!node_modules", "!.git"],
 	"scripts": {
 		"test": "bunx turbo run test",
@@ -54,7 +54,7 @@
 		"release": "bun run release.ts"
 	},
 	"devDependencies": {
-		"turbo": "^2.0.0",
+		"turbo": "^2.8.12",
 		"typescript": "^5.6.0"
 	},
 	"dependencies": {

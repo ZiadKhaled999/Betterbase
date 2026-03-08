@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import { existsSync } from "node:fs"
 import os from "node:os"
 import { info, success, error as logError, warn } from "../utils/logger"
+import { randomBytes } from "node:crypto"
 
 export interface Credentials {
   token: string
@@ -11,21 +12,13 @@ export interface Credentials {
   expiresAt: string
 }
 
-
-// ── bb login — STAGED FOR ACTIVATION ────────────────────────────────────────
-// This code is complete and tested. Uncomment when app.betterbase.com is live.
-// See: betterbase_backend_rebuild.md Part 3
-// ────────────────────────────────────────────────────────────────────────────
-
 const BETTERBASE_API = process.env.BETTERBASE_API_URL ?? "https://gzmqjmgomlkpwntbivox.supabase.co/functions/v1"
+const AUTH_PAGE_URL = process.env.BETTERBASE_AUTH_PAGE_URL ?? "https://betterbaseauthpage.vercel.app"
 const CREDENTIALS_PATH = path.join(os.homedir(), ".betterbase", "credentials.json")
 const POLL_INTERVAL_MS = 2000
-const POLL_TIMEOUT_MS = 300000  // 5 minutes
+const POLL_TIMEOUT_MS = 300000
 
-// runLoginCommand
-// Authenticates the CLI with app.betterbase.com via browser OAuth flow.
 export async function runLoginCommand(): Promise<void> {
-  // Check if already logged in
   const existing = await getCredentials()
   if (existing) {
     info(`Already logged in as ${existing.email}`)
@@ -33,18 +26,31 @@ export async function runLoginCommand(): Promise<void> {
     return
   }
 
-  // Generate a one-time device code
   const code = generateDeviceCode()
-  const authUrl = `${BETTERBASE_API}/cli-auth-page?code=${code}`
 
+  // Register device code in DB before opening browser
+  try {
+    const res = await fetch(`${BETTERBASE_API}/cli-auth-device`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code })
+    })
+    if (!res.ok) {
+      logError("Failed to register device code. Check your connection and try again.")
+      process.exit(1)
+    }
+  } catch {
+    logError("Could not reach BetterBase API. Check your connection and try again.")
+    process.exit(1)
+  }
+
+  const authUrl = `${AUTH_PAGE_URL}?code=${code}`
   info("Opening browser for authentication...")
   info(`Auth URL: ${authUrl}`)
   info("Waiting for authentication... (timeout: 5 minutes)")
 
-  // Try to open the browser
   await openBrowser(authUrl)
 
-  // Poll for authentication
   const credentials = await pollForAuth(code)
 
   if (!credentials) {
@@ -52,13 +58,10 @@ export async function runLoginCommand(): Promise<void> {
     process.exit(1)
   }
 
-  // Store credentials
   await saveCredentials(credentials)
   success(`Logged in as ${credentials.email}`)
 }
 
-// runLogoutCommand
-// Removes stored credentials.
 export async function runLogoutCommand(): Promise<void> {
   if (existsSync(CREDENTIALS_PATH)) {
     await fs.unlink(CREDENTIALS_PATH)
@@ -68,9 +71,6 @@ export async function runLogoutCommand(): Promise<void> {
   }
 }
 
-// getCredentials
-// Reads stored credentials from ~/.betterbase/credentials.json
-// Returns null if not logged in or credentials expired.
 export async function getCredentials(): Promise<Credentials | null> {
   if (!existsSync(CREDENTIALS_PATH)) return null
   try {
@@ -83,15 +83,17 @@ export async function getCredentials(): Promise<Credentials | null> {
   }
 }
 
-// requireCredentials
-// Used by commands that require authentication (like bb init in managed mode).
-// Exits with a helpful message if not logged in.
+export async function isAuthenticated(): Promise<boolean> {
+  const creds = await getCredentials()
+  return creds !== null
+}
+
 export async function requireCredentials(): Promise<Credentials> {
   const creds = await getCredentials()
   if (!creds) {
     logError(
       "Not logged in. Run: bb login\n" +
-      "This connects your CLI with app.betterbase.com so your project\n" +
+      "This connects your CLI with BetterBase so your project\n" +
       "can be registered and managed from the dashboard."
     )
     process.exit(1)
@@ -99,27 +101,21 @@ export async function requireCredentials(): Promise<Credentials> {
   return creds
 }
 
-// Internal helpers
-
 function generateDeviceCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-  const part1 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("")
-  const part2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("")
+  const part1 = Array.from({ length: 4 }, () => chars[randomBytes(1)[0] % chars.length]).join("")
+  const part2 = Array.from({ length: 4 }, () => chars[randomBytes(1)[0] % chars.length]).join("")
   return `${part1}-${part2}`
 }
 
 async function openBrowser(url: string): Promise<void> {
-  const { platform } = process
   try {
-    if (platform === "darwin") {
-      const { execSync } = await import("child_process")
-      execSync(`open "${url}"`, { stdio: "ignore" })
-    } else if (platform === "win32") {
-      const { execSync } = await import("child_process")
-      execSync(`start "" "${url}"`, { stdio: "ignore" })
+    if (process.platform === "darwin") {
+      await Bun.spawn(["open", url])
+    } else if (process.platform === "win32") {
+      await Bun.spawn(["cmd", "/c", "start", "", url])
     } else {
-      const { execSync } = await import("child_process")
-      execSync(`xdg-open "${url}"`, { stdio: "ignore" })
+      await Bun.spawn(["xdg-open", url])
     }
   } catch {
     // Browser open failed — URL already printed, user can open manually
@@ -131,23 +127,11 @@ async function pollForAuth(code: string): Promise<Credentials | null> {
 
   while (Date.now() - startTime < POLL_TIMEOUT_MS) {
     await sleep(POLL_INTERVAL_MS)
-
     try {
-      const response = await fetch(
-        `${BETTERBASE_API}/cli-auth-poll?code=${code}`
-      )
-
+      const response = await fetch(`${BETTERBASE_API}/cli-auth-poll?code=${code}`)
       if (response.status === 200) {
-        const data = await response.json() as {
-          token: string
-          email: string
-          userId: string
-          expiresAt: string
-        }
-        return data
+        return await response.json() as Credentials
       }
-      // 202 = still pending, continue polling
-      // Any other status = error, continue polling until timeout
     } catch {
       // Network error — continue polling
     }
@@ -165,5 +149,3 @@ async function saveCredentials(creds: Credentials): Promise<void> {
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
-
-
