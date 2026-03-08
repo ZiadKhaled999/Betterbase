@@ -128,6 +128,7 @@ export class BranchManager {
 	 */
 	async createBranch(options: CreateBranchOptions): Promise<BranchOperationResult> {
 		const warnings: string[] = [];
+		const infos: string[] = [];
 
 		// Check if branching is enabled
 		if (!this.config.enabled) {
@@ -171,8 +172,9 @@ export class BranchManager {
 				dbConnectionString = previewDb.connectionString;
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
-				warnings.push(`Database cloning failed: ${message}`);
-				console.warn("Database branching failed:", error);
+				throw new Error(
+					`Database cloning failed: ${message}`,
+				);
 			}
 		}
 
@@ -189,7 +191,7 @@ export class BranchManager {
 					const filesCopied = await this.storageBranching.copyFilesToPreview(
 						previewStorage.bucket,
 					);
-					warnings.push(`Copied ${filesCopied} files to preview storage`);
+					infos.push(`Copied ${filesCopied} files to preview storage`);
 				}
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
@@ -220,6 +222,7 @@ export class BranchManager {
 			success: true,
 			branch: branchConfig,
 			warnings: warnings.length > 0 ? warnings : undefined,
+			infos: infos.length > 0 ? infos : undefined,
 		};
 	}
 

@@ -17,18 +17,40 @@ import type { BranchConfig, PreviewDatabase } from "./types";
  * @returns True if the DDL is safe
  */
 function isSafeDDL(ddl: string): boolean {
-	const trimmed = ddl.trim().toUpperCase();
+	// Step 1: Reject semicolons to prevent multi-statement injection
+	if (ddl.includes(";")) {
+		return false;
+	}
+
+	// Step 2: Strip SQL comments (-- and /* */)
+	let cleaned = ddl
+		// Remove single-line comments (-- comment)
+		.replace(/--[^\n]*/g, "")
+		// Remove multi-line comments (/* comment */)
+		.replace(/\/\*[\s\S]*?\*\//g, "");
+
+	// Step 3: Remove string literals to prevent comment injection via strings
+	// Remove single-quoted strings
+	cleaned = cleaned.replace(/'([^']|'')*'/g, "");
+	// Remove double-quoted strings
+	cleaned = cleaned.replace(/"([^"]|"")*"/g, "");
+
+	// Step 4: Normalize and validate
+	const trimmed = cleaned.trim().toUpperCase();
+
 	// Only allow CREATE TABLE statements
 	if (!trimmed.startsWith("CREATE TABLE")) {
 		return false;
 	}
-	// Block dangerous operations
-	const dangerous = ["DROP", "TRUNCATE", "DELETE", "INSERT", "UPDATE", "ALTER", "GRANT", "REVOKE"];
+
+	// Ensure it doesn't contain dangerous keywords after cleaning
+	const dangerous = ["DROP", "TRUNCATE", "DELETE", "INSERT", "UPDATE", "ALTER", "GRANT", "REVOKE", "EXEC", "EXECUTE"];
 	for (const keyword of dangerous) {
 		if (trimmed.includes(keyword)) {
 			return false;
 		}
 	}
+
 	return true;
 }
 
@@ -72,18 +94,27 @@ function parseConnectionString(connectionString: string): {
 	password: string;
 	database: string;
 } {
-	const match = connectionString.match(
-		/postgres(?:ql)?:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/,
-	);
-	if (!match) {
-		throw new Error("Invalid PostgreSQL connection string format");
+	const url = new URL(connectionString);
+
+	if (!url.hostname) {
+		throw new Error("Invalid PostgreSQL connection string: hostname is required");
 	}
+
+	const database = url.pathname.replace(/^\//, "");
+	if (!database) {
+		throw new Error("Invalid PostgreSQL connection string: database name is required");
+	}
+
+	const port = url.port ? parseInt(url.port, 10) : 5432;
+	const user = url.username ? decodeURIComponent(url.username) : "";
+	const password = url.password ? decodeURIComponent(url.password) : "";
+
 	return {
-		user: match[1],
-		password: match[2],
-		host: match[3],
-		port: parseInt(match[4], 10),
-		database: match[5],
+		user,
+		password,
+		host: url.hostname,
+		port,
+		database,
 	};
 }
 

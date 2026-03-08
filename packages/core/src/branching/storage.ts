@@ -201,7 +201,7 @@ export class StorageBranching {
 	async previewBucketExists(bucketName: string): Promise<boolean> {
 		try {
 			const objects = await this.mainStorageAdapter.listObjects(bucketName);
-			return objects.length > 0 || true; // Bucket exists if we can list it
+			return objects.length > 0; // Bucket exists if it has any objects
 		} catch {
 			return false;
 		}

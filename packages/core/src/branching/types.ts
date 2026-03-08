@@ -180,6 +180,8 @@ export interface BranchOperationResult {
 	error?: string;
 	/** Any warnings during the operation */
 	warnings?: string[];
+	/** Informational messages during the operation */
+	infos?: string[];
 }
 
 /**
