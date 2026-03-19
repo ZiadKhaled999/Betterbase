@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { definePolicy } from "../src/rls/types";
 import {
-	policyToSQL,
-	dropPolicySQL,
-	dropPolicyByName,
+	type PolicyOperation,
 	disableRLS,
+	dropPoliciesSQL,
+	dropPolicyByName,
+	dropPolicySQL,
 	hasPolicyConditions,
 	policiesToSQL,
-	dropPoliciesSQL,
-	type PolicyOperation,
+	policyToSQL,
 } from "../src/rls/generator";
+import { definePolicy } from "../src/rls/types";
 
 describe("RLS Generator", () => {
 	describe("policyToSQL", () => {
@@ -21,7 +21,9 @@ describe("RLS Generator", () => {
 			const sql = policyToSQL(policy);
 
 			expect(sql).toContain("ALTER TABLE users ENABLE ROW LEVEL SECURITY;");
-			expect(sql).toContain("CREATE POLICY users_select_policy ON users FOR SELECT USING (auth.uid() = id);");
+			expect(sql).toContain(
+				"CREATE POLICY users_select_policy ON users FOR SELECT USING (auth.uid() = id);",
+			);
 		});
 
 		test("should generate SQL for INSERT policy", () => {
@@ -31,7 +33,9 @@ describe("RLS Generator", () => {
 
 			const sql = policyToSQL(policy);
 
-			expect(sql).toContain("CREATE POLICY posts_insert_policy ON posts FOR INSERT WITH CHECK (auth.uid() = author_id);");
+			expect(sql).toContain(
+				"CREATE POLICY posts_insert_policy ON posts FOR INSERT WITH CHECK (auth.uid() = author_id);",
+			);
 		});
 
 		test("should generate SQL for UPDATE policy", () => {
@@ -41,7 +45,9 @@ describe("RLS Generator", () => {
 
 			const sql = policyToSQL(policy);
 
-			expect(sql).toContain("CREATE POLICY documents_update_policy ON documents FOR UPDATE USING (auth.uid() = owner_id) WITH CHECK (auth.uid() = owner_id);");
+			expect(sql).toContain(
+				"CREATE POLICY documents_update_policy ON documents FOR UPDATE USING (auth.uid() = owner_id) WITH CHECK (auth.uid() = owner_id);",
+			);
 		});
 
 		test("should generate SQL for DELETE policy", () => {
@@ -51,7 +57,9 @@ describe("RLS Generator", () => {
 
 			const sql = policyToSQL(policy);
 
-			expect(sql).toContain("CREATE POLICY comments_delete_policy ON comments FOR DELETE USING (auth.uid() = user_id);");
+			expect(sql).toContain(
+				"CREATE POLICY comments_delete_policy ON comments FOR DELETE USING (auth.uid() = user_id);",
+			);
 		});
 
 		test("should generate SQL for multiple operations", () => {
@@ -65,10 +73,18 @@ describe("RLS Generator", () => {
 			const sql = policyToSQL(policy);
 
 			expect(sql.length).toBe(5); // 1 enable RLS + 4 operations
-			expect(sql).toContain("CREATE POLICY profiles_select_policy ON profiles FOR SELECT USING (auth.uid() = user_id);");
-			expect(sql).toContain("CREATE POLICY profiles_insert_policy ON profiles FOR INSERT WITH CHECK (auth.uid() = user_id);");
-			expect(sql).toContain("CREATE POLICY profiles_update_policy ON profiles FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);");
-			expect(sql).toContain("CREATE POLICY profiles_delete_policy ON profiles FOR DELETE USING (auth.uid() = user_id);");
+			expect(sql).toContain(
+				"CREATE POLICY profiles_select_policy ON profiles FOR SELECT USING (auth.uid() = user_id);",
+			);
+			expect(sql).toContain(
+				"CREATE POLICY profiles_insert_policy ON profiles FOR INSERT WITH CHECK (auth.uid() = user_id);",
+			);
+			expect(sql).toContain(
+				"CREATE POLICY profiles_update_policy ON profiles FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);",
+			);
+			expect(sql).toContain(
+				"CREATE POLICY profiles_delete_policy ON profiles FOR DELETE USING (auth.uid() = user_id);",
+			);
 		});
 
 		test("should use USING clause for SELECT", () => {
@@ -78,7 +94,9 @@ describe("RLS Generator", () => {
 
 			const sql = policyToSQL(policy);
 
-			expect(sql).toContain("CREATE POLICY items_select_policy ON items FOR SELECT USING (auth.uid() = owner_id);");
+			expect(sql).toContain(
+				"CREATE POLICY items_select_policy ON items FOR SELECT USING (auth.uid() = owner_id);",
+			);
 		});
 
 		test("should use WITH CHECK clause for INSERT", () => {
@@ -88,7 +106,9 @@ describe("RLS Generator", () => {
 
 			const sql = policyToSQL(policy);
 
-			expect(sql).toContain("CREATE POLICY messages_insert_policy ON messages FOR INSERT WITH CHECK (auth.uid() = sender_id);");
+			expect(sql).toContain(
+				"CREATE POLICY messages_insert_policy ON messages FOR INSERT WITH CHECK (auth.uid() = sender_id);",
+			);
 		});
 
 		test("should prioritize using clause over operation-specific for SELECT/DELETE/UPDATE", () => {
@@ -100,7 +120,9 @@ describe("RLS Generator", () => {
 			const sql = policyToSQL(policy);
 
 			// using clause takes priority over select for USING clause
-			expect(sql).toContain("CREATE POLICY test1_select_policy ON test1 FOR SELECT USING (using_clause);");
+			expect(sql).toContain(
+				"CREATE POLICY test1_select_policy ON test1 FOR SELECT USING (using_clause);",
+			);
 		});
 
 		test("should prioritize withCheck clause over operation-specific for INSERT/UPDATE", () => {
@@ -112,7 +134,9 @@ describe("RLS Generator", () => {
 			const sql = policyToSQL(policy);
 
 			// withCheck takes priority over insert for WITH CHECK clause
-			expect(sql).toContain("CREATE POLICY test2_insert_policy ON test2 FOR INSERT WITH CHECK (withcheck_clause);");
+			expect(sql).toContain(
+				"CREATE POLICY test2_insert_policy ON test2 FOR INSERT WITH CHECK (withcheck_clause);",
+			);
 		});
 
 		test("should handle true policy (allow all)", () => {
@@ -122,7 +146,9 @@ describe("RLS Generator", () => {
 
 			const sql = policyToSQL(policy);
 
-			expect(sql).toContain("CREATE POLICY public_data_select_policy ON public_data FOR SELECT USING (true);");
+			expect(sql).toContain(
+				"CREATE POLICY public_data_select_policy ON public_data FOR SELECT USING (true);",
+			);
 		});
 
 		test("should handle false policy (deny all)", () => {
@@ -132,7 +158,9 @@ describe("RLS Generator", () => {
 
 			const sql = policyToSQL(policy);
 
-			expect(sql).toContain("CREATE POLICY restricted_select_policy ON restricted FOR SELECT USING (false);");
+			expect(sql).toContain(
+				"CREATE POLICY restricted_select_policy ON restricted FOR SELECT USING (false);",
+			);
 		});
 
 		test("should include operations when using or withCheck is defined", () => {
@@ -145,9 +173,15 @@ describe("RLS Generator", () => {
 
 			const sql = policyToSQL(policy);
 
-			expect(sql).toContain("CREATE POLICY partial_select_policy ON partial FOR SELECT USING (auth.uid() = id);");
-			expect(sql).toContain("CREATE POLICY partial_update_policy ON partial FOR UPDATE USING (auth.uid() = id);");
-			expect(sql).toContain("CREATE POLICY partial_delete_policy ON partial FOR DELETE USING (auth.uid() = id);");
+			expect(sql).toContain(
+				"CREATE POLICY partial_select_policy ON partial FOR SELECT USING (auth.uid() = id);",
+			);
+			expect(sql).toContain(
+				"CREATE POLICY partial_update_policy ON partial FOR UPDATE USING (auth.uid() = id);",
+			);
+			expect(sql).toContain(
+				"CREATE POLICY partial_delete_policy ON partial FOR DELETE USING (auth.uid() = id);",
+			);
 			// No INSERT since only select and using are defined
 		});
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-	PolicyDefinition,
 	PolicyConfig,
+	type PolicyDefinition,
 	definePolicy,
 	isPolicyDefinition,
 	mergePolicies,
@@ -175,9 +175,7 @@ describe("RLS Types", () => {
 		});
 
 		test("should handle single policy", () => {
-			const policies: PolicyDefinition[] = [
-				{ table: "users", select: "true" },
-			];
+			const policies: PolicyDefinition[] = [{ table: "users", select: "true" }];
 
 			const merged = mergePolicies(policies);
 

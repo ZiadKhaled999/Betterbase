@@ -1,22 +1,22 @@
-import { describe, expect, test, beforeAll } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import {
+	DEFAULT_EMBEDDING_CONFIGS,
 	// Types
 	type EmbeddingConfig,
 	type SearchOptions,
-	type VectorSearchResult,
 	type SimilarityMetric,
-	// Embedding utilities
-	validateEmbeddingDimensions,
-	normalizeVector,
-	computeCosineSimilarity,
-	createEmbeddingConfig,
-	DEFAULT_EMBEDDING_CONFIGS,
 	// Search utilities
 	VECTOR_OPERATORS,
-	embeddingToSql,
-	validateEmbedding,
+	type VectorSearchResult,
 	buildVectorSearchQuery,
+	computeCosineSimilarity,
+	createEmbeddingConfig,
 	createVectorIndex,
+	embeddingToSql,
+	normalizeVector,
+	validateEmbedding,
+	// Embedding utilities
+	validateEmbeddingDimensions,
 } from "../src/vector";
 
 describe("vector/types", () => {
@@ -92,9 +92,7 @@ describe("vector/embeddings - computeCosineSimilarity", () => {
 	test("throws for different dimension vectors", () => {
 		const v1 = [1, 2, 3];
 		const v2 = [1, 2];
-		expect(() => computeCosineSimilarity(v1, v2)).toThrow(
-			"Vectors must have the same dimension",
-		);
+		expect(() => computeCosineSimilarity(v1, v2)).toThrow("Vectors must have the same dimension");
 	});
 });
 
@@ -160,13 +158,13 @@ describe("vector/search - validateEmbedding", () => {
 	});
 
 	test("throws for NaN values", () => {
-		expect(() => validateEmbedding([1, NaN, 3])).toThrow(
+		expect(() => validateEmbedding([1, Number.NaN, 3])).toThrow(
 			"Embedding must contain only valid numbers",
 		);
 	});
 
 	test("throws for Infinity", () => {
-		expect(() => validateEmbedding([1, Infinity, 3])).toThrow(
+		expect(() => validateEmbedding([1, Number.POSITIVE_INFINITY, 3])).toThrow(
 			"Embedding contains non-finite numbers",
 		);
 	});
@@ -186,11 +184,7 @@ describe("vector/search - embeddingToSql", () => {
 
 describe("vector/search - buildVectorSearchQuery", () => {
 	test("builds basic query", () => {
-		const { query, params } = buildVectorSearchQuery(
-			"documents",
-			"embedding",
-			[0.1, 0.2, 0.3],
-		);
+		const { query, params } = buildVectorSearchQuery("documents", "embedding", [0.1, 0.2, 0.3]);
 		expect(query).toContain("SELECT *");
 		expect(query).toContain("documents");
 		expect(query).toContain("embedding");
@@ -198,54 +192,35 @@ describe("vector/search - buildVectorSearchQuery", () => {
 	});
 
 	test("applies limit", () => {
-		const { query } = buildVectorSearchQuery(
-			"documents",
-			"embedding",
-			[0.1, 0.2],
-			{ limit: 5 },
-		);
+		const { query } = buildVectorSearchQuery("documents", "embedding", [0.1, 0.2], { limit: 5 });
 		expect(query).toContain("LIMIT 5");
 	});
 
 	test("applies filter", () => {
-		const { query, params } = buildVectorSearchQuery(
-			"documents",
-			"embedding",
-			[0.1, 0.2],
-			{ filter: { userId: "abc123" } },
-		);
+		const { query, params } = buildVectorSearchQuery("documents", "embedding", [0.1, 0.2], {
+			filter: { userId: "abc123" },
+		});
 		expect(query).toContain("WHERE");
 		expect(query).toContain("userId = $2");
 		expect(params[1]).toBe("abc123");
 	});
 
 	test("uses correct operator for cosine", () => {
-		const { query } = buildVectorSearchQuery(
-			"documents",
-			"embedding",
-			[0.1],
-			{ metric: "cosine" },
-		);
+		const { query } = buildVectorSearchQuery("documents", "embedding", [0.1], { metric: "cosine" });
 		expect(query).toContain("<=>");
 	});
 
 	test("uses correct operator for euclidean", () => {
-		const { query } = buildVectorSearchQuery(
-			"documents",
-			"embedding",
-			[0.1],
-			{ metric: "euclidean" },
-		);
+		const { query } = buildVectorSearchQuery("documents", "embedding", [0.1], {
+			metric: "euclidean",
+		});
 		expect(query).toContain("<->");
 	});
 
 	test("uses correct operator for inner_product", () => {
-		const { query } = buildVectorSearchQuery(
-			"documents",
-			"embedding",
-			[0.1],
-			{ metric: "inner_product" },
-		);
+		const { query } = buildVectorSearchQuery("documents", "embedding", [0.1], {
+			metric: "inner_product",
+		});
 		expect(query).toContain("<#>");
 	});
 });
@@ -292,7 +267,7 @@ describe("vector - config integration", () => {
 	test("BetterBaseConfigSchema accepts vector config", async () => {
 		// Import here to test the full integration
 		const { BetterBaseConfigSchema } = await import("../src/config/schema");
-		
+
 		const config = {
 			project: { name: "test" },
 			provider: {
@@ -306,14 +281,14 @@ describe("vector - config integration", () => {
 				dimensions: 1536,
 			},
 		};
-		
+
 		const result = BetterBaseConfigSchema.safeParse(config);
 		expect(result.success).toBe(true);
 	});
 
 	test("BetterBaseConfigSchema accepts vector config with apiKey", async () => {
 		const { BetterBaseConfigSchema } = await import("../src/config/schema");
-		
+
 		const config = {
 			project: { name: "test" },
 			provider: {
@@ -326,7 +301,7 @@ describe("vector - config integration", () => {
 				apiKey: "test-api-key",
 			},
 		};
-		
+
 		const result = BetterBaseConfigSchema.safeParse(config);
 		expect(result.success).toBe(true);
 	});

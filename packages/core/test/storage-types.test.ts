@@ -1,19 +1,19 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-	type StorageProvider,
-	type StorageConfig,
-	type UploadOptions,
-	type SignedUrlOptions,
-	type UploadResult,
-	type StorageObject,
 	type AllowedMimeTypes,
-	type BucketConfig,
-	type StoragePolicy,
-	type S3Config,
-	type R2Config,
 	type BackblazeConfig,
-	type MinioConfig,
+	type BucketConfig,
 	type ManagedConfig,
+	type MinioConfig,
+	type R2Config,
+	type S3Config,
+	type SignedUrlOptions,
+	type StorageConfig,
+	type StorageObject,
+	type StoragePolicy,
+	type StorageProvider,
+	type UploadOptions,
+	type UploadResult,
 	defineStoragePolicy,
 } from "../src/storage/types";
 
@@ -102,10 +102,10 @@ describe("Storage Types", () => {
 				key: "path/to/file.jpg",
 				size: 1024,
 				contentType: "image/jpeg",
-				etag: "\"abc123\"",
+				etag: '"abc123"',
 			};
 			expect(result.contentType).toBe("image/jpeg");
-			expect(result.etag).toBe("\"abc123\"");
+			expect(result.etag).toBe('"abc123"');
 		});
 	});
 
@@ -311,10 +311,28 @@ describe("Storage Types", () => {
 		test("should validate StorageConfig union type", () => {
 			// Test that all config types are assignable to StorageConfig
 			const configs: StorageConfig[] = [
-				{ provider: "s3", bucket: "b", region: "us-east-1", accessKeyId: "k", secretAccessKey: "s" },
+				{
+					provider: "s3",
+					bucket: "b",
+					region: "us-east-1",
+					accessKeyId: "k",
+					secretAccessKey: "s",
+				},
 				{ provider: "r2", bucket: "b", accountId: "a", accessKeyId: "k", secretAccessKey: "s" },
-				{ provider: "backblaze", bucket: "b", region: "us-west", accessKeyId: "k", secretAccessKey: "s" },
-				{ provider: "minio", bucket: "b", endpoint: "localhost", accessKeyId: "k", secretAccessKey: "s" },
+				{
+					provider: "backblaze",
+					bucket: "b",
+					region: "us-west",
+					accessKeyId: "k",
+					secretAccessKey: "s",
+				},
+				{
+					provider: "minio",
+					bucket: "b",
+					endpoint: "localhost",
+					accessKeyId: "k",
+					secretAccessKey: "s",
+				},
 				{ provider: "managed", bucket: "b" },
 			];
 			expect(configs.length).toBe(5);

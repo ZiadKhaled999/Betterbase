@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { GraphQLInputObjectType, GraphQLObjectType, GraphQLSchema } from "graphql";
 import {
-	generateGraphQLSchema,
-	GraphQLJSON,
 	GraphQLDateTime,
 	type GraphQLGenerationConfig,
+	GraphQLJSON,
+	generateGraphQLSchema,
 } from "../src/graphql/schema-generator";
-import { GraphQLSchema, GraphQLObjectType, GraphQLInputObjectType } from "graphql";
 
 // ============================================================================
 // GraphQL Schema Generator Tests
@@ -102,8 +102,8 @@ describe("GraphQL Schema Generator", () => {
 			const queryType = schema.getQueryType()!;
 			const fields = queryType.getFields();
 
-			expect(fields["users"]).toBeDefined();
-			expect(fields["posts"]).toBeDefined();
+			expect(fields.users).toBeDefined();
+			expect(fields.posts).toBeDefined();
 		});
 
 		test("should handle empty tables object", () => {

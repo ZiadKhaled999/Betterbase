@@ -1,14 +1,14 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdir, writeFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+	type PolicyFileInfo,
+	PolicyScanError,
+	getPolicyFileInfo,
+	listPolicyFiles,
 	scanPolicies,
 	scanPoliciesStrict,
-	listPolicyFiles,
-	getPolicyFileInfo,
-	PolicyScanError,
-	type PolicyFileInfo,
 } from "../src/rls/scanner";
 import { definePolicy } from "../src/rls/types";
 
@@ -159,10 +159,7 @@ export default definePolicy('comments', {
 			const policiesDir = join(testDir, "src/db/policies");
 			await mkdir(policiesDir, { recursive: true });
 
-			await writeFile(
-				join(policiesDir, "invalid.policy.ts"),
-				`export const notapolicy = 'test';`,
-			);
+			await writeFile(join(policiesDir, "invalid.policy.ts"), `export const notapolicy = 'test';`);
 
 			await expect(scanPoliciesStrict(testDir)).rejects.toThrow(PolicyScanError);
 		});
@@ -179,8 +176,8 @@ export default definePolicy('comments', {
 			const policiesDir = join(testDir, "src/db/policies");
 			await mkdir(policiesDir, { recursive: true });
 
-			await writeFile(join(policiesDir, "users.policy.ts"), `export default {};`);
-			await writeFile(join(policiesDir, "posts.policy.ts"), `export default {};`);
+			await writeFile(join(policiesDir, "users.policy.ts"), "export default {};");
+			await writeFile(join(policiesDir, "posts.policy.ts"), "export default {};");
 
 			const files = await listPolicyFiles(testDir);
 
@@ -202,9 +199,9 @@ export default definePolicy('comments', {
 			const policiesDir = join(testDir, "src/db/policies");
 			await mkdir(policiesDir, { recursive: true });
 
-			await writeFile(join(policiesDir, "users.policy.ts"), `export default {};`);
-			await writeFile(join(policiesDir, "utils.ts"), `export const foo = 'bar';`);
-		await writeFile(join(policiesDir, "schema.ts"), `export const schema = {};`);
+			await writeFile(join(policiesDir, "users.policy.ts"), "export default {};");
+			await writeFile(join(policiesDir, "utils.ts"), "export const foo = 'bar';");
+			await writeFile(join(policiesDir, "schema.ts"), "export const schema = {};");
 
 			const files = await listPolicyFiles(testDir);
 
@@ -218,7 +215,7 @@ export default definePolicy('comments', {
 			const policiesDir = join(testDir, "src/db/policies");
 			await mkdir(policiesDir, { recursive: true });
 
-			await writeFile(join(policiesDir, "users.policy.ts"), `export default {};`);
+			await writeFile(join(policiesDir, "users.policy.ts"), "export default {};");
 
 			const info = await getPolicyFileInfo(testDir);
 

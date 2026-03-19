@@ -1,10 +1,7 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { checkStorageAccess, getPolicyDenialMessage } from "../src/storage/policy-engine";
 import { defineStoragePolicy } from "../src/storage/types";
 import type { StoragePolicy } from "../src/storage/types";
-import {
-	checkStorageAccess,
-	getPolicyDenialMessage,
-} from "../src/storage/policy-engine";
 
 // Note: evaluateStoragePolicy is not exported, so we test through checkStorageAccess
 describe("Storage Policy Engine", () => {
@@ -25,7 +22,13 @@ describe("Storage Policy Engine", () => {
 		];
 
 		test("should allow upload when policy is 'true' with authenticated user", () => {
-			const result = checkStorageAccess(policies, "user-123", "avatars", "upload", "user-123/profile.jpg");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"avatars",
+				"upload",
+				"user-123/profile.jpg",
+			);
 			expect(result).toBe(true);
 		});
 
@@ -35,7 +38,13 @@ describe("Storage Policy Engine", () => {
 		});
 
 		test("should allow download when policy is 'true'", () => {
-			const result = checkStorageAccess(policies, "user-123", "avatars", "download", "user-123/profile.jpg");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"avatars",
+				"download",
+				"user-123/profile.jpg",
+			);
 			expect(result).toBe(true);
 		});
 
@@ -74,27 +83,57 @@ describe("Storage Policy Engine", () => {
 		];
 
 		test("should allow when path starts with prefix", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "upload", "public/document.pdf");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"upload",
+				"public/document.pdf",
+			);
 			expect(result).toBe(true);
 		});
 
 		test("should allow for nested paths starting with prefix", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "upload", "public/images/photo.jpg");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"upload",
+				"public/images/photo.jpg",
+			);
 			expect(result).toBe(true);
 		});
 
 		test("should deny when path does not start with prefix", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "upload", "private/document.pdf");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"upload",
+				"private/document.pdf",
+			);
 			expect(result).toBe(false);
 		});
 
 		test("should work for download operations", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "download", "public/file.txt");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"download",
+				"public/file.txt",
+			);
 			expect(result).toBe(true);
 		});
 
 		test("should deny download for non-prefix paths", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "download", "private/file.txt");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"download",
+				"private/file.txt",
+			);
 			expect(result).toBe(false);
 		});
 	});
@@ -105,22 +144,46 @@ describe("Storage Policy Engine", () => {
 		];
 
 		test("should allow when userId matches first path segment", () => {
-			const result = checkStorageAccess(policies, "user-123", "avatars", "upload", "user-123/profile.jpg");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"avatars",
+				"upload",
+				"user-123/profile.jpg",
+			);
 			expect(result).toBe(true);
 		});
 
 		test("should deny when userId does not match first path segment", () => {
-			const result = checkStorageAccess(policies, "user-123", "avatars", "upload", "user-456/profile.jpg");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"avatars",
+				"upload",
+				"user-456/profile.jpg",
+			);
 			expect(result).toBe(false);
 		});
 
 		test("should deny when userId is null (anonymous)", () => {
-			const result = checkStorageAccess(policies, null, "avatars", "upload", "user-123/profile.jpg");
+			const result = checkStorageAccess(
+				policies,
+				null,
+				"avatars",
+				"upload",
+				"user-123/profile.jpg",
+			);
 			expect(result).toBe(false);
 		});
 
 		test("should work with longer paths", () => {
-			const result = checkStorageAccess(policies, "user-123", "avatars", "upload", "user-123/images/2024/photo.jpg");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"avatars",
+				"upload",
+				"user-123/images/2024/photo.jpg",
+			);
 			expect(result).toBe(true);
 		});
 	});
@@ -131,25 +194,41 @@ describe("Storage Policy Engine", () => {
 		];
 
 		test("should allow when userId matches second path segment", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "upload", "prefix/user-123/file.txt");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"upload",
+				"prefix/user-123/file.txt",
+			);
 			expect(result).toBe(true);
 		});
 
 		test("should deny when userId does not match second segment", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "upload", "prefix/user-456/file.txt");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"upload",
+				"prefix/user-456/file.txt",
+			);
 			expect(result).toBe(false);
 		});
 
 		test("should deny when userId is null", () => {
-			const result = checkStorageAccess(policies, null, "files", "upload", "prefix/user-123/file.txt");
+			const result = checkStorageAccess(
+				policies,
+				null,
+				"files",
+				"upload",
+				"prefix/user-123/file.txt",
+			);
 			expect(result).toBe(false);
 		});
 	});
 
 	describe("checkStorageAccess - wildcard operation", () => {
-		const policies: StoragePolicy[] = [
-			defineStoragePolicy("public", "*", "true"),
-		];
+		const policies: StoragePolicy[] = [defineStoragePolicy("public", "*", "true")];
 
 		test("should allow upload with wildcard policy", () => {
 			const result = checkStorageAccess(policies, "user-123", "public", "upload", "file.txt");
@@ -178,12 +257,16 @@ describe("Storage Policy Engine", () => {
 	});
 
 	describe("checkStorageAccess - no matching policies", () => {
-		const policies: StoragePolicy[] = [
-			defineStoragePolicy("avatars", "upload", "true"),
-		];
+		const policies: StoragePolicy[] = [defineStoragePolicy("avatars", "upload", "true")];
 
 		test("should deny when no policy matches the bucket", () => {
-			const result = checkStorageAccess(policies, "user-123", "unknown-bucket", "upload", "file.txt");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"unknown-bucket",
+				"upload",
+				"file.txt",
+			);
 			expect(result).toBe(false);
 		});
 
@@ -205,25 +288,41 @@ describe("Storage Policy Engine", () => {
 		];
 
 		test("should allow if any policy matches (public path)", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "upload", "public/document.pdf");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"upload",
+				"public/document.pdf",
+			);
 			expect(result).toBe(true);
 		});
 
 		test("should allow if any policy matches (user path)", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "upload", "user-123/file.txt");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"upload",
+				"user-123/file.txt",
+			);
 			expect(result).toBe(true);
 		});
 
 		test("should deny if no policy matches", () => {
-			const result = checkStorageAccess(policies, "user-123", "files", "upload", "private/document.pdf");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"upload",
+				"private/document.pdf",
+			);
 			expect(result).toBe(false);
 		});
 	});
 
 	describe("checkStorageAccess - list operation", () => {
-		const policies: StoragePolicy[] = [
-			defineStoragePolicy("files", "list", "true"),
-		];
+		const policies: StoragePolicy[] = [defineStoragePolicy("files", "list", "true")];
 
 		test("should allow list operation with 'true' policy", () => {
 			const result = checkStorageAccess(policies, "user-123", "files", "list", "");
@@ -236,18 +335,14 @@ describe("Storage Policy Engine", () => {
 		});
 
 		test("should deny list without matching policy", () => {
-			const noListPolicy: StoragePolicy[] = [
-				defineStoragePolicy("files", "upload", "true"),
-			];
+			const noListPolicy: StoragePolicy[] = [defineStoragePolicy("files", "upload", "true")];
 			const result = checkStorageAccess(noListPolicy, "user-123", "files", "list", "");
 			expect(result).toBe(false);
 		});
 	});
 
 	describe("checkStorageAccess - delete operation", () => {
-		const policies: StoragePolicy[] = [
-			defineStoragePolicy("files", "delete", "true"),
-		];
+		const policies: StoragePolicy[] = [defineStoragePolicy("files", "delete", "true")];
 
 		test("should allow delete operation with 'true' policy", () => {
 			const result = checkStorageAccess(policies, "user-123", "files", "delete", "file.txt");
@@ -255,9 +350,7 @@ describe("Storage Policy Engine", () => {
 		});
 
 		test("should deny delete without matching policy", () => {
-			const noDeletePolicy: StoragePolicy[] = [
-				defineStoragePolicy("files", "upload", "true"),
-			];
+			const noDeletePolicy: StoragePolicy[] = [defineStoragePolicy("files", "upload", "true")];
 			const result = checkStorageAccess(noDeletePolicy, "user-123", "files", "delete", "file.txt");
 			expect(result).toBe(false);
 		});
@@ -291,9 +384,7 @@ describe("Storage Policy Engine", () => {
 
 	describe("Edge cases", () => {
 		test("should handle empty path", () => {
-			const policies: StoragePolicy[] = [
-				defineStoragePolicy("files", "list", "true"),
-			];
+			const policies: StoragePolicy[] = [defineStoragePolicy("files", "list", "true")];
 			const result = checkStorageAccess(policies, "user-123", "files", "list", "");
 			expect(result).toBe(true);
 		});
@@ -302,23 +393,25 @@ describe("Storage Policy Engine", () => {
 			const policies: StoragePolicy[] = [
 				defineStoragePolicy("files", "upload", "path.startsWith('public/')"),
 			];
-			const result = checkStorageAccess(policies, "user-123", "files", "upload", "public/file with spaces.txt");
+			const result = checkStorageAccess(
+				policies,
+				"user-123",
+				"files",
+				"upload",
+				"public/file with spaces.txt",
+			);
 			expect(result).toBe(true);
 		});
 
 		test("should handle very long paths", () => {
-			const policies: StoragePolicy[] = [
-				defineStoragePolicy("files", "upload", "true"),
-			];
+			const policies: StoragePolicy[] = [defineStoragePolicy("files", "upload", "true")];
 			const longPath = "a".repeat(1000);
 			const result = checkStorageAccess(policies, "user-123", "files", "upload", longPath);
 			expect(result).toBe(true);
 		});
 
 		test("should handle bucket names with special characters", () => {
-			const policies: StoragePolicy[] = [
-				defineStoragePolicy("my-bucket", "upload", "true"),
-			];
+			const policies: StoragePolicy[] = [defineStoragePolicy("my-bucket", "upload", "true")];
 			const result = checkStorageAccess(policies, "user-123", "my-bucket", "upload", "file.txt");
 			expect(result).toBe(true);
 		});

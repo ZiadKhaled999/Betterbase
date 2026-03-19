@@ -1,13 +1,13 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { definePolicy } from "../src/rls/types";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-	evaluatePolicy,
-	applyRLSSelect,
-	applyRLSInsert,
-	applyRLSUpdate,
 	applyRLSDelete,
+	applyRLSInsert,
+	applyRLSSelect,
+	applyRLSUpdate,
 	createRLSMiddleware,
+	evaluatePolicy,
 } from "../src/rls/evaluator";
+import { definePolicy } from "../src/rls/types";
 
 describe("RLS Evaluator", () => {
 	describe("evaluatePolicy", () => {
@@ -343,7 +343,7 @@ describe("RLS Evaluator", () => {
 	});
 
 	describe("createRLSMiddleware", () => {
-		let userId: string | null = "test-user";
+		const userId: string | null = "test-user";
 
 		const getUserId = () => userId;
 		const policies = [

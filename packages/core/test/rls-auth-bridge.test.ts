@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
-	generateAuthFunction,
-	generateAuthFunctionWithSetting,
-	dropAuthFunction,
-	setCurrentUserId,
 	clearCurrentUserId,
-	generateIsAuthenticatedCheck,
+	dropAllAuthFunctions,
+	dropAuthFunction,
 	dropIsAuthenticatedCheck,
 	generateAllAuthFunctions,
-	dropAllAuthFunctions,
+	generateAuthFunction,
+	generateAuthFunctionWithSetting,
+	generateIsAuthenticatedCheck,
+	setCurrentUserId,
 } from "../src/rls/auth-bridge";
 
 describe("RLS Auth Bridge", () => {

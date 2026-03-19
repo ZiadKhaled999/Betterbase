@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-	exportSDL,
-	exportTypeSDL,
-	saveSDL,
-} from "../src/graphql/sdl-exporter";
 import { generateGraphQLSchema } from "../src/graphql/schema-generator";
+import { exportSDL, exportTypeSDL, saveSDL } from "../src/graphql/sdl-exporter";
 
 // ============================================================================
 // Test Utilities
@@ -144,7 +140,7 @@ describe("SDL Exporter", () => {
 			const schema = createTestSchema();
 			// Export the Input type and verify it contains the expected SDL
 			const typeSdl = exportTypeSDL(schema, "CreateUsersInput");
-			
+
 			expect(typeSdl).toBeDefined();
 			expect(typeSdl).toContain("input CreateUsersInput");
 			expect(typeSdl).toContain("name");

@@ -1,19 +1,19 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-	type StorageConfig,
-	type S3Config,
-	type R2Config,
-	type BackblazeConfig,
-	type MinioConfig,
-	type ManagedConfig,
-} from "../src/storage/types";
-import {
-	createStorage,
-	Storage,
-	resolveStorageAdapter,
-	type StorageFactory,
 	type BucketClient,
+	Storage,
+	type StorageFactory,
+	createStorage,
+	resolveStorageAdapter,
 } from "../src/storage/index";
+import type {
+	BackblazeConfig,
+	ManagedConfig,
+	MinioConfig,
+	R2Config,
+	S3Config,
+	StorageConfig,
+} from "../src/storage/types";
 
 describe("Storage Module", () => {
 	describe("createStorage", () => {
@@ -302,10 +302,28 @@ describe("Storage Module", () => {
 	describe("Type exports", () => {
 		test("should export StorageConfig type", () => {
 			const configs: StorageConfig[] = [
-				{ provider: "s3", bucket: "b", region: "us-east-1", accessKeyId: "k", secretAccessKey: "s" },
+				{
+					provider: "s3",
+					bucket: "b",
+					region: "us-east-1",
+					accessKeyId: "k",
+					secretAccessKey: "s",
+				},
 				{ provider: "r2", bucket: "b", accountId: "a", accessKeyId: "k", secretAccessKey: "s" },
-				{ provider: "backblaze", bucket: "b", region: "us-west", accessKeyId: "k", secretAccessKey: "s" },
-				{ provider: "minio", bucket: "b", endpoint: "localhost", accessKeyId: "k", secretAccessKey: "s" },
+				{
+					provider: "backblaze",
+					bucket: "b",
+					region: "us-west",
+					accessKeyId: "k",
+					secretAccessKey: "s",
+				},
+				{
+					provider: "minio",
+					bucket: "b",
+					endpoint: "localhost",
+					accessKeyId: "k",
+					secretAccessKey: "s",
+				},
 				{ provider: "managed", bucket: "b" },
 			];
 			expect(configs.length).toBe(5);

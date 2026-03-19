@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
-	ProviderTypeSchema,
-	BetterBaseConfigSchema,
-	defineConfig,
-	validateConfig,
-	parseConfig,
-	assertConfig,
 	type BetterBaseConfig,
+	BetterBaseConfigSchema,
+	ProviderTypeSchema,
+	assertConfig,
+	defineConfig,
+	parseConfig,
+	validateConfig,
 } from "../src/config/schema";
 
 describe("config/schema", () => {

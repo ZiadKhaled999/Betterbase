@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
-	generateResolvers,
-	createGraphQLContext,
-	requireAuth,
+	type GraphQLContext,
+	type GraphQLResolver,
 	type ResolverGenerationConfig,
 	type Resolvers,
-	type GraphQLResolver,
-	type GraphQLContext,
+	createGraphQLContext,
+	generateResolvers,
+	requireAuth,
 } from "../src/graphql/resolvers";
 
 // ============================================================================
@@ -276,11 +276,7 @@ describe("GraphQL Resolvers", () => {
 
 			const mockDb = {} as any;
 
-			const onErrorHandler = (
-				error: Error,
-				operation: string,
-				context: GraphQLContext,
-			): void => {
+			const onErrorHandler = (error: Error, operation: string, context: GraphQLContext): void => {
 				console.error(`Error in ${operation}:`, error.message);
 			};
 

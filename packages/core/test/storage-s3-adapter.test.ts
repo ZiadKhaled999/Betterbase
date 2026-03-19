@@ -1,13 +1,6 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import {
-	type S3Config,
-	type R2Config,
-	type BackblazeConfig,
-	type MinioConfig,
-} from "../src/storage/types";
-import {
-	createS3Adapter,
-} from "../src/storage/s3-adapter";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createS3Adapter } from "../src/storage/s3-adapter";
+import type { BackblazeConfig, MinioConfig, R2Config, S3Config } from "../src/storage/types";
 
 describe("S3 Adapter", () => {
 	describe("createS3Adapter - S3 Provider", () => {

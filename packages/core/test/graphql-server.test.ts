@@ -1,12 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import {
-	createGraphQLServer,
-	startGraphQLServer,
-	type GraphQLConfig,
-} from "../src/graphql/server";
-import { generateGraphQLSchema } from "../src/graphql/schema-generator";
+import { GraphQLObjectType, GraphQLSchema } from "graphql";
 import { generateResolvers } from "../src/graphql/resolvers";
-import { GraphQLSchema, GraphQLObjectType } from "graphql";
+import { generateGraphQLSchema } from "../src/graphql/schema-generator";
+import { type GraphQLConfig, createGraphQLServer, startGraphQLServer } from "../src/graphql/server";
 
 // ============================================================================
 // Test Utilities
