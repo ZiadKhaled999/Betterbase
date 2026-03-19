@@ -19,6 +19,8 @@ Betterbase is an open-source alternative to Supabase, built with Bun for blazing
 
 </div>
 
+**Last Updated: 2026-03-19**
+
 ---
 
 ## Why Betterbase?
@@ -253,9 +255,9 @@ Your backend is now running at `http://localhost:3000`:
 │                                                                         │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
 │  │                     @betterbase/cli                              │   │
-│  │  CLI tool with 11 commands for development and deployment       │   │
-│  │  init, dev, migrate, auth, generate, function, graphql, login,   │   │
-│  │  rls, storage, webhook                                           │   │
+│  │  CLI tool with 12 commands for development and deployment       │   │
+│  │  init, dev, migrate, auth, generate, function, graphql, login,  │   │
+│  │  rls, storage, webhook, branch                                   │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
@@ -271,9 +273,7 @@ Your backend is now running at `http://localhost:3000`:
 │  └──────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                     @betterbase/shared                          │   │
-│  │  Shared utilities, types, constants, and validation schemas     │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
+
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -365,7 +365,7 @@ export default defineConfig({
 
 ## CLI Reference
 
-The Betterbase CLI (`bb`) provides 11 commands for development and deployment:
+The Betterbase CLI (`bb`) provides 12 commands for development and deployment:
 
 ### Core Commands
 
@@ -1172,8 +1172,7 @@ betterbase/
 ├── packages/
 │   ├── cli/               # @betterbase/cli
 │   ├── client/            # @betterbase/client
-│   ├── core/              # @betterbase/core
-│   └── shared/            # @betterbase/shared
+│   └── core/              # @betterbase/core
 ├── templates/             # Project templates
 └── turbo.json             # Turborepo configuration
 ```
@@ -1254,6 +1253,31 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 
 ---
 
+## Changelog
+
+All notable changes to this project will be documented in this section.
+
+### [1.0.0] - 2026-03-19
+
+#### Added
+- **AI Context Generation**: Automatic `.betterbase-context.json` generation for AI-assisted development
+- **Branch Management**: New `bb branch` command for creating isolated preview environments
+- **Vector Search**: pgvector-powered similarity search with embeddings support
+- **Auto-REST**: Automatic CRUD route generation from Drizzle schema
+- **Enhanced CLI**: Added 12 commands including branch, webhook management, and storage operations
+
+#### Updated
+- Updated copyright year to 2026
+- Improved documentation with Last Updated timestamp
+- Verified all features against current codebase structure
+- Removed deprecated @betterbase/shared package references
+
+#### Security
+- Improved webhook signature verification
+- Enhanced RLS policy engine
+
+---
+
 ## License
 
 Betterbase is open source under the [MIT License](LICENSE).
@@ -1261,7 +1285,7 @@ Betterbase is open source under the [MIT License](LICENSE).
 ```
 MIT License
 
-Copyright (c) 2024 Betterbase
+Copyright (c) 2026 Betterbase
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
