@@ -155,7 +155,7 @@ export async function runDevCommand(projectRoot: string = process.cwd()): Promis
 		try {
 			// Only use recursive option for directories on supported platforms (darwin/win32)
 			const isDir = statSync(watchPath).isDirectory();
-			const isSupportedPlatform = process.platform === 'darwin' || process.platform === 'win32';
+			const isSupportedPlatform = process.platform === "darwin" || process.platform === "win32";
 			const opts = isDir && isSupportedPlatform ? { recursive: true } : undefined;
 
 			const watcher = watch(watchPath, opts, (_eventType, filename) => {

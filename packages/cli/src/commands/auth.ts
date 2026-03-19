@@ -228,14 +228,14 @@ function updateIndexForAuth(projectRoot: string): void {
 	if (!current.includes('import { auth } from "./auth"')) {
 		// Try with semicolon first, then without
 		let insertAfter = 'import { registerRoutes } from "./routes";';
-		let importLine = '\nimport { auth } from "./auth";';
+		const importLine = '\nimport { auth } from "./auth";';
 		let updated = current.replace(insertAfter, insertAfter + importLine);
-		
+
 		if (updated === current) {
 			insertAfter = 'import { registerRoutes } from "./routes"';
 			updated = current.replace(insertAfter, insertAfter + importLine);
 		}
-		
+
 		writeFileSync(indexPath, updated);
 	}
 
@@ -244,14 +244,14 @@ function updateIndexForAuth(projectRoot: string): void {
 	if (!updatedWithMount.includes("/api/auth/**")) {
 		// Try with semicolon first, then without
 		let insertAfter = "registerRoutes(app);";
-		let mountCode = `\n\napp.on(["POST", "GET"], "/api/auth/**", (c) => {\n  return auth.handler(c.req.raw)\n})`;
+		const mountCode = `\n\napp.on(["POST", "GET"], "/api/auth/**", (c) => {\n  return auth.handler(c.req.raw)\n})`;
 		let final = updatedWithMount.replace(insertAfter, insertAfter + mountCode);
-		
+
 		if (final === updatedWithMount) {
 			insertAfter = "registerRoutes(app)";
 			final = updatedWithMount.replace(insertAfter, insertAfter + mountCode);
 		}
-		
+
 		writeFileSync(indexPath, final);
 		logger.info("Updated src/index.ts with BetterAuth handler mount");
 	}
@@ -277,23 +277,25 @@ export async function runAuthSetupCommand(
 	let authSchemaPath = path.join(srcDir, "db", "auth-schema.ts");
 	if (existsSync(authSchemaPath)) {
 		logger.info("✅ Auth is already set up!");
-		
+
 		// Ask if they want to re-run migrations
 		const shouldRunMigrations = await confirm({
 			message: "Would you like to re-run migrations?",
 			default: false,
 		});
-		
+
 		if (shouldRunMigrations) {
 			logger.info("🗄️ Running database migrations...");
 			try {
 				execSync("bunx drizzle-kit push", { cwd: resolvedRoot, stdio: "inherit" });
 				logger.success("✅ Migrations complete!");
 			} catch (error: any) {
-				logger.warn(`Could not run drizzle-kit push automatically: ${error.message}. Please run it manually.`);
+				logger.warn(
+					`Could not run drizzle-kit push automatically: ${error.message}. Please run it manually.`,
+				);
 			}
 		}
-		
+
 		return;
 	}
 
@@ -342,7 +344,9 @@ export async function runAuthSetupCommand(
 		logger.info("Executing drizzle-kit push...");
 		execSync("bunx drizzle-kit push", { cwd: resolvedRoot, stdio: "inherit" });
 	} catch (error: any) {
-		logger.warn(`Could not run drizzle-kit push automatically: ${error.message}. Please run it manually.`);
+		logger.warn(
+			`Could not run drizzle-kit push automatically: ${error.message}. Please run it manually.`,
+		);
 	}
 
 	logger.success("✅ BetterAuth setup complete!");

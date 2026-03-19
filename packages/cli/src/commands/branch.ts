@@ -5,20 +5,20 @@
  * Provides commands to create, list, delete, sleep, and wake preview environments.
  */
 
-import { readFile } from "fs/promises";
-import { resolve } from "path";
-import * as logger from "../utils/logger";
-import { CONFIG_FILE_NAME } from "@betterbase/shared";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { BetterBaseConfig } from "@betterbase/core";
 import {
-	createBranchManager,
-	getAllBranches,
-	clearAllBranches,
 	type BranchConfig,
 	type BranchListResult,
 	type BranchOperationResult,
 	type CreateBranchOptions,
+	clearAllBranches,
+	createBranchManager,
+	getAllBranches,
 } from "@betterbase/core/branching";
+import { CONFIG_FILE_NAME } from "@betterbase/shared";
+import * as logger from "../utils/logger";
 
 /**
  * Load BetterBase configuration from project root
@@ -84,18 +84,20 @@ export async function runBranchCreateCommand(
 		}
 
 		const branch = result.branch!;
-		logger.success(`Preview environment created successfully!`);
+		logger.success("Preview environment created successfully!");
 		logger.info(`  Name: ${branch.name}`);
 		logger.info(`  Preview URL: ${branch.previewUrl}`);
 		logger.info(`  Status: ${branch.status}`);
 
 		if (result.warnings && result.warnings.length > 0) {
 			logger.warn("Warnings:");
-			result.warnings.forEach((warning: string) => logger.warn(`  - ${warning}`));
+			for (const warning of result.warnings) {
+				logger.warn(`  - ${warning}`);
+			}
 		}
 
 		if (branch.databaseConnectionString) {
-			logger.info(`  Database: Cloned from main`);
+			logger.info("  Database: Cloned from main");
 		}
 
 		if (branch.storageBucket) {
@@ -142,14 +144,14 @@ export async function runBranchListCommand(
 		logger.info(`Found ${result.total} preview environment(s):\n`);
 
 		// Display each branch
-		result.branches.forEach((branch: BranchConfig) => {
+		for (const branch of result.branches) {
 			logger.info(`  ${branch.name}`);
 			logger.info(`    Status: ${branch.status}`);
 			logger.info(`    URL: ${branch.previewUrl}`);
 			logger.info(`    Created: ${branch.createdAt.toISOString()}`);
 			logger.info(`    Last accessed: ${branch.lastAccessedAt.toISOString()}`);
 			logger.info("");
-		});
+		}
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		logger.error(`Error listing preview environments: ${message}`);
@@ -207,7 +209,9 @@ export async function runBranchDeleteCommand(
 
 		if (result.warnings && result.warnings.length > 0) {
 			logger.warn("Warnings:");
-			result.warnings.forEach((warning: string) => logger.warn(`  - ${warning}`));
+			for (const warning of result.warnings) {
+				logger.warn(`  - ${warning}`);
+			}
 		}
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
