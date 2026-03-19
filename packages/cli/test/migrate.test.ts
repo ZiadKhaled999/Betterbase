@@ -1,21 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { splitStatements, analyzeMigration } from "../src/commands/migrate";
+import { analyzeMigration, splitStatements } from "../src/commands/migrate";
 
 describe("splitStatements", () => {
 	test("splits two statements separated by semicolons", () => {
-		const sql = `CREATE TABLE users (id TEXT PRIMARY KEY);\nCREATE TABLE posts (id TEXT PRIMARY KEY);`;
+		const sql =
+			"CREATE TABLE users (id TEXT PRIMARY KEY);\nCREATE TABLE posts (id TEXT PRIMARY KEY);";
 		const result = splitStatements(sql);
 		expect(result.length).toBe(2);
 	});
 
 	test("trims whitespace from each statement", () => {
-		const sql = `  CREATE TABLE a (id TEXT);  `;
+		const sql = "  CREATE TABLE a (id TEXT);  ";
 		const result = splitStatements(sql);
 		expect(result[0].trim()).toBe("CREATE TABLE a (id TEXT)");
 	});
 
 	test("ignores empty statements from consecutive semicolons", () => {
-		const sql = `CREATE TABLE a (id TEXT);;;CREATE TABLE b (id TEXT);`;
+		const sql = "CREATE TABLE a (id TEXT);;;CREATE TABLE b (id TEXT);";
 		const result = splitStatements(sql);
 		expect(result.every((s: string) => s.trim().length > 0)).toBe(true);
 	});
@@ -25,7 +26,7 @@ describe("splitStatements", () => {
 	});
 
 	test("returns single item for input with no semicolons", () => {
-		const sql = `CREATE TABLE a (id TEXT PRIMARY KEY)`;
+		const sql = "CREATE TABLE a (id TEXT PRIMARY KEY)";
 		const result = splitStatements(sql);
 		expect(result.length).toBe(1);
 	});
@@ -89,10 +90,7 @@ describe("analyzeMigration", () => {
 	});
 
 	test("handles multiple statements with mixed destructiveness", () => {
-		const statements = [
-			"CREATE TABLE posts (id TEXT)",
-			"DROP TABLE old_table",
-		];
+		const statements = ["CREATE TABLE posts (id TEXT)", "DROP TABLE old_table"];
 		const result = analyzeMigration(statements);
 		const hasDestructive = result.some((c) => c.isDestructive);
 		expect(hasDestructive).toBe(true);
