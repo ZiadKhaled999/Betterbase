@@ -5,11 +5,7 @@
  * Uses S3-compatible storage (AWS S3, Cloudflare R2, Backblaze B2, MinIO)
  */
 
-import type {
-	StorageAdapter,
-	StorageConfig,
-	StorageObject,
-} from "../storage/types";
+import type { StorageAdapter, StorageConfig, StorageObject } from "../storage/types";
 import type { PreviewStorage } from "./types";
 
 /**
@@ -42,11 +38,7 @@ export class StorageBranching {
 	 * @param mainBucket - Main bucket name
 	 * @param config - Storage configuration
 	 */
-	constructor(
-		storageAdapter: StorageAdapter,
-		mainBucket: string,
-		config: StorageConfig,
-	) {
+	constructor(storageAdapter: StorageAdapter, mainBucket: string, config: StorageConfig) {
 		this.mainStorageAdapter = storageAdapter;
 		this.mainBucket = mainBucket;
 		this.config = config;
@@ -78,15 +70,9 @@ export class StorageBranching {
 	 * @param prefix - Optional prefix to filter files to copy
 	 * @returns Number of files copied
 	 */
-	async copyFilesToPreview(
-		previewBucket: string,
-		prefix?: string,
-	): Promise<number> {
+	async copyFilesToPreview(previewBucket: string, prefix?: string): Promise<number> {
 		// List all objects in the main bucket
-		const objects = await this.mainStorageAdapter.listObjects(
-			this.mainBucket,
-			prefix,
-		);
+		const objects = await this.mainStorageAdapter.listObjects(this.mainBucket, prefix);
 
 		let copiedCount = 0;
 
@@ -96,27 +82,16 @@ export class StorageBranching {
 
 			try {
 				// Download from main bucket
-				const fileData = await this.mainStorageAdapter.download(
-					this.mainBucket,
-					obj.key,
-				);
+				const fileData = await this.mainStorageAdapter.download(this.mainBucket, obj.key);
 
 				// Upload to preview bucket
-				await this.mainStorageAdapter.upload(
-					previewBucket,
-					obj.key,
-					fileData,
-					{
-						contentType: obj.contentType,
-					},
-				);
+				await this.mainStorageAdapter.upload(previewBucket, obj.key, fileData, {
+					contentType: obj.contentType,
+				});
 
 				copiedCount++;
 			} catch (error) {
-				console.warn(
-					`Failed to copy file ${obj.key} to preview bucket:`,
-					error,
-				);
+				console.warn(`Failed to copy file ${obj.key} to preview bucket:`, error);
 			}
 		}
 
@@ -141,14 +116,9 @@ export class StorageBranching {
 			// Note: Actual bucket deletion depends on the provider
 			// For S3-compatible storage, we don't delete the bucket itself
 			// as it may require special permissions or may not be supported
-			console.log(
-				`Preview storage bucket '${previewBucket}' has been cleaned up`,
-			);
+			console.log(`Preview storage bucket '${previewBucket}' has been cleaned up`);
 		} catch (error) {
-			console.warn(
-				`Failed to teardown preview storage bucket '${previewBucket}':`,
-				error,
-			);
+			console.warn(`Failed to teardown preview storage bucket '${previewBucket}':`, error);
 			// Don't throw - cleanup should be best-effort
 		}
 	}

@@ -5,8 +5,8 @@
  * Supports PostgreSQL databases (including Neon, Supabase, etc.)
  */
 
-import postgres from "postgres";
 import type { ProviderType } from "@betterbase/shared";
+import postgres from "postgres";
 import { BranchStatus } from "./types";
 import type { BranchConfig, PreviewDatabase } from "./types";
 
@@ -44,7 +44,18 @@ function isSafeDDL(ddl: string): boolean {
 	}
 
 	// Ensure it doesn't contain dangerous keywords after cleaning
-	const dangerous = ["DROP", "TRUNCATE", "DELETE", "INSERT", "UPDATE", "ALTER", "GRANT", "REVOKE", "EXEC", "EXECUTE"];
+	const dangerous = [
+		"DROP",
+		"TRUNCATE",
+		"DELETE",
+		"INSERT",
+		"UPDATE",
+		"ALTER",
+		"GRANT",
+		"REVOKE",
+		"EXEC",
+		"EXECUTE",
+	];
 	for (const keyword of dangerous) {
 		if (trimmed.includes(keyword)) {
 			return false;
@@ -105,7 +116,7 @@ function parseConnectionString(connectionString: string): {
 		throw new Error("Invalid PostgreSQL connection string: database name is required");
 	}
 
-	const port = url.port ? parseInt(url.port, 10) : 5432;
+	const port = url.port ? Number.parseInt(url.port, 10) : 5432;
 	const user = url.username ? decodeURIComponent(url.username) : "";
 	const password = url.password ? decodeURIComponent(url.password) : "";
 
@@ -124,10 +135,7 @@ function parseConnectionString(connectionString: string): {
  * @param newDatabaseName - New database name
  * @returns New connection string
  */
-function createConnectionString(
-	connectionString: string,
-	newDatabaseName: string,
-): string {
+function createConnectionString(connectionString: string, newDatabaseName: string): string {
 	const parsed = parseConnectionString(connectionString);
 	return `postgres://${parsed.user}:${parsed.password}@${parsed.host}:${parsed.port}/${newDatabaseName}`;
 }
@@ -154,12 +162,7 @@ export class DatabaseBranching {
 	 * Only PostgreSQL-based providers support branching
 	 */
 	isBranchingSupported(): boolean {
-		const supportedProviders: ProviderType[] = [
-			"postgres",
-			"neon",
-			"supabase",
-			"managed",
-		];
+		const supportedProviders: ProviderType[] = ["postgres", "neon", "supabase", "managed"];
 		return supportedProviders.includes(this.provider);
 	}
 
@@ -169,10 +172,7 @@ export class DatabaseBranching {
 	 * @param copyData - Whether to copy existing data (default: true)
 	 * @returns Connection details for the new preview database
 	 */
-	async cloneDatabase(
-		branchName: string,
-		copyData: boolean = true,
-	): Promise<PreviewDatabase> {
+	async cloneDatabase(branchName: string, copyData = true): Promise<PreviewDatabase> {
 		if (!this.isBranchingSupported()) {
 			throw new Error(
 				`Database branching is not supported for provider: ${this.provider}. Only PostgreSQL-based providers (postgres, neon, supabase) support branching.`,
@@ -245,7 +245,7 @@ export class DatabaseBranching {
 								for (const row of sourceData) {
 									const columns = Object.keys(row);
 									const values = Object.values(row);
-									const safeColumns = columns.map(c => escapeIdentifier(c)).join(", ");
+									const safeColumns = columns.map((c) => escapeIdentifier(c)).join(", ");
 									const placeholders = columns.map(() => "?").join(", ");
 
 									await previewDb.unsafe(
@@ -263,7 +263,6 @@ export class DatabaseBranching {
 
 				// Copy indexes
 				await this.copyIndexes(mainDb, previewDb);
-
 			} finally {
 				await previewDb.end();
 			}
@@ -281,10 +280,7 @@ export class DatabaseBranching {
 	/**
 	 * Copy sequences from source to target database
 	 */
-	private async copySequences(
-		sourceDb: postgres.Sql,
-		targetDb: postgres.Sql,
-	): Promise<void> {
+	private async copySequences(sourceDb: postgres.Sql, targetDb: postgres.Sql): Promise<void> {
 		const sequences = await sourceDb`
 			SELECT sequence_schema, sequence_name 
 			FROM information_schema.sequences
@@ -311,10 +307,7 @@ export class DatabaseBranching {
 	 * Copy indexes from source to target database
 	 * Note: Indexes are typically created as part of table DDL, but this handles custom indexes
 	 */
-	private async copyIndexes(
-		_sourceDb: postgres.Sql,
-		_targetDb: postgres.Sql,
-	): Promise<void> {
+	private async copyIndexes(_sourceDb: postgres.Sql, _targetDb: postgres.Sql): Promise<void> {
 		// Indexes are typically included in the table DDL from pg_get_tabledef
 		// Additional custom index handling can be added here if needed
 	}
@@ -337,10 +330,7 @@ export class DatabaseBranching {
 		const dbName = parsed.database;
 
 		// Connect to the default postgres database to drop the target database
-		const adminConnectionString = createConnectionString(
-			this.mainConnectionString,
-			"postgres",
-		);
+		const adminConnectionString = createConnectionString(this.mainConnectionString, "postgres");
 		const adminDb = postgres(adminConnectionString);
 
 		try {

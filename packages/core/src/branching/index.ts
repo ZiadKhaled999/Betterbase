@@ -5,26 +5,19 @@
  * Orchestrates database branching and storage branching together.
  */
 
-import type { ProviderType, BetterBaseConfig } from "../config/schema";
-import type { StorageConfig, StorageAdapter } from "../storage/types";
-import { resolveStorageAdapter, createStorage } from "../storage";
-import {
-	DatabaseBranching,
-	createDatabaseBranching,
-	buildBranchConfig,
-} from "./database";
-import {
-	StorageBranching,
-	createStorageBranching,
-} from "./storage";
+import type { BetterBaseConfig, ProviderType } from "../config/schema";
+import { createStorage, resolveStorageAdapter } from "../storage";
+import type { StorageAdapter, StorageConfig } from "../storage/types";
+import { type DatabaseBranching, buildBranchConfig, createDatabaseBranching } from "./database";
+import { type StorageBranching, createStorageBranching } from "./storage";
 import type {
 	BranchConfig,
+	BranchListResult,
+	BranchOperationResult,
 	BranchStatus,
+	BranchingConfig,
 	CreateBranchOptions,
 	PreviewEnvironment,
-	BranchOperationResult,
-	BranchListResult,
-	BranchingConfig,
 } from "./types";
 import { BranchStatus as BranchStatusEnum } from "./types";
 
@@ -72,19 +65,14 @@ export class BranchManager {
 		// Initialize storage branching if configured
 		if (betterbaseConfig.storage && this.config.storageEnabled) {
 			try {
-				const storageAdapter = resolveStorageAdapter(
-					betterbaseConfig.storage as StorageConfig,
-				);
+				const storageAdapter = resolveStorageAdapter(betterbaseConfig.storage as StorageConfig);
 				this.storageBranching = createStorageBranching(
 					storageAdapter,
 					betterbaseConfig.storage.bucket,
 					betterbaseConfig.storage as StorageConfig,
 				);
 			} catch (error) {
-				console.warn(
-					"Failed to initialize storage branching:",
-					error,
-				);
+				console.warn("Failed to initialize storage branching:", error);
 			}
 		}
 	}
@@ -172,9 +160,7 @@ export class BranchManager {
 				dbConnectionString = previewDb.connectionString;
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
-				throw new Error(
-					`Database cloning failed: ${message}`,
-				);
+				throw new Error(`Database cloning failed: ${message}`);
 			}
 		}
 
@@ -182,15 +168,12 @@ export class BranchManager {
 		let storageBucket: string | undefined;
 		if (this.storageBranching && options.copyStorage !== false) {
 			try {
-				const previewStorage =
-					await this.storageBranching.createPreviewBucket(branchName);
+				const previewStorage = await this.storageBranching.createPreviewBucket(branchName);
 				storageBucket = previewStorage.bucket;
 
 				// Copy files from main bucket
 				if (options.copyStorage === true) {
-					const filesCopied = await this.storageBranching.copyFilesToPreview(
-						previewStorage.bucket,
-					);
+					const filesCopied = await this.storageBranching.copyFilesToPreview(previewStorage.bucket);
 					infos.push(`Copied ${filesCopied} files to preview storage`);
 				}
 			} catch (error) {
@@ -274,9 +257,7 @@ export class BranchManager {
 		}
 
 		// Sort by creation date (newest first)
-		branches.sort(
-			(a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-		);
+		branches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
 		// Apply pagination
 		const limit = options?.limit || 50;
@@ -309,9 +290,7 @@ export class BranchManager {
 		// Teardown database if exists
 		if (branch.databaseConnectionString && this.databaseBranching) {
 			try {
-				await this.databaseBranching.teardownPreviewDatabase(
-					branch.databaseConnectionString,
-				);
+				await this.databaseBranching.teardownPreviewDatabase(branch.databaseConnectionString);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				warnings.push(`Database teardown failed: ${message}`);
