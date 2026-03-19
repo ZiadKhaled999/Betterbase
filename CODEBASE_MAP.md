@@ -1,6 +1,6 @@
 # BetterBase — Complete Codebase Map
 
-> Last updated: 2026-03-07
+> Last updated: 2026-03-19
 
 ## Project Identity
 
@@ -49,10 +49,9 @@ graph TB
     end
     
     subgraph packages
-        CLI[packages/cli<br/>11 commands<br/>7 utils]
+        CLI[packages/cli<br/>12 commands<br/>7 utils]
         Client[packages/client<br/>9 modules]
         Core[packages/core<br/>11 modules]
-        Shared[packages/shared<br/>5 utilities]
     end
     
     subgraph apps
@@ -61,13 +60,11 @@ graph TB
     
     subgraph external
         CliAuth[cli-auth-page<br/>Auth UI]
-        AuthTemplate[templates/auth<br/>Auth template]
     end
     
     Root --> CLI
     Root --> Client
     Root --> Core
-    Root --> Shared
     Root --> TestProject
 ```
 
@@ -101,7 +98,8 @@ betterbase/
 │   │   │   │   ├── migrate.ts     # bb migrate - Database migrations
 │   │   │   │   ├── rls.ts         # bb rls - Row Level Security management
 │   │   │   │   ├── storage.ts     # bb storage - Storage bucket management
-│   │   │   │   └── webhook.ts     # bb webhook - Webhook management
+│   │   │   │   ├── webhook.ts     # bb webhook - Webhook management
+│   │   │   │   └── branch.ts      # bb branch - Branch management
 │   │   │   └── utils/             # CLI utilities (7 files)
 │   │   │       ├── context-generator.ts   # Generates .betterbase-context.json
 │   │   │       ├── logger.ts              # Colored console logging
@@ -180,17 +178,6 @@ betterbase/
 │   │           ├── integrator.ts # DB trigger integration
 │   │           ├── signer.ts     # Payload signing
 │   │           └── startup.ts    # Server initialization
-│   │
-│   └── shared/                    # @betterbase/shared - Shared utilities
-│       ├── package.json
-│       ├── README.md
-│       ├── tsconfig.json
-│       └── src/
-│           ├── index.ts          # Package exports
-│           ├── constants.ts      # Shared constants
-│           ├── errors.ts         # Error classes
-│           ├── types.ts          # Shared types
-│           └── utils.ts          # Utility functions
 │
 ├── apps/
 │   └── test-project/              # Example/test project
@@ -228,19 +215,9 @@ betterbase/
 │           ├── crud.test.ts
 │           └── health.test.ts
 │
-├── cli-auth-page/                 # Authentication page for CLI
+├── cli-auth-page/                 # Standalone auth page for CLI (not a template)
 │   ├── .gitignore
-│   ├── index.html                # Auth UI entry
-│   └── .vercel/                  # Vercel config
-│
-└── templates/
-    └── auth/                      # Auth template with BetterAuth
-        ├── README.md
-        └── src/
-            ├── auth/             # Auth setup
-            ├── db/               # Auth schema
-            ├── middleware/       # Auth middleware
-            └── routes/          # Auth routes
+│   └── index.html                # Auth UI entry
 ```
 
 ---
@@ -249,7 +226,7 @@ betterbase/
 
 ### [`package.json`](package.json)
 **Purpose:** Root workspace configuration for Turborepo monorepo.
-- **Key Fields:** `name: "betterbase"`, workspaces: `["packages/*", "templates/*", "apps/*"]`
+- **Key Fields:** `name: "betterbase"`, workspaces: `["packages/*", "apps/*"]`
 - **Scripts:** Build, test, and dev scripts using turbo
 - **Dependencies:** `turbo@^2.3.0`, `bun` (package manager)
 
@@ -265,59 +242,6 @@ betterbase/
 - **Module:** NodeNext
 - **Strict:** Enabled
 - **Module Resolution:** NodeNext
-
----
-
-## packages/shared
-
-`@betterbase/shared` - Shared utilities and types across all packages.
-
-### Shared Modules
-
-#### [`src/constants.ts`](packages/shared/src/constants.ts)
-**Purpose:** Defines shared constants used by all packages.
-- **Exports:** `BETTERBASE_VERSION`, `DEFAULT_PORT`, `DEFAULT_DB_PATH`, `CONTEXT_FILE_NAME`, `CONFIG_FILE_NAME`, `MIGRATIONS_DIR`, `FUNCTIONS_DIR`, `POLICIES_DIR`
-- **Values:**
-  - `BETTERBASE_VERSION`: "0.1.0"
-  - `DEFAULT_PORT`: 3000
-  - `DEFAULT_DB_PATH`: "local.db"
-  - `CONTEXT_FILE_NAME`: ".betterbase-context.json"
-  - `CONFIG_FILE_NAME`: "betterbase.config.ts"
-  - `MIGRATIONS_DIR`: "drizzle"
-  - `FUNCTIONS_DIR`: "src/functions"
-  - `POLICIES_DIR`: "src/db/policies"
-
-#### [`src/errors.ts`](packages/shared/src/errors.ts)
-**Purpose:** Defines custom error classes for consistent error handling.
-- **Exports:** `BetterBaseError`, `ValidationError`, `NotFoundError`, `UnauthorizedError`
-- **Key Features:**
-  - `BetterBaseError`: Base error class with code and status code
-  - `ValidationError`: 400 Bad Request error for validation failures
-  - `NotFoundError`: 404 Not Found error for missing resources
-  - `UnauthorizedError`: 401 Unauthorized error for authentication failures
-
-#### [`src/types.ts`](packages/shared/src/types.ts)
-**Purpose:** Shared TypeScript type definitions.
-- **Exports:**
-  - `SerializedError`: JSON-serializable error representation
-  - `BetterBaseResponse<T>`: Generic API response wrapper with data, error, count, and pagination
-  - `DBEventType`: Database event type (INSERT, UPDATE, DELETE)
-  - `DBEvent`: Database event object with table, type, record, old_record, and timestamp
-  - `ProviderType`: Supported database providers (neon, turso, planetscale, supabase, postgres, managed)
-  - `PaginationParams`: Generic pagination parameters (limit, offset)
-
-#### [`src/utils.ts`](packages/shared/src/utils.ts)
-**Purpose:** Utility functions used across all packages.
-- **Exports:**
-  - `serializeError(error)`: Converts an Error object to SerializedError
-  - `isValidProjectName(name)`: Validates project name is slug-safe (lowercase, alphanumeric, hyphens)
-  - `toCamelCase(str)`: Converts snake_case to camelCase
-  - `toSnakeCase(str)`: Converts camelCase/PascalCase to snake_case
-  - `safeJsonParse<T>(str)`: Safely parses JSON without throwing, returns null on failure
-  - `formatBytes(bytes)`: Formats bytes to human-readable string (B, KiB, MiB, GiB, TiB, PiB)
-
-#### [`src/index.ts`](packages/shared/src/index.ts)
-**Purpose:** Shared package entry point re-exporting all modules.
 
 ---
 
@@ -883,7 +807,6 @@ Canonical `@betterbase/cli` implementation - the `bb` command-line tool.
 - **Usage Patterns:** Run after project initialization to add authentication. Modifies existing files to integrate BetterAuth.
 - **Implementation Details:** Injects SQL schema blocks into existing schema file, adds auth routes to routes index, creates auth middleware. Uses file patching rather than full file generation for integration.
 - **External Deps:** `better-auth`, `chalk`
-- **Cross-Ref:** [`templates/auth/`](templates/auth/)
 
 #### [`commands/generate.ts`](packages/cli/src/commands/generate.ts)
 **Purpose:** `bb generate crud` command - generates CRUD routes for a table.
@@ -1049,92 +972,6 @@ Canonical `@betterbase/cli` implementation - the `bb` command-line tool.
 **Purpose:** Tests for RouteScanner.
 - **Tests:** Extracts Hono routes with auth detection and schema usage
 - **Usage Patterns:** Unit tests for route scanning.
-
----
-
-## templates/base
-
-Bun + Hono + Drizzle starter template.
-
-### Template Files
-
-#### [`src/index.ts`](templates/base/src/index.ts)
-**Purpose:** Main server entry point.
-- **Key Features:**
-  - Initializes Hono app
-  - Sets up WebSocket server for realtime
-  - Registers routes
-  - Mounts auth handler
-  - Enables GraphQL API if configured
-  - Initializes webhooks
-  - Starts server
-  - Handles shutdown signals
-
-#### [`src/db/schema.ts`](templates/base/src/db/schema.ts)
-**Purpose:** Database schema definitions using Drizzle ORM.
-- **Key Features:**
-  - User and posts tables
-  - Helper functions for timestamps, UUID, soft delete, status enum, money column, JSON column
-  - BetterAuth tables (user, session, account, verification)
-
-#### [`src/routes/index.ts`](templates/base/src/routes/index.ts)
-**Purpose:** Main route registration file.
-- **Key Features:**
-  - CORS middleware
-  - Logger middleware
-  - Error handler
-  - Health check endpoint
-  - Users API routes
-  - Storage API routes
-
-#### [`src/routes/storage.ts`](templates/base/src/routes/storage.ts)
-**Purpose:** Storage API routes.
-- **Key Features:**
-  - List files in bucket
-  - Delete files
-  - Upload file
-  - Download file
-  - Get public URL
-  - Create signed URL
-  - Authentication middleware
-  - Request validation with Zod
-  - Path sanitization
-  - Storage configuration from environment variables
-
-#### [`src/lib/realtime.ts`](templates/base/src/lib/realtime.ts)
-**Purpose:** Realtime server implementation.
-- **Key Features:**
-  - WebSocket server for realtime updates
-  - Client management
-  - Subscription management
-  - Event broadcasting
-  - Filtering
-  - Rate limiting
-  - Authentication and authorization
-  - Connection limits
-
-#### [`betterbase.config.ts`](templates/base/betterbase.config.ts)
-**Purpose:** BetterBase project configuration.
-
-#### [`drizzle.config.ts`](templates/base/drizzle.config.ts)
-**Purpose:** Drizzle ORM configuration.
-
-#### [`package.json`](templates/base/package.json)
-**Purpose:** Project dependencies and scripts.
-
----
-
-## templates/auth
-
-Auth template with BetterAuth integration.
-
-### Template Files
-
-#### [`src/routes/auth.ts`](templates/auth/src/routes/auth.ts)
-**Purpose:** Authentication API routes.
-
-#### [`src/db/auth-schema.ts`](templates/auth/src/db/auth-schema.ts)
-**Purpose:** BetterAuth database schema.
 
 ---
 
@@ -1560,6 +1397,33 @@ bun test
 
 ---
 
+## Changelog
+
+All notable changes to BetterBase will be documented in this file.
+
+### Recent Updates (2026-03-19)
+
+#### New Features
+- **AI Context Generation**: Added intelligent context generation for AI assistants to understand project structure and provide more accurate recommendations
+- **Branch Management**: New `bb branch` command for creating and managing database branches for development, staging, and production
+- **Vector Search**: Integrated vector search capabilities for AI-powered semantic search functionality
+- **Auto-REST**: Automatic REST API generation from Drizzle schema definitions
+- **Enhanced CLI**: Expanded from 11 to 12 commands with the addition of branch management
+
+#### Security Improvements
+- Enhanced RLS (Row Level Security) policies
+- Improved webhook signing and verification
+- Better authentication middleware
+- Secure credential handling across providers
+
+#### Package Updates
+- **packages/cli**: 12 commands (init, dev, migrate, auth, generate, function, graphql, login, rls, storage, webhook, branch)
+- **packages/client**: Auth, Query Builder, Realtime, Storage modules
+- **packages/core**: Config, Functions, GraphQL, Middleware, Migration, Providers, RLS, Storage, Vector, Branching, Auto-REST, Webhooks
+
+---
+
 ## License
 
 BetterBase is released under the MIT license.
+
