@@ -194,7 +194,7 @@ Your backend is now running at `http://localhost:3000`:
 | `http://localhost:3000` | API root |
 | `http://localhost:3000/rest/v1/*` | REST API |
 | `http://localhost:3000/graphql` | GraphQL playground |
-| `http://localhost:3000/auth/*` | Authentication endpoints |
+| `http://localhost:3000/api/auth/*` | Authentication endpoints |
 | `http://localhost:3000/storage/*` | Storage endpoints |
 | `http://localhost:3000/realtime/*` | Realtime subscriptions |
 
@@ -725,24 +725,6 @@ const { data, error } = await client
   .eq('id', 'post-123')
 ```
 
-#### Delete
-
-| Method | Parameters | Description |
-|--------|------------|-------------|
-| `.signUp(email, password, name)` | `string, string, string` | Create new account |
-| `.signIn(email, password)` | `string, string` | Sign in with credentials |
-| `.signOut()` | — | End current session |
-| `.getSession()` | — | Get current session |
-| `.sendMagicLink(email)` | `string` | Send magic link for passwordless login |
-| `.verifyMagicLink(email, code)` | `string, string` | Verify magic link code |
-| `.sendOtp(email)` | `string` | Send one-time password |
-| `.verifyOtp(email, code)` | `string, string` | Verify OTP code |
-| `.mfa.enable()` | — | Enable multi-factor authentication |
-| `.mfa.verify(code)` | `string` | Verify MFA code |
-| `.mfa.disable()` | — | Disable MFA |
-| `.sendPhoneVerification(phone)` | `string` | Send phone verification SMS |
-| `.verifyPhone(phone, code)` | `string, string` | Verify phone number |
-
 ### Realtime Subscriptions
 
 ```typescript
@@ -1001,10 +983,11 @@ AUTH_SECRET=your-secret-key-min-32-chars-long
 AUTH_URL=http://localhost:3000
 
 # Storage (S3)
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-S3_BUCKET=my-bucket
+STORAGE_PROVIDER=s3
+STORAGE_REGION=us-east-1
+STORAGE_ACCESS_KEY_ID=your-access-key
+STORAGE_SECRET_ACCESS_KEY=your-secret-key
+STORAGE_BUCKET=my-bucket
 
 # API
 PORT=3000

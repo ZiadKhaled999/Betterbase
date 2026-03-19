@@ -51,7 +51,7 @@ graph TB
     subgraph packages
         CLI[packages/cli<br/>11 commands<br/>7 utils]
         Client[packages/client<br/>9 modules]
-        Core[packages/core<br/>9 modules]
+        Core[packages/core<br/>11 modules]
         Shared[packages/shared<br/>5 utilities]
     end
     
