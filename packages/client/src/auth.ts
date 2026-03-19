@@ -70,7 +70,8 @@ export class AuthClient {
 			if (token) {
 				this._headers.Authorization = `Bearer ${token}`;
 			} else {
-				delete this._headers.Authorization;
+				const { Authorization: _, ...rest } = this._headers;
+				this._headers = rest;
 			}
 			onAuthStateChange?.(token);
 		};
@@ -332,13 +333,18 @@ export class AuthClient {
 		}
 	}
 
-	async verifyMagicLink(token: string): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+	async verifyMagicLink(
+		token: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
 		try {
 			// Make direct API call to verify magic link
-			const response = await this.fetchImpl(`${this.url}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`, {
-				method: "GET",
-				headers: this._headers,
-			});
+			const response = await this.fetchImpl(
+				`${this.url}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`,
+				{
+					method: "GET",
+					headers: this._headers,
+				},
+			);
 
 			const data = await response.json();
 
@@ -422,7 +428,10 @@ export class AuthClient {
 		}
 	}
 
-	async verifyOtp(email: string, code: string): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+	async verifyOtp(
+		email: string,
+		code: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
 		try {
 			// Make direct API call to verify OTP
 			const response = await this.fetchImpl(`${this.url}/api/auth/otp/verify`, {
@@ -481,7 +490,9 @@ export class AuthClient {
 	}
 
 	// Two-Factor Authentication methods
-	async mfaEnable(code: string): Promise<BetterBaseResponse<{ qrUri: string; backupCodes: string[] }>> {
+	async mfaEnable(
+		code: string,
+	): Promise<BetterBaseResponse<{ qrUri: string; backupCodes: string[] }>> {
 		try {
 			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/enable`, {
 				method: "POST",
@@ -667,7 +678,10 @@ export class AuthClient {
 		}
 	}
 
-	async verifyPhoneOtp(phone: string, code: string): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+	async verifyPhoneOtp(
+		phone: string,
+		code: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
 		try {
 			const response = await this.fetchImpl(`${this.url}/api/auth/phone/verify`, {
 				method: "POST",
