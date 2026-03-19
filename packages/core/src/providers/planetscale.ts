@@ -1,4 +1,4 @@
-import type { ProviderType, DBEvent } from "@betterbase/shared";
+import type { DBEvent, ProviderType } from "@betterbase/shared";
 import { connect } from "@planetscale/database";
 import type {
 	DatabaseConnection,

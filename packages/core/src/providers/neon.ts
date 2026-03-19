@@ -1,4 +1,4 @@
-import type { ProviderType, DBEvent } from "@betterbase/shared";
+import type { DBEvent, ProviderType } from "@betterbase/shared";
 import { neon } from "@neondatabase/serverless";
 import type {
 	DatabaseConnection,
@@ -38,23 +38,23 @@ class NeonConnection implements NeonDatabaseConnection {
 	 */
 	private async _startListening(): Promise<void> {
 		if (this._listening) return;
-		
+
 		try {
 			// For Neon, we need a separate connection for listening
 			// Use a polling mechanism to check for changes
 			this._listening = true;
-			
+
 			// Create a separate connection for polling
 			const notifyConnection = neon(this.getConnectionString());
-			
+
 			// Set up LISTEN on a notification channel
 			await notifyConnection`LISTEN betterbase_changes`;
-			
+
 			// Set up notification handler
 			// Note: neon serverless doesn't support persistent connections
 			// We'll use polling as the primary mechanism
 			const pollInterval = 5000; // 5 seconds
-			
+
 			const pollForChanges = async (): Promise<void> => {
 				while (this._listening) {
 					try {
@@ -69,7 +69,7 @@ class NeonConnection implements NeonDatabaseConnection {
 						`.catch(() => {
 							// Ignore notification errors in poll
 						});
-						
+
 						// Wait before next poll
 						await new Promise((resolve) => setTimeout(resolve, pollInterval));
 					} catch (error) {
@@ -80,10 +80,10 @@ class NeonConnection implements NeonDatabaseConnection {
 					}
 				}
 			};
-			
+
 			// Start the polling loop
 			pollForChanges();
-			
+
 			console.log("[CDC] Neon CDC initialized - using polling fallback");
 		} catch (error) {
 			console.error("[CDC] Failed to start listening:", error);
@@ -134,7 +134,7 @@ class NeonConnection implements NeonDatabaseConnection {
 	 */
 	onchange(callback: (event: DBEvent) => void): void {
 		this._changeCallbacks.push(callback);
-		
+
 		// Start listening on first callback registration
 		if (!this._listening) {
 			this._startListening().catch((error) => {

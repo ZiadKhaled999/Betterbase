@@ -1,4 +1,4 @@
-import type { ProviderType, DBEvent, DBEventType } from "@betterbase/shared";
+import type { DBEvent, DBEventType, ProviderType } from "@betterbase/shared";
 import postgres from "postgres";
 import type {
 	DatabaseConnection,
@@ -37,10 +37,10 @@ class PostgresConnection implements PostgresDatabaseConnection {
 	 */
 	private async _startListening(): Promise<void> {
 		if (this._listening) return;
-		
+
 		// Set flag immediately before attempting to listen
 		this._listening = true;
-		
+
 		try {
 			await this.postgres.listen("db_changes", (payload: string) => {
 				let data: Record<string, unknown>;
@@ -50,7 +50,7 @@ class PostgresConnection implements PostgresDatabaseConnection {
 					console.error("[CDC] Failed to parse notification payload:", error);
 					return;
 				}
-				
+
 				const event: DBEvent = {
 					table: data.table as string,
 					type: data.type as DBEventType,
@@ -58,7 +58,7 @@ class PostgresConnection implements PostgresDatabaseConnection {
 					old_record: data.old_record as Record<string, unknown>,
 					timestamp: (data.timestamp as string) || new Date().toISOString(),
 				};
-				
+
 				// Notify all registered callbacks - each in its own try/catch
 				for (const callback of this._changeCallbacks) {
 					try {
@@ -92,7 +92,7 @@ class PostgresConnection implements PostgresDatabaseConnection {
 	 */
 	onchange(callback: (event: DBEvent) => void): void {
 		this._changeCallbacks.push(callback);
-		
+
 		// Start listening on first callback registration
 		if (!this._listening) {
 			this._startListening().catch((error) => {

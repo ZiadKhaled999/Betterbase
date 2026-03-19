@@ -1,4 +1,4 @@
-import type { ProviderType, DBEvent, DBEventType } from "@betterbase/shared";
+import type { DBEvent, DBEventType, ProviderType } from "@betterbase/shared";
 import { createClient } from "@libsql/client";
 import type {
 	DatabaseConnection,
@@ -21,12 +21,12 @@ type SqlOperation = "insert" | "update" | "delete" | "select";
  */
 function detectOperation(sql: string): SqlOperation {
 	const normalizedSql = sql.trim().toLowerCase();
-	
+
 	if (normalizedSql.startsWith("insert")) return "insert";
 	if (normalizedSql.startsWith("update")) return "update";
 	if (normalizedSql.startsWith("delete")) return "delete";
 	if (normalizedSql.startsWith("select")) return "select";
-	
+
 	return "select"; // default to select for safety
 }
 
@@ -35,19 +35,19 @@ function detectOperation(sql: string): SqlOperation {
  */
 function extractTableName(sql: string): string | null {
 	const normalizedSql = sql.trim().toLowerCase();
-	
+
 	// Match INSERT INTO table_name
 	const insertMatch = normalizedSql.match(/^insert\s+into\s+(\w+)/);
 	if (insertMatch) return insertMatch[1];
-	
+
 	// Match UPDATE table_name
 	const updateMatch = normalizedSql.match(/^update\s+(\w+)/);
 	if (updateMatch) return updateMatch[1];
-	
+
 	// Match DELETE FROM table_name
 	const deleteMatch = normalizedSql.match(/^delete\s+from\s+(\w+)/);
 	if (deleteMatch) return deleteMatch[1];
-	
+
 	return null;
 }
 
@@ -71,10 +71,10 @@ class TursoConnection implements TursoDatabaseConnection {
 		});
 		this.drizzle = this.libsql;
 		this._isConnected = true;
-		
+
 		// Store original execute method
 		this._originalExecute = this.libsql.execute.bind(this.libsql);
-		
+
 		// Wrap execute to emit CDC events
 		this.libsql.execute = this._wrapExecute(this._originalExecute);
 	}
@@ -82,30 +82,25 @@ class TursoConnection implements TursoDatabaseConnection {
 	/**
 	 * Wrap the execute method to emit CDC events
 	 */
-	private _wrapExecute(
-		originalExecute: TursoClient["execute"],
-	): TursoClient["execute"] {
-		const self = this;
-		
+	private _wrapExecute(originalExecute: TursoClient["execute"]): TursoClient["execute"] {
 		return async (
 			query: Parameters<TursoClient["execute"]>[0],
 		): ReturnType<TursoClient["execute"]> => {
 			const sql = typeof query === "string" ? query : (query as { sql: string }).sql;
 			const operation = detectOperation(sql);
 			const tableName = extractTableName(sql);
-			
+
 			// Execute the query
 			const result = await originalExecute(query);
-			
+
 			// Emit CDC event for write operations
-			if (tableName && operation !== "select" && self._changeCallbacks.length > 0) {
-				const eventType: DBEventType = 
-					operation === "insert" ? "INSERT" :
-					operation === "update" ? "UPDATE" : "DELETE";
-				
+			if (tableName && operation !== "select" && this._changeCallbacks.length > 0) {
+				const eventType: DBEventType =
+					operation === "insert" ? "INSERT" : operation === "update" ? "UPDATE" : "DELETE";
+
 				// Get the affected rows
 				const records = result.rows || [];
-				
+
 				for (const record of records) {
 					const event: DBEvent = {
 						table: tableName,
@@ -114,9 +109,9 @@ class TursoConnection implements TursoDatabaseConnection {
 						old_record: undefined,
 						timestamp: new Date().toISOString(),
 					};
-					
+
 					// Notify all registered callbacks - each in its own try/catch
-					for (const callback of self._changeCallbacks) {
+					for (const callback of this._changeCallbacks) {
 						try {
 							callback(event);
 						} catch (callbackError) {
@@ -125,7 +120,7 @@ class TursoConnection implements TursoDatabaseConnection {
 					}
 				}
 			}
-			
+
 			return result;
 		};
 	}
