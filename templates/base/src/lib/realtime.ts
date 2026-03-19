@@ -1,5 +1,5 @@
-import type { ServerWebSocket } from "bun";
 import type { DBEvent } from "@betterbase/shared";
+import type { ServerWebSocket } from "bun";
 import deepEqual from "fast-deep-equal";
 import { z } from "zod";
 
@@ -116,7 +116,7 @@ export class RealtimeServer {
 		event: "INSERT" | "UPDATE" | "DELETE",
 	): Set<ServerWebSocket<unknown>> {
 		const subscribers = new Set<ServerWebSocket<unknown>>();
-		
+
 		// Get exact match subscribers (table + event)
 		const exactKey = `${table}:${event}`;
 		const exactSubs = this.tableEventSubscribers.get(exactKey);
@@ -125,7 +125,7 @@ export class RealtimeServer {
 				subscribers.add(ws);
 			}
 		}
-		
+
 		// Get wildcard subscribers (table + *)
 		const wildcardKey = `${table}:*`;
 		const wildcardSubs = this.tableEventSubscribers.get(wildcardKey);
@@ -134,7 +134,7 @@ export class RealtimeServer {
 				subscribers.add(ws);
 			}
 		}
-		
+
 		return subscribers;
 	}
 
@@ -242,7 +242,7 @@ export class RealtimeServer {
 	broadcast(table: string, event: RealtimeUpdatePayload["event"], data: unknown): void {
 		// Server-side filtering: get only subscribers for this specific event type
 		const subscribers = this.getSubscribersForEvent(table, event);
-		
+
 		if (subscribers.size === 0) {
 			return;
 		}
@@ -305,7 +305,8 @@ export class RealtimeServer {
 
 		// Track subscribers by table+event for efficient filtering
 		const tableEventKey = `${table}:${event}`;
-		const tableEventSet = this.tableEventSubscribers.get(tableEventKey) ?? new Set<ServerWebSocket<unknown>>();
+		const tableEventSet =
+			this.tableEventSubscribers.get(tableEventKey) ?? new Set<ServerWebSocket<unknown>>();
 		if (!tableEventSet.has(ws) && tableEventSet.size >= this.config.maxSubscribersPerTable) {
 			realtimeLogger.warn(`Table event subscriber cap reached for ${tableEventKey}`);
 			this.safeSend(ws, { error: "Table subscription limit reached" });
@@ -333,7 +334,7 @@ export class RealtimeServer {
 		// Remove subscription with specific event type
 		const subscriptionKey = `${table}:${event}`;
 		client.subscriptions.delete(subscriptionKey);
-		
+
 		// Clean up table+event subscriber tracking
 		const tableEventKey = `${table}:${event}`;
 		const tableEventSubs = this.tableEventSubscribers.get(tableEventKey);

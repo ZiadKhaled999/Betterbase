@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
+import { type AutoRestOptions, mountAutoRest } from "@betterbase/core";
 import { initializeWebhooks } from "@betterbase/core/webhooks";
-import { mountAutoRest, type AutoRestOptions } from "@betterbase/core";
 import { Hono } from "hono";
 import { upgradeWebSocket, websocket } from "hono/bun";
 import config from "../betterbase.config";
@@ -75,7 +75,7 @@ const autoRestEnabled = config.autoRest?.enabled ?? true;
 if (autoRestEnabled) {
 	let dbModule: { schema?: unknown; db?: unknown } | null = null;
 	let schema: unknown;
-	
+
 	try {
 		// Dynamic import to handle case where db module may not exist
 		// eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -88,7 +88,7 @@ if (autoRestEnabled) {
 		}
 		dbModule = null;
 	}
-	
+
 	// Check if schema is absent/undefined after module loaded
 	if (!schema && dbModule === null) {
 		// Module missing - expected in some configurations

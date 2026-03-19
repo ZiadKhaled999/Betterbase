@@ -1,27 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import {
-	BetterBaseError,
-	ValidationError,
-	NotFoundError,
-	UnauthorizedError,
-} from "../src/errors";
-import {
 	BETTERBASE_VERSION,
-	DEFAULT_PORT,
-	DEFAULT_DB_PATH,
-	CONTEXT_FILE_NAME,
 	CONFIG_FILE_NAME,
-	MIGRATIONS_DIR,
+	CONTEXT_FILE_NAME,
+	DEFAULT_DB_PATH,
+	DEFAULT_PORT,
 	FUNCTIONS_DIR,
+	MIGRATIONS_DIR,
 	POLICIES_DIR,
 } from "../src/constants";
+import { BetterBaseError, NotFoundError, UnauthorizedError, ValidationError } from "../src/errors";
 import {
-	serializeError,
+	formatBytes,
 	isValidProjectName,
+	safeJsonParse,
+	serializeError,
 	toCamelCase,
 	toSnakeCase,
-	safeJsonParse,
-	formatBytes,
 } from "../src/utils";
 
 describe("shared/errors", () => {

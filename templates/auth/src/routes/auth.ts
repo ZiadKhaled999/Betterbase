@@ -49,7 +49,9 @@ authRoute.post("/magic-link/send", async (c) => {
 
 	// In development, log the magic link
 	if (isDev) {
-		console.log(`[DEV] Magic Link for ${email}: http://localhost:3000/auth/magic-link?token=dev-token-${Date.now()}`);
+		console.log(
+			`[DEV] Magic Link for ${email}: http://localhost:3000/auth/magic-link?token=dev-token-${Date.now()}`,
+		);
 	}
 
 	// TODO: Use better-auth's magic link API in production
@@ -164,7 +166,9 @@ authRoute.post("/mfa/enable", async (c) => {
 	// TODO: Implement actual MFA enable using better-auth twoFactor plugin
 	// Return QR URI and backup codes for TOTP setup
 	const qrUri = "otpauth://totp/BetterBase:user@example.com?secret=EXAMPLE&issuer=BetterBase";
-	const backupCodes = Array.from({ length: 10 }, () => Math.random().toString(36).substring(2, 10).toUpperCase());
+	const backupCodes = Array.from({ length: 10 }, () =>
+		Math.random().toString(36).substring(2, 10).toUpperCase(),
+	);
 
 	return c.json({
 		qrUri,
@@ -256,7 +260,9 @@ authRoute.post("/mfa/challenge", async (c) => {
 
 // Phone / SMS Authentication endpoints
 const phoneSendSchema = z.object({
-	phone: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone must be in E.164 format (e.g., +15555555555)"),
+	phone: z
+		.string()
+		.regex(/^\+[1-9]\d{1,14}$/, "Phone must be in E.164 format (e.g., +15555555555)"),
 });
 
 const phoneVerifySchema = z.object({
@@ -320,7 +326,7 @@ authRoute.post("/phone/verify", async (c) => {
 			token: sessionId,
 			user: {
 				id: "phone-user-id",
-				email: phone + "@phone.local",
+				email: `${phone}@phone.local`,
 				name: "Phone User",
 			},
 		});

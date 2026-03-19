@@ -1,4 +1,11 @@
-import { type StorageFactory, createStorage, type StoragePolicy, type StorageConfig, checkStorageAccess, getPolicyDenialMessage } from "@betterbase/core/storage";
+import {
+	type StorageConfig,
+	type StorageFactory,
+	type StoragePolicy,
+	checkStorageAccess,
+	createStorage,
+	getPolicyDenialMessage,
+} from "@betterbase/core/storage";
 import type { Context, Next } from "hono";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -118,8 +125,8 @@ function getMaxFileSize(): number {
 	if (!maxSize) {
 		return DEFAULT_MAX_FILE_SIZE;
 	}
-	const parsed = parseInt(maxSize, 10);
-	return isNaN(parsed) ? DEFAULT_MAX_FILE_SIZE : parsed;
+	const parsed = Number.parseInt(maxSize, 10);
+	return Number.isNaN(parsed) ? DEFAULT_MAX_FILE_SIZE : parsed;
 }
 
 // Validate MIME type for upload
