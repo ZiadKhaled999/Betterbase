@@ -53,16 +53,16 @@ describe("SDL Exporter", () => {
 			const sdl = exportSDL(schema);
 
 			expect(sdl).toContain("type Mutation");
-			expect(sdl).toContain("createUsers");
-			expect(sdl).toContain("updateUsers");
-			expect(sdl).toContain("deleteUsers");
+			expect(sdl).toContain("createUser");
+			expect(sdl).toContain("updateUser");
+			expect(sdl).toContain("deleteUser");
 		});
 
 		test("should include Object types in SDL", () => {
 			const schema = createTestSchema();
 			const sdl = exportSDL(schema);
 
-			expect(sdl).toContain("type Users");
+			expect(sdl).toContain("type User");
 			expect(sdl).toContain("id");
 			expect(sdl).toContain("name");
 			expect(sdl).toContain("email");
@@ -72,9 +72,9 @@ describe("SDL Exporter", () => {
 			const schema = createTestSchema();
 			const sdl = exportSDL(schema);
 
-			expect(sdl).toContain("input CreateUsersInput");
-			expect(sdl).toContain("input UpdateUsersInput");
-			expect(sdl).toContain("input UsersWhereInput");
+			expect(sdl).toContain("input CreateUserInput");
+			expect(sdl).toContain("input UpdateUserInput");
+			expect(sdl).toContain("input UserWhereInput");
 		});
 
 		test("should include scalar types in SDL", () => {
@@ -128,21 +128,21 @@ describe("SDL Exporter", () => {
 	describe("exportTypeSDL", () => {
 		test("should export specific Object type", () => {
 			const schema = createTestSchema();
-			// The type name is pluralized (Users, not User)
-			const typeSdl = exportTypeSDL(schema, "Users");
+			// The type name is singular (User, not Users)
+			const typeSdl = exportTypeSDL(schema, "User");
 
 			expect(typeSdl).toBeDefined();
-			expect(typeSdl).toContain("type Users");
+			expect(typeSdl).toContain("type User");
 			expect(typeSdl).toContain("id");
 		});
 
 		test("should export specific Input type", () => {
 			const schema = createTestSchema();
 			// Export the Input type and verify it contains the expected SDL
-			const typeSdl = exportTypeSDL(schema, "CreateUsersInput");
+			const typeSdl = exportTypeSDL(schema, "CreateUserInput");
 
 			expect(typeSdl).toBeDefined();
-			expect(typeSdl).toContain("input CreateUsersInput");
+			expect(typeSdl).toContain("input CreateUserInput");
 			expect(typeSdl).toContain("name");
 			expect(typeSdl).toContain("email");
 		});
@@ -157,7 +157,7 @@ describe("SDL Exporter", () => {
 
 		test("should respect includeDescriptions option", () => {
 			const schema = createTestSchema();
-			const typeSdl = exportTypeSDL(schema, "Users", { includeDescriptions: true });
+			const typeSdl = exportTypeSDL(schema, "User", { includeDescriptions: true });
 
 			expect(typeSdl).toBeDefined();
 		});
@@ -185,7 +185,7 @@ describe("SDL Exporter", () => {
 			// Check for basic SDL structure
 			expect(sdl).toMatch(/type Query \{/);
 			expect(sdl).toMatch(/type Mutation \{/);
-			expect(sdl).toMatch(/type Users \{/);
+			expect(sdl).toMatch(/type User \{/);
 		});
 
 		test("should properly format field arguments", () => {
@@ -200,7 +200,7 @@ describe("SDL Exporter", () => {
 			const schema = createTestSchema();
 			const sdl = exportSDL(schema);
 
-			// ID should be non-null in the Users type
+			// ID should be non-null in the User type
 			expect(sdl).toMatch(/id: ID!/);
 		});
 	});

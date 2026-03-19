@@ -374,8 +374,9 @@ export function exportTypeSDL(
 		const fields = type.getFields();
 		for (const field of Object.values(fields)) {
 			lines.push(formatDescription(toStringOrUndefined(field.description), "  "));
+			// Input types don't have field arguments - only Object types do
 			const args =
-				field.args.length > 0
+				field.args && field.args.length > 0
 					? `(${field.args.map((a: any) => `${a.name}: ${formatType(a.type)}`).join(", ")})`
 					: "";
 			lines.push(`  ${field.name}${args}: ${formatType(field.type)}`);

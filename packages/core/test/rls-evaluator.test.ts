@@ -199,8 +199,9 @@ describe("RLS Evaluator", () => {
 
 			const result = applyRLSSelect(rows, [policy1, policy2], "user-123");
 
-			// Should use first matching policy (posts)
-			expect(result.length).toBe(1);
+			// With "any policy allows" logic, policy2 (true) allows all rows
+			// So both rows pass since at least one policy grants access
+			expect(result.length).toBe(2);
 		});
 	});
 

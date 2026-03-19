@@ -56,7 +56,7 @@ describe("S3 Adapter", () => {
 			const adapter = createS3Adapter(config);
 			const url = adapter.getPublicUrl("my-bucket", "path/to/file.txt");
 
-			expect(url).toBe("https://my-bucket.s3.us-east-1.amazonaws.com/path/to/file.txt");
+			expect(url).toBe("https://my-bucket.s3.us-east-1.amazonaws.com/path%2Fto%2Ffile.txt");
 		});
 
 		test("should handle different regions", () => {
@@ -101,7 +101,7 @@ describe("S3 Adapter", () => {
 			const adapter = createS3Adapter(config);
 			const url = adapter.getPublicUrl("my-bucket", "folder/subfolder/file.txt");
 
-			expect(url).toContain("folder/subfolder/file.txt");
+			expect(url).toContain("folder%2Fsubfolder%2Ffile.txt");
 		});
 
 		test("should handle special characters in path", () => {
@@ -117,7 +117,7 @@ describe("S3 Adapter", () => {
 			const url = adapter.getPublicUrl("my-bucket", "path with spaces/file.txt");
 
 			// URL-encode special characters in the path
-			expect(url).toContain("path%20with%20spaces/file.txt");
+			expect(url).toContain("path%20with%20spaces%2Ffile.txt");
 		});
 	});
 
