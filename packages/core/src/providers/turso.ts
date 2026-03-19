@@ -1,4 +1,4 @@
-import type { ProviderType } from "@betterbase/shared";
+import type { DBEvent, DBEventType, ProviderType } from "@betterbase/shared";
 import { createClient } from "@libsql/client";
 import type {
 	DatabaseConnection,
@@ -12,8 +12,48 @@ import { parseProviderConfig } from "./types";
 // Type for the Turso client
 type TursoClient = ReturnType<typeof createClient>;
 
+// SQL operation types for CDC detection
+type SqlOperation = "insert" | "update" | "delete" | "select";
+
+/**
+ * Parse SQL statement to determine operation type
+ * This is a simple heuristic-based parser for CDC detection
+ */
+function detectOperation(sql: string): SqlOperation {
+	const normalizedSql = sql.trim().toLowerCase();
+
+	if (normalizedSql.startsWith("insert")) return "insert";
+	if (normalizedSql.startsWith("update")) return "update";
+	if (normalizedSql.startsWith("delete")) return "delete";
+	if (normalizedSql.startsWith("select")) return "select";
+
+	return "select"; // default to select for safety
+}
+
+/**
+ * Extract table name from SQL statement
+ */
+function extractTableName(sql: string): string | null {
+	const normalizedSql = sql.trim().toLowerCase();
+
+	// Match INSERT INTO table_name
+	const insertMatch = normalizedSql.match(/^insert\s+into\s+(\w+)/);
+	if (insertMatch) return insertMatch[1];
+
+	// Match UPDATE table_name
+	const updateMatch = normalizedSql.match(/^update\s+(\w+)/);
+	if (updateMatch) return updateMatch[1];
+
+	// Match DELETE FROM table_name
+	const deleteMatch = normalizedSql.match(/^delete\s+from\s+(\w+)/);
+	if (deleteMatch) return deleteMatch[1];
+
+	return null;
+}
+
 /**
  * Turso-specific database connection implementation
+ * Includes CDC (Change Data Capture) for automatic event emission
  */
 class TursoConnection implements TursoDatabaseConnection {
 	readonly provider = "turso" as const;
@@ -21,6 +61,8 @@ class TursoConnection implements TursoDatabaseConnection {
 	// Store the drizzle-compatible client for use with drizzle-orm
 	readonly drizzle: TursoClient;
 	private _isConnected = false;
+	private _changeCallbacks: ((event: DBEvent) => void)[] = [];
+	private _originalExecute: TursoClient["execute"];
 
 	constructor(url: string, authToken: string) {
 		this.libsql = createClient({
@@ -29,15 +71,76 @@ class TursoConnection implements TursoDatabaseConnection {
 		});
 		this.drizzle = this.libsql;
 		this._isConnected = true;
+
+		// Store original execute method
+		this._originalExecute = this.libsql.execute.bind(this.libsql);
+
+		// Wrap execute to emit CDC events
+		this.libsql.execute = this._wrapExecute(this._originalExecute);
+	}
+
+	/**
+	 * Wrap the execute method to emit CDC events
+	 */
+	private _wrapExecute(originalExecute: TursoClient["execute"]): TursoClient["execute"] {
+		return async (
+			query: Parameters<TursoClient["execute"]>[0],
+		): ReturnType<TursoClient["execute"]> => {
+			const sql = typeof query === "string" ? query : (query as { sql: string }).sql;
+			const operation = detectOperation(sql);
+			const tableName = extractTableName(sql);
+
+			// Execute the query
+			const result = await originalExecute(query);
+
+			// Emit CDC event for write operations
+			if (tableName && operation !== "select" && this._changeCallbacks.length > 0) {
+				const eventType: DBEventType =
+					operation === "insert" ? "INSERT" : operation === "update" ? "UPDATE" : "DELETE";
+
+				// Get the affected rows
+				const records = result.rows || [];
+
+				for (const record of records) {
+					const event: DBEvent = {
+						table: tableName,
+						type: eventType,
+						record: record as Record<string, unknown>,
+						old_record: undefined,
+						timestamp: new Date().toISOString(),
+					};
+
+					// Notify all registered callbacks - each in its own try/catch
+					for (const callback of this._changeCallbacks) {
+						try {
+							callback(event);
+						} catch (callbackError) {
+							console.error("[CDC] Callback error:", callbackError, "Event:", event);
+						}
+					}
+				}
+			}
+
+			return result;
+		};
 	}
 
 	async close(): Promise<void> {
 		await this.libsql.close();
 		this._isConnected = false;
+		this._changeCallbacks = [];
 	}
 
 	isConnected(): boolean {
 		return this._isConnected;
+	}
+
+	/**
+	 * Register a callback for database change events (CDC)
+	 * This enables automatic event emission for INSERT, UPDATE, DELETE operations
+	 */
+	onchange(callback: (event: DBEvent) => void): void {
+		this._changeCallbacks.push(callback);
 	}
 }
 

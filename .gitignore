@@ -12,7 +12,6 @@ dist
 .vscode/
 .idea/
 
-cli-auth-page/
 
 .env
 .env.*
@@ -28,3 +27,5 @@ coverage/
 .parcel-cache/
 
 .DS_Store
+
+.vercel/

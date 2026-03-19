@@ -23,6 +23,65 @@ import * as logger from "../utils/logger";
 const runningFunctions: Map<string, ChildProcess> = new Map();
 const FUNCTION_PORT_START = 3001;
 
+// Timeout for graceful shutdown (ms)
+const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 5000;
+
+/**
+ * Wait for process termination with optional timeout using Node.js APIs
+ */
+async function waitForTermination(proc: ChildProcess, timeoutMs: number): Promise<void> {
+	return new Promise((resolve, reject) => {
+		// Check if already exited
+		if (!proc.pid || proc.killed) {
+			resolve();
+			return;
+		}
+
+		// Create exit handler
+		const onExit = (code: number | null, signal: string | null): void => {
+			clearTimeout(timeout);
+			resolve();
+		};
+
+		// Set up exit listener (use once to avoid memory leaks)
+		proc.once("exit", onExit);
+
+		// Timeout handler
+		const timeout = setTimeout(() => {
+			// Remove the listener to prevent memory leak
+			proc.removeListener("exit", onExit);
+			reject(new Error("Termination timeout"));
+		}, timeoutMs);
+	});
+}
+
+/**
+ * Kill a process gracefully with timeout-based forced kill
+ */
+async function killProcess(proc: ChildProcess, timeoutMs: number = GRACEFUL_SHUTDOWN_TIMEOUT_MS): Promise<void> {
+	// Check if process is still running
+	if (!proc.pid || proc.killed) {
+		return;
+	}
+
+	// Send SIGTERM for graceful shutdown
+	proc.kill("SIGTERM");
+
+	// Wait for graceful shutdown with timeout
+	try {
+		await waitForTermination(proc, timeoutMs);
+	} catch {
+		// Timeout - force kill with SIGKILL
+		proc.kill("SIGKILL");
+		// Wait a bit for forced kill
+		try {
+			await waitForTermination(proc, 1000);
+		} catch {
+			// Process still running - ignore, we've done our best
+		}
+	}
+}
+
 /**
  * Run the function command
  */
@@ -150,6 +209,12 @@ async function runFunctionDev(name: string | undefined, projectRoot: string): Pr
 	console.log(`Starting function "${name}" on port ${port}...`);
 	console.log(`Watching for changes in src/functions/${name}/`);
 
+	// Kill any existing process with the same name to prevent orphaning
+	const existingProc = runningFunctions.get(name);
+	if (existingProc) {
+		await killProcess(existingProc, 1000);
+	}
+
 	// Start the function with bun --watch
 	const proc = spawn("bun", ["run", "--watch", indexPath], {
 		cwd: projectRoot,
@@ -163,17 +228,32 @@ async function runFunctionDev(name: string | undefined, projectRoot: string): Pr
 
 	runningFunctions.set(name, proc);
 
-	// Handle cleanup on exit
-	const cleanup = (): void => {
+	// Handle cleanup on exit - use named functions to allow removal
+	const cleanup = async (): Promise<void> => {
 		const p = runningFunctions.get(name);
 		if (p) {
-			p.kill();
+			await killProcess(p);
 			runningFunctions.delete(name);
 		}
+		// Remove the event listeners to prevent leaks
+		process.off("SIGINT", cleanup);
+		process.off("SIGTERM", cleanup);
 	};
 
+	// Use once option to automatically remove listeners after first trigger
+	// But we still need the named cleanup function for manual removal on process exit
 	process.on("SIGINT", cleanup);
 	process.on("SIGTERM", cleanup);
+
+	// Handle case where the function process exits on its own
+	proc.once("exit", (code: number | null, signal: string | null) => {
+		// Clean up the Map entry
+		runningFunctions.delete(name);
+		// Remove the signal listeners to prevent leaks
+		process.off("SIGINT", cleanup);
+		process.off("SIGTERM", cleanup);
+		console.log(`Function "${name}" exited with code ${code}, signal ${signal}`);
+	});
 
 	console.log(`Function ${name} running at http://localhost:${port}`);
 }
@@ -403,10 +483,16 @@ async function runFunctionDeploy(
 /**
  * Stop all running functions
  */
-export function stopAllFunctions(): void {
+export async function stopAllFunctions(): Promise<void> {
+	const stopPromises: Promise<void>[] = [];
+
 	for (const [name, proc] of runningFunctions) {
 		console.log(`Stopping function "${name}"...`);
-		proc.kill();
+		stopPromises.push(killProcess(proc));
 	}
+
+	// Wait for all processes to terminate
+	await Promise.all(stopPromises);
+
 	runningFunctions.clear();
 }

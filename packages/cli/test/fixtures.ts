@@ -1,6 +1,6 @@
 // Shared test fixtures for BetterBase CLI tests
-import { mkdir, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export const SIMPLE_SCHEMA = `
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
@@ -59,33 +59,33 @@ app.get('/health', async (c) => c.json({ status: 'ok' }))
 export default app
 `;
 
-export const EMPTY_SCHEMA = `export {}`;
-export const EMPTY_ROUTES = `export {}`;
+export const EMPTY_SCHEMA = "export {}";
+export const EMPTY_ROUTES = "export {}";
 
 export async function createMinimalProject(dir: string) {
-  await mkdir(join(dir, 'src/db'), { recursive: true });
-  await mkdir(join(dir, 'src/routes'), { recursive: true });
-  await mkdir(join(dir, 'src/middleware'), { recursive: true });
-  await writeFile(join(dir, 'src/db/schema.ts'), SIMPLE_SCHEMA);
-  await writeFile(
-    join(dir, 'src/routes/index.ts'),
-    `
+	await mkdir(join(dir, "src/db"), { recursive: true });
+	await mkdir(join(dir, "src/routes"), { recursive: true });
+	await mkdir(join(dir, "src/middleware"), { recursive: true });
+	await writeFile(join(dir, "src/db/schema.ts"), SIMPLE_SCHEMA);
+	await writeFile(
+		join(dir, "src/routes/index.ts"),
+		`
     import { Hono } from 'hono'
     const app = new Hono()
     export default app
-  `
-  );
-  await writeFile(join(dir, '.env'), 'PORT=3000\n');
-  await writeFile(
-    join(dir, 'package.json'),
-    JSON.stringify(
-      {
-        name: 'test-project',
-        version: '0.0.1',
-        private: true,
-      },
-      null,
-      2
-    )
-  );
+  `,
+	);
+	await writeFile(join(dir, ".env"), "PORT=3000\n");
+	await writeFile(
+		join(dir, "package.json"),
+		JSON.stringify(
+			{
+				name: "test-project",
+				version: "0.0.1",
+				private: true,
+			},
+			null,
+			2,
+		),
+	);
 }

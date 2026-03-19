@@ -20,8 +20,8 @@ function getDatabaseUrl(): string {
 	if (!dbUrl || typeof dbUrl !== "string" || dbUrl.trim() === "") {
 		console.error(
 			"[BetterBase Config Error] DATABASE_URL is required but not set or is empty. " +
-			"Please set the DATABASE_URL environment variable.\n" +
-			"Example: DATABASE_URL=\"postgresql://user:pass@localhost:5432/mydb\""
+				"Please set the DATABASE_URL environment variable.\n" +
+				'Example: DATABASE_URL="postgresql://user:pass@localhost:5432/mydb"',
 		);
 		process.exit(1);
 	}

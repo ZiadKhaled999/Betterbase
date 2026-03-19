@@ -46,17 +46,17 @@ export class RealtimeClient {
 		}, delay);
 	}
 
-	private sendSubscribe(table: string, filter?: Record<string, unknown>): void {
+	private sendSubscribe(table: string, event: string, filter?: Record<string, unknown>): void {
 		if (this.disabled) return;
 		if (this.ws?.readyState === WebSocket.OPEN) {
-			this.ws.send(JSON.stringify({ type: "subscribe", table, filter }));
+			this.ws.send(JSON.stringify({ type: "subscribe", table, event, filter }));
 		}
 	}
 
-	private sendUnsubscribe(table: string): void {
+	private sendUnsubscribe(table: string, event: string): void {
 		if (this.disabled) return;
 		if (this.ws?.readyState === WebSocket.OPEN) {
-			this.ws.send(JSON.stringify({ type: "unsubscribe", table }));
+			this.ws.send(JSON.stringify({ type: "unsubscribe", table, event }));
 		}
 	}
 
@@ -66,8 +66,8 @@ export class RealtimeClient {
 			return;
 		}
 
-		for (const subscriber of tableSubscribers.values()) {
-			this.sendSubscribe(table, subscriber.filter);
+		for (const [id, subscriber] of tableSubscribers.entries()) {
+			this.sendSubscribe(table, subscriber.event, subscriber.filter);
 		}
 	}
 
@@ -168,7 +168,7 @@ export class RealtimeClient {
 
 					this.subscriptions.set(table, tableSubscribers);
 					if (!this.disabled) {
-						this.sendSubscribe(table, filter);
+						this.sendSubscribe(table, event, filter);
 					}
 
 					return {
@@ -183,7 +183,7 @@ export class RealtimeClient {
 							if (currentSubscribers.size === 0) {
 								this.subscriptions.delete(table);
 								if (!this.disabled) {
-									this.sendUnsubscribe(table);
+									this.sendUnsubscribe(table, event);
 								}
 
 								if (this.subscriptions.size === 0 && !this.disabled) {

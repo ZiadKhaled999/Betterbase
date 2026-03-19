@@ -48,6 +48,30 @@ export interface StorageObject {
 }
 
 /**
+ * Allowed MIME types configuration for a bucket
+ */
+export interface AllowedMimeTypes {
+	/** List of allowed MIME types (e.g., ['image/jpeg', 'image/png']) */
+	allow?: string[];
+	/** List of denied MIME types */
+	deny?: string[];
+	/** If true, only allow MIME types in the allow list */
+	allowListOnly?: boolean;
+}
+
+/**
+ * Bucket configuration options
+ */
+export interface BucketConfig {
+	/** Maximum file size in bytes */
+	maxFileSize?: number;
+	/** Allowed MIME types configuration */
+	allowedMimeTypes?: AllowedMimeTypes;
+	/** Allowed file extensions (e.g., ['jpg', 'png']) */
+	allowedExtensions?: string[];
+}
+
+/**
  * AWS S3 storage configuration
  */
 export interface S3Config {
@@ -108,6 +132,30 @@ export interface ManagedConfig {
  * Union of all storage configuration types
  */
 export type StorageConfig = S3Config | R2Config | BackblazeConfig | MinioConfig | ManagedConfig;
+
+/**
+ * Storage policy for bucket operations
+ * Similar to RLS policies but for storage operations
+ */
+export interface StoragePolicy {
+	/** The bucket name this policy applies to */
+	bucket: string;
+	/** The operation this policy applies to */
+	operation: "upload" | "download" | "list" | "delete" | "*";
+	/** The policy expression to evaluate */
+	expression: string;
+}
+
+/**
+ * Helper function to create a StoragePolicy
+ */
+export function defineStoragePolicy(
+	bucket: string,
+	operation: StoragePolicy["operation"],
+	expression: string,
+): StoragePolicy {
+	return { bucket, operation, expression };
+}
 
 /**
  * Core storage adapter interface for S3-compatible storage services

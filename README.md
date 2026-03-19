@@ -58,17 +58,23 @@ Betterbase provides a complete backend solution with enterprise-grade features:
 
 | Feature | Description |
 |---------|-------------|
-| 🚀 **AI Context Generation** | AI-powered context awareness that understands your schema and generates intelligent queries, migrations, and code suggestions |
-| ⚡ **Sub-100ms Startup** | Local development starts in under 100ms using Bun's native performance |
-| 🐳 **Docker-less Dev** | No Docker required. Run everything natively with Bun + SQLite |
-| 🔒 **TypeScript-first** | Full TypeScript support with auto-generated types for all operations |
-| 🔐 **BetterAuth Integration** | Enterprise-grade authentication with 30+ providers, session management, and security features |
-| 📡 **Realtime Subscriptions** | WebSocket-based realtime data sync with sub-second latency |
-| 🗄️ **Multi-Provider Support** | Connect to SQLite, PostgreSQL, MySQL, Neon, Turso, and PlanetScale |
-| 🛡️ **Row Level Security** | Fine-grained access control policies at the database level |
-| ⚡ **Serverless Functions** | Deploy TypeScript functions that scale automatically |
-| 💾 **S3 Storage** | Compatible file storage with AWS S3 SDK |
-| 🔗 **Webhooks** | Event-driven architecture with configurable webhook triggers |
+| **AI Context Generation** | Automatic `.betterbase-context.json` generation for AI-assisted development |
+| **Sub-100ms Startup** | Lightning-fast local development with `bun:sqlite` |
+| **Docker-less Dev** | Run everything locally without containerization overhead |
+| **TypeScript First** | Full type inference and strict mode throughout |
+| **BetterAuth Integration** | Production-ready authentication out of the box |
+| **Realtime Subscriptions** | WebSocket-based live data updates |
+| **Multi-Provider Support** | PostgreSQL, MySQL (Planetscale), SQLite (Turso), Neon, Supabase |
+| **RLS (Row Level Security)** | Built-in policy engine for fine-grained access control |
+| **Serverless Functions** | Deploy custom API functions |
+| **Storage API** | S3-compatible object storage |
+| **Webhooks** | Event-driven architecture with signed payloads |
+| **Vector Search** | pgvector-powered similarity search with embeddings support |
+| **Branching/Preview Environments** | Create isolated development environments for each branch |
+| **Auto-REST** | Automatic CRUD route generation from Drizzle schema |
+| **Magic Link Auth** | Passwordless authentication via email magic links |
+| **MFA** | Multi-factor authentication support |
+| **Phone Auth** | Phone number verification via SMS/OTP |
 
 ---
 
@@ -188,7 +194,7 @@ Your backend is now running at `http://localhost:3000`:
 | `http://localhost:3000` | API root |
 | `http://localhost:3000/rest/v1/*` | REST API |
 | `http://localhost:3000/graphql` | GraphQL playground |
-| `http://localhost:3000/auth/*` | Authentication endpoints |
+| `http://localhost:3000/api/auth/*` | Authentication endpoints |
 | `http://localhost:3000/storage/*` | Storage endpoints |
 | `http://localhost:3000/realtime/*` | Realtime subscriptions |
 
@@ -286,6 +292,74 @@ Your backend is now running at `http://localhost:3000`:
 | **Turborepo** | Monorepo | Efficient caching, parallel builds, remote caching |
 | **AWS S3 SDK** | Storage | Industry-standard object storage compatibility |
 | **Zod** | Validation | TypeScript-first schema validation |
+
+### Configuration Options
+
+BetterBase can be configured using `betterbase.config.ts`:
+
+```typescript
+import { defineConfig } from '@betterbase/core';
+
+export default defineConfig({
+  // Auto-REST: Automatic CRUD route generation
+  autoRest: {
+    enabled: true,
+    excludeTables: ['internal_logs', 'migrations'],
+  },
+  
+  // Storage policies for access control
+  storage: {
+    policies: [
+      {
+        bucket: 'avatars',
+        operation: 'upload',
+        expression: 'auth.uid() != null', // Allow authenticated users
+      },
+      {
+        bucket: 'avatars',
+        operation: 'download',
+        expression: 'true', // Allow public read
+      },
+    ],
+  },
+  
+  // Branching: Preview Environments configuration
+  branching: {
+    enabled: true,
+    maxPreviews: 10,
+    defaultSleepTimeout: 3600, // seconds
+  },
+  
+  // Vector search configuration
+  vector: {
+    enabled: true,
+    provider: 'openai',
+    model: 'text-embedding-3-small',
+    dimensions: 1536,
+  },
+});
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Server port | `3000` |
+| `NODE_ENV` | Environment (development/production) | `development` |
+| `DB_PATH` | SQLite database path | `local.db` |
+| `DATABASE_URL` | PostgreSQL/MySQL connection string | — |
+| `STORAGE_PROVIDER` | Storage provider (s3, r2, backblaze, minio) | `s3` |
+| `STORAGE_BUCKET` | Default storage bucket name | `storage` |
+| `STORAGE_ALLOWED_MIME_TYPES` | Comma-separated allowed MIME types | — |
+| `STORAGE_MAX_FILE_SIZE` | Maximum file size in bytes | 10485760 |
+| `SMTP_HOST` | SMTP server host | — |
+| `SMTP_PORT` | SMTP server port | 587 |
+| `SMTP_USER` | SMTP username | — |
+| `SMTP_PASS` | SMTP password | — |
+| `SMTP_FROM` | SMTP from email address | — |
+| `TWILIO_ACCOUNT_SID` | Twilio Account SID | — |
+| `TWILIO_AUTH_TOKEN` | Twilio Auth Token | — |
+| `TWILIO_PHONE_NUMBER` | Twilio phone number | — |
 
 ---
 
@@ -491,6 +565,30 @@ bb webhook test my-webhook
 bb webhook delete my-webhook
 ```
 
+#### `bb branch`
+
+Manage preview environments (branches) for isolated development.
+
+```bash
+# Create a new preview environment
+bb branch create my-feature
+
+# Delete a preview environment
+bb branch delete my-feature
+
+# List all preview environments
+bb branch list
+
+# Check branch status
+bb branch status my-feature
+
+# Wake a sleeping preview
+bb branch wake my-feature
+
+# Sleep a preview to save resources
+bb branch sleep my-feature
+```
+
 ---
 
 ## Client SDK
@@ -627,15 +725,6 @@ const { data, error } = await client
   .eq('id', 'post-123')
 ```
 
-#### Delete
-
-```typescript
-const { data, error } = await client
-  .from('posts')
-  .delete()
-  .eq('id', 'post-123')
-```
-
 ### Realtime Subscriptions
 
 ```typescript
@@ -714,7 +803,33 @@ bb dev
 
 Uses SQLite by default for zero-configuration development.
 
-### Production (Bun)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/auth/signup` | Register new user |
+| `POST` | `/api/auth/signin` | Sign in user |
+| `POST` | `/api/auth/signout` | Sign out user |
+| `GET` | `/api/auth/session` | Get current session |
+| `POST` | `/api/auth/refresh` | Refresh session |
+| `POST` | `/api/auth/magic-link` | Send magic link email |
+| `GET` | `/api/auth/magic-link/verify` | Verify magic link |
+| `POST` | `/api/auth/otp/send` | Send OTP |
+| `POST` | `/api/auth/otp/verify` | Verify OTP |
+| `POST` | `/api/auth/mfa/enable` | Enable MFA |
+| `POST` | `/api/auth/mfa/verify` | Verify MFA |
+| `POST` | `/api/auth/mfa/disable` | Disable MFA |
+| `POST` | `/api/auth/mfa/challenge` | MFA challenge |
+| `POST` | `/api/auth/phone/send` | Send SMS verification |
+| `POST` | `/api/auth/phone/verify` | Verify SMS code |
+
+#### Auto-REST (Automatic CRUD)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/:table` | List all records (paginated) |
+| `GET` | `/api/:table/:id` | Get single record by ID |
+| `POST` | `/api/:table` | Create new record |
+| `PATCH` | `/api/:table/:id` | Update record |
+| `DELETE` | `/api/:table/:id` | Delete record |
 
 Deploy to any Bun-compatible host:
 
@@ -868,10 +983,11 @@ AUTH_SECRET=your-secret-key-min-32-chars-long
 AUTH_URL=http://localhost:3000
 
 # Storage (S3)
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-S3_BUCKET=my-bucket
+STORAGE_PROVIDER=s3
+STORAGE_REGION=us-east-1
+STORAGE_ACCESS_KEY_ID=your-access-key
+STORAGE_SECRET_ACCESS_KEY=your-secret-key
+STORAGE_BUCKET=my-bucket
 
 # API
 PORT=3000

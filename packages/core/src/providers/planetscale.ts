@@ -1,4 +1,4 @@
-import type { ProviderType } from "@betterbase/shared";
+import type { DBEvent, ProviderType } from "@betterbase/shared";
 import { connect } from "@planetscale/database";
 import type {
 	DatabaseConnection,
@@ -14,6 +14,7 @@ type PlanetScaleClient = ReturnType<typeof connect>;
 
 /**
  * PlanetScale-specific database connection implementation
+ * Note: PlanetScale (MySQL) does not have native CDC support
  */
 class PlanetScaleConnectionImpl implements PlanetScaleDatabaseConnection {
 	readonly provider = "planetscale" as const;
@@ -37,6 +38,15 @@ class PlanetScaleConnectionImpl implements PlanetScaleDatabaseConnection {
 
 	isConnected(): boolean {
 		return this._isConnected;
+	}
+
+	/**
+	 * Register a callback for database change events (CDC)
+	 * Note: PlanetScale does not support CDC natively - this is a no-op placeholder
+	 */
+	onchange(callback: (event: DBEvent) => void): void {
+		// PlanetScale does not support CDC - callbacks are not stored or invoked
+		console.warn("[CDC] PlanetScale does not support native CDC. Events will not be emitted.");
 	}
 }
 

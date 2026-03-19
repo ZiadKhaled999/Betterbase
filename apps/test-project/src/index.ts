@@ -66,14 +66,10 @@ if (graphqlEnabled) {
 		// Check if it's a "module not found" error vs a real syntax/runtime error
 		const isModuleNotFound =
 			err &&
-			(typeof err === "object" &&
-				(("code" in err &&
-					(err.code === "ERR_MODULE_NOT_FOUND" ||
-						 err.code === "MODULE_NOT_FOUND")) ||
-					("message" in err &&
-						/Cannot find module|Cannot find package/.test(
-							String(err.message)
-						))));
+			typeof err === "object" &&
+			(("code" in err &&
+				(err.code === "ERR_MODULE_NOT_FOUND" || err.code === "MODULE_NOT_FOUND")) ||
+				("message" in err && /Cannot find module|Cannot find package/.test(String(err.message))));
 
 		if (isModuleNotFound) {
 			// GraphQL route not generated yet - only log in development

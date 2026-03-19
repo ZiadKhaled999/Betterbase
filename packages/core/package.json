@@ -12,7 +12,9 @@
 		"./graphql": "./src/graphql/index.ts",
 		"./functions": "./src/functions/index.ts",
 		"./middleware": "./src/middleware/index.ts",
-		"./migration": "./src/migration/index.ts"
+		"./migration": "./src/migration/index.ts",
+		"./vector": "./src/vector/index.ts",
+		"./branching": "./src/branching/index.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

@@ -10,13 +10,16 @@
 // fs/promises access() in Bun 1.3.9 resolves to null (not undefined) on success.
 // Use existsSync (sync, returns boolean) instead.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
-import { existsSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const { runAuthSetupCommand } = await import("../src/commands/auth");
+
+// Timeout for bun add better-auth (first run takes ~30s)
+const BUN_ADD_TIMEOUT = 60000;
 
 async function scaffoldProject(dir: string): Promise<void> {
 	await mkdir(join(dir, "src/db"), { recursive: true });
@@ -59,13 +62,18 @@ export { app }
 
 describe("runAuthSetupCommand", () => {
 	let tmpDir: string;
+	let authSetupDone = false;
 
-	beforeEach(async () => {
+	// Shared setup for all tests - runs once before any test
+	beforeAll(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "bb-auth-"));
 		await scaffoldProject(tmpDir);
-	});
+		// Run auth setup once for all tests that need sqlite
+		await runAuthSetupCommand(tmpDir, "sqlite");
+		authSetupDone = true;
+	}, BUN_ADD_TIMEOUT + 30000);
 
-	afterEach(async () => {
+	afterAll(async () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
@@ -73,67 +81,64 @@ describe("runAuthSetupCommand", () => {
 	// not undefined, causing .resolves.toBeUndefined() to fail.
 
 	test("creates src/auth/index.ts", async () => {
-		// Increase timeout for first test - bun add better-auth takes ~30s on first run
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		expect(existsSync(join(tmpDir, "src/auth/index.ts"))).toBe(true);
-	}, 60000);
+	});
 
 	test("creates src/auth/types.ts", async () => {
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		expect(existsSync(join(tmpDir, "src/auth/types.ts"))).toBe(true);
 	});
 
 	test("creates src/db/auth-schema.ts", async () => {
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		expect(existsSync(join(tmpDir, "src/db/auth-schema.ts"))).toBe(true);
 	});
 
 	test("creates src/middleware/auth.ts", async () => {
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		expect(existsSync(join(tmpDir, "src/middleware/auth.ts"))).toBe(true);
 	});
 
 	test("middleware contains requireAuth export", async () => {
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		const content = await readFile(join(tmpDir, "src/middleware/auth.ts"), "utf-8");
 		expect(content).toContain("requireAuth");
 	});
 
 	test("middleware contains optionalAuth export", async () => {
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		const content = await readFile(join(tmpDir, "src/middleware/auth.ts"), "utf-8");
 		expect(content).toContain("optionalAuth");
 	});
 
 	test("auth-schema.ts contains user and session tables for sqlite", async () => {
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		const schema = await readFile(join(tmpDir, "src/db/auth-schema.ts"), "utf-8");
 		expect(schema).toContain("sqliteTable");
 		expect(schema).toContain("user");
 		expect(schema).toContain("session");
 	});
 
-	test("auth-schema.ts uses pgTable for pg provider", async () => {
-		await runAuthSetupCommand(tmpDir, "pg");
-		const schema = await readFile(join(tmpDir, "src/db/auth-schema.ts"), "utf-8");
-		expect(schema).toContain("pgTable");
-	});
+	test(
+		"auth-schema.ts uses pgTable for pg provider",
+		async () => {
+			// This test needs a fresh project since it tests different provider
+			const freshTmpDir = await mkdtemp(join(tmpdir(), "bb-auth-pg-"));
+			await scaffoldProject(freshTmpDir);
+			await runAuthSetupCommand(freshTmpDir, "pg");
+			const schema = await readFile(join(freshTmpDir, "src/db/auth-schema.ts"), "utf-8");
+			expect(schema).toContain("pgTable");
+			await rm(freshTmpDir, { recursive: true, force: true });
+		},
+		BUN_ADD_TIMEOUT,
+	);
 
 	test("auth/index.ts references the correct provider and betterAuth", async () => {
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		const content = await readFile(join(tmpDir, "src/auth/index.ts"), "utf-8");
 		expect(content).toContain("sqlite");
 		expect(content).toContain("betterAuth");
 	});
 
 	test("adds AUTH_SECRET to .env.example", async () => {
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		const env = await readFile(join(tmpDir, ".env.example"), "utf-8");
 		expect(env).toContain("AUTH_SECRET");
 	});
 
 	test("mounts auth handler in src/index.ts", async () => {
-		await runAuthSetupCommand(tmpDir, "sqlite");
 		const index = await readFile(join(tmpDir, "src/index.ts"), "utf-8");
 		expect(index).toContain("/api/auth/**");
 	});

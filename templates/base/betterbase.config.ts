@@ -95,4 +95,13 @@ export default {
 	graphql: {
 		enabled: true,
 	},
+
+	/**
+	 * Auto-REST API configuration
+	 * Automatically generates CRUD routes for all tables in the schema
+	 */
+	autoRest: {
+		enabled: true,
+		excludeTables: [],
+	},
 } satisfies BetterBaseConfig;

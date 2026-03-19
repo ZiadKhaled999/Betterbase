@@ -1,8 +1,8 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "path";
-import { runInitCommand, InitCommandOptions } from "../src/commands/init";
+import { join } from "node:path";
+import { type InitCommandOptions, runInitCommand } from "../src/commands/init";
 
 describe("runInitCommand", () => {
 	let tempDir: string;

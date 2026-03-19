@@ -220,7 +220,7 @@ function pascalCase(str: string): string {
 function singularize(str: string): string {
 	// Handle common English plural forms
 	if (str.endsWith("ies")) {
-		return str.slice(0, -3) + "y";
+		return `${str.slice(0, -3)}y`;
 	}
 	if (str.endsWith("es") && str.length > 2) {
 		// Don't singularize words like "status", "statuses" -> "statuse"
@@ -599,7 +599,8 @@ export function generateGraphQLSchema(
 	// Build and return the schema
 	const schemaConfig: GraphQLSchemaConfig = {
 		query: queryType,
-		mutation: mergedConfig.mutations && Object.keys(mutationFieldsConfig).length > 0 ? mutationType : null,
+		mutation:
+			mergedConfig.mutations && Object.keys(mutationFieldsConfig).length > 0 ? mutationType : null,
 		types: [
 			...objectTypes,
 			...createInputTypes,

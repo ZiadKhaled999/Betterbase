@@ -9,10 +9,10 @@
 // utility so ensureRealtimeUtility() finds it and skips the copy.
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
-import { existsSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // Mock graphql command to avoid it running during generate tests
 mock.module("./graphql", () => ({
@@ -49,7 +49,7 @@ async function scaffoldProject(dir: string): Promise<void> {
 	// Pre-create realtime utility so ensureRealtimeUtility() skips the copy
 	await writeFile(
 		join(dir, "src/lib/realtime.ts"),
-		`export const realtime = { broadcast: () => {} }`,
+		"export const realtime = { broadcast: () => {} }",
 	);
 
 	// Pre-create routes index so updateMainRouter() can patch it
@@ -156,15 +156,13 @@ describe("runGenerateCrudCommand", () => {
 	});
 
 	test("throws for a table that does not exist in the schema", async () => {
-		await expect(
-			runGenerateCrudCommand(tmpDir, "nonexistent_table_xyz"),
-		).rejects.toThrow('Table "nonexistent_table_xyz" not found in schema.');
+		await expect(runGenerateCrudCommand(tmpDir, "nonexistent_table_xyz")).rejects.toThrow(
+			'Table "nonexistent_table_xyz" not found in schema.',
+		);
 	});
 
 	test("throws when schema file does not exist", async () => {
 		await rm(join(tmpDir, "src/db/schema.ts"));
-		await expect(runGenerateCrudCommand(tmpDir, "posts")).rejects.toThrow(
-			"Schema file not found",
-		);
+		await expect(runGenerateCrudCommand(tmpDir, "posts")).rejects.toThrow("Schema file not found");
 	});
 });

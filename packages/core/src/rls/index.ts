@@ -74,3 +74,13 @@ export {
 	generateAllAuthFunctions,
 	dropAllAuthFunctions,
 } from "./auth-bridge";
+
+// Evaluator (Application-layer RLS for SQLite)
+export {
+	evaluatePolicy,
+	applyRLSSelect,
+	applyRLSInsert,
+	applyRLSUpdate,
+	applyRLSDelete,
+	createRLSMiddleware,
+} from "./evaluator";

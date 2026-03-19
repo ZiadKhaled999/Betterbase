@@ -119,7 +119,9 @@ function getTablesFromSchema(projectRoot: string): string[] {
 /**
  * Read the raw config file content
  */
-async function readConfigFile(projectRoot: string): Promise<{ content: string; path: string } | null> {
+async function readConfigFile(
+	projectRoot: string,
+): Promise<{ content: string; path: string } | null> {
 	const configPath = findConfigFile(projectRoot);
 	const resolvedPath = await configPath;
 	if (!resolvedPath) {

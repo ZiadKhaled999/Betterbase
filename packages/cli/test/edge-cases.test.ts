@@ -1,6 +1,6 @@
 // packages/cli/test/edge-cases.test.ts
 // Edge case and boundary condition tests for CLI utilities.
-// 
+//
 // IMPORTANT — actual API signatures (verified from source):
 //   SchemaScanner  → new SchemaScanner(filePath: string) — takes a FILE PATH, reads internally
 //   RouteScanner   → new RouteScanner(filePath: string)  — takes a FILE PATH, reads internally
@@ -8,9 +8,9 @@
 //                      takes a PROJECT ROOT directory, scans schema + routes inside it
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ContextGenerator } from "../src/utils/context-generator";
 import { RouteScanner } from "../src/utils/route-scanner";
 import { SchemaScanner } from "../src/utils/scanner";
@@ -49,7 +49,7 @@ describe("SchemaScanner — malformed and edge inputs", () => {
 
 	test("returns empty object for schema with only comments", async () => {
 		const p = join(tmpDir, "schema.ts");
-		await writeFile(p, `// just a comment\n/* block comment */`);
+		await writeFile(p, "// just a comment\n/* block comment */");
 		expect(new SchemaScanner(p).scan()).toEqual({});
 	});
 
@@ -62,10 +62,13 @@ describe("SchemaScanner — malformed and edge inputs", () => {
 	test("handles very long column names without throwing", async () => {
 		const longName = "a".repeat(200);
 		const p = join(tmpDir, "schema.ts");
-		await writeFile(p, `
+		await writeFile(
+			p,
+			`
       import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
       export const t = sqliteTable('t', { ${longName}: text('${longName}') });
-    `);
+    `,
+		);
 		expect(() => new SchemaScanner(p).scan()).not.toThrow();
 	});
 

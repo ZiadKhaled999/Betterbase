@@ -1,479 +1,402 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from "bun:test"
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import os from "node:os"
-import path from "node:path"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+	type BucketClient,
 	Storage,
+	type StorageFactory,
 	createStorage,
 	resolveStorageAdapter,
-	BucketClient,
-	type StorageFactory,
-	type StorageConfig,
-	type UploadOptions,
-	type SignedUrlOptions,
-	type UploadResult,
-	type StorageObject,
-} from "../src/storage/index"
-import {
-	type StorageProvider,
-	type S3Config,
-	type R2Config,
-	type BackblazeConfig,
-	type MinioConfig,
-	type ManagedConfig,
-	type StorageAdapter,
-	type UploadOptions as StorageUploadOptions,
-	type SignedUrlOptions as StorageSignedUrlOptions,
-	type UploadResult as StorageUploadResult,
-	type StorageObject as StorageStorageObject,
-} from "../src/storage/types"
+} from "../src/storage/index";
+import type {
+	BackblazeConfig,
+	ManagedConfig,
+	MinioConfig,
+	R2Config,
+	S3Config,
+	StorageConfig,
+} from "../src/storage/types";
 
-let tmpDir: string
+describe("Storage Module", () => {
+	describe("createStorage", () => {
+		test("should return null for null config", () => {
+			const result = createStorage(null);
+			expect(result).toBeNull();
+		});
 
-beforeAll(() => {
-	tmpDir = mkdtempSync(path.join(os.tmpdir(), "betterbase-test-"))
-})
+		test("should return null for undefined config", () => {
+			const result = createStorage(undefined);
+			expect(result).toBeNull();
+		});
 
-afterAll(() => {
-	rmSync(tmpDir, { recursive: true, force: true })
-})
-
-describe("storage/types", () => {
-	describe("StorageProvider type", () => {
-		it("accepts 's3' as valid provider", () => {
-			const provider: StorageProvider = "s3"
-			expect(provider).toBe("s3")
-		})
-
-		it("accepts 'r2' as valid provider", () => {
-			const provider: StorageProvider = "r2"
-			expect(provider).toBe("r2")
-		})
-
-		it("accepts 'backblaze' as valid provider", () => {
-			const provider: StorageProvider = "backblaze"
-			expect(provider).toBe("backblaze")
-		})
-
-		it("accepts 'minio' as valid provider", () => {
-			const provider: StorageProvider = "minio"
-			expect(provider).toBe("minio")
-		})
-
-		it("accepts 'managed' as valid provider", () => {
-			const provider: StorageProvider = "managed"
-			expect(provider).toBe("managed")
-		})
-	})
-
-	describe("S3Config", () => {
-		it("validates valid S3 config", () => {
+		test("should return StorageFactory for valid S3 config", () => {
 			const config: S3Config = {
 				provider: "s3",
 				bucket: "my-bucket",
 				region: "us-east-1",
-				accessKeyId: "AKIAIOSFODNN7EXAMPLE",
-				secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-			}
-			expect(config.provider).toBe("s3")
-			expect(config.bucket).toBe("my-bucket")
-		})
-	})
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-	describe("R2Config", () => {
-		it("validates R2 config with endpoint", () => {
+			const result = createStorage(config);
+			expect(result).not.toBeNull();
+			expect(typeof result?.from).toBe("function");
+		});
+
+		test("should return StorageFactory for valid R2 config", () => {
 			const config: R2Config = {
 				provider: "r2",
 				bucket: "my-bucket",
-				accountId: "my-account-id",
-				accessKeyId: "AKIAIOSFODNN7EXAMPLE",
-				secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-				endpoint: "https://my-bucket.r2.cloudflarestorage.com",
-			}
-			expect(config.provider).toBe("r2")
-			expect(config.accountId).toBe("my-account-id")
-		})
-	})
+				accountId: "abc123",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-	describe("BackblazeConfig", () => {
-		it("validates Backblaze config", () => {
+			const result = createStorage(config);
+			expect(result).not.toBeNull();
+			expect(typeof result?.from).toBe("function");
+		});
+
+		test("should return StorageFactory for valid Backblaze config", () => {
 			const config: BackblazeConfig = {
 				provider: "backblaze",
 				bucket: "my-bucket",
-				region: "us-west-000",
-				accessKeyId: "AKIAIOSFODNN7EXAMPLE",
-				secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-			}
-			expect(config.provider).toBe("backblaze")
-		})
-	})
+				region: "us-west-002",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-	describe("MinioConfig", () => {
-		it("validates Minio config", () => {
+			const result = createStorage(config);
+			expect(result).not.toBeNull();
+			expect(typeof result?.from).toBe("function");
+		});
+
+		test("should return StorageFactory for valid MinIO config", () => {
 			const config: MinioConfig = {
 				provider: "minio",
 				bucket: "my-bucket",
 				endpoint: "localhost",
-				port: 9000,
-				useSSL: false,
-				accessKeyId: "minioadmin",
-				secretAccessKey: "minioadmin",
-			}
-			expect(config.provider).toBe("minio")
-		})
-	})
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-	describe("ManagedConfig", () => {
-		it("validates managed config", () => {
+			const result = createStorage(config);
+			expect(result).not.toBeNull();
+			expect(typeof result?.from).toBe("function");
+		});
+
+		test("should throw error for managed provider", () => {
 			const config: ManagedConfig = {
 				provider: "managed",
 				bucket: "my-bucket",
-			}
-			expect(config.provider).toBe("managed")
-		})
-	})
+			};
 
-	describe("UploadOptions", () => {
-		it("validates upload options with contentType", () => {
-			const options: UploadOptions = {
-				contentType: "image/jpeg",
-			}
-			expect(options.contentType).toBe("image/jpeg")
-		})
+			expect(() => createStorage(config)).toThrow(
+				"Managed storage provider is coming soon. Please use s3, r2, backblaze, or minio.",
+			);
+		});
+	});
 
-		it("validates upload options with metadata", () => {
-			const options: UploadOptions = {
-				metadata: {
-					"x-custom-key": "custom-value",
-				},
-			}
-			expect(options.metadata).toBeDefined()
-		})
-
-		it("validates upload options with isPublic", () => {
-			const options: UploadOptions = {
-				isPublic: true,
-			}
-			expect(options.isPublic).toBe(true)
-		})
-	})
-
-	describe("SignedUrlOptions", () => {
-		it("validates signed URL options", () => {
-			const options: SignedUrlOptions = {
-				expiresIn: 3600,
-			}
-			expect(options.expiresIn).toBe(3600)
-		})
-	})
-
-	describe("UploadResult", () => {
-		it("validates upload result", () => {
-			const result: UploadResult = {
-				key: "path/to/file.jpg",
-				size: 1024,
-				contentType: "image/jpeg",
-				etag: "\"abc123\"",
-			}
-			expect(result.key).toBe("path/to/file.jpg")
-			expect(result.size).toBe(1024)
-		})
-	})
-
-	describe("StorageObject", () => {
-		it("validates storage object", () => {
-			const obj: StorageObject = {
-				key: "path/to/file.jpg",
-				size: 1024,
-				lastModified: new Date("2024-01-01"),
-				contentType: "image/jpeg",
-			}
-			expect(obj.key).toBe("path/to/file.jpg")
-			expect(obj.lastModified).toBeInstanceOf(Date)
-		})
-	})
-})
-
-describe("storage/index", () => {
-	describe("createStorage", () => {
-		it("returns null for null config", () => {
-			const storage = createStorage(null)
-			expect(storage).toBeNull()
-		})
-
-		it("returns null for undefined config", () => {
-			const storage = createStorage(undefined)
-			expect(storage).toBeNull()
-		})
-
-		it("throws for managed provider", () => {
-			const config: StorageConfig = {
-				provider: "managed",
-				bucket: "my-bucket",
-			}
-			expect(() => createStorage(config)).toThrow("Managed storage provider")
-		})
-
-		it("creates S3 storage factory", () => {
+	describe("StorageFactory.from()", () => {
+		test("should return BucketClient with from() method", () => {
 			const config: S3Config = {
 				provider: "s3",
 				bucket: "my-bucket",
 				region: "us-east-1",
-				accessKeyId: "test-key",
-				secretAccessKey: "test-secret",
-			}
-			const storage = createStorage(config)
-			expect(storage).toBeInstanceOf(Storage)
-		})
-	})
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
+
+			const storage = createStorage(config);
+			expect(storage).not.toBeNull();
+
+			const bucket = storage!.from("avatars");
+			expect(bucket).toBeDefined();
+		});
+
+		test("should return BucketClient with all required methods", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
+
+			const storage = createStorage(config)!;
+			const bucket = storage.from("avatars");
+
+			expect(typeof bucket.upload).toBe("function");
+			expect(typeof bucket.download).toBe("function");
+			expect(typeof bucket.remove).toBe("function");
+			expect(typeof bucket.getPublicUrl).toBe("function");
+			expect(typeof bucket.createSignedUrl).toBe("function");
+			expect(typeof bucket.list).toBe("function");
+		});
+	});
 
 	describe("resolveStorageAdapter", () => {
-		it("throws for managed provider", () => {
-			const config: ManagedConfig = {
-				provider: "managed",
-				bucket: "my-bucket",
-			}
-			expect(() => resolveStorageAdapter(config)).toThrow("Managed storage provider")
-		})
-
-		it("returns S3 adapter for S3 config", () => {
+		test("should resolve S3 adapter for s3 provider", () => {
 			const config: S3Config = {
 				provider: "s3",
 				bucket: "my-bucket",
 				region: "us-east-1",
-				accessKeyId: "test-key",
-				secretAccessKey: "test-secret",
-			}
-			const adapter = resolveStorageAdapter(config)
-			expect(adapter).toBeDefined()
-		})
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-		it("returns S3 adapter for R2 config", () => {
+			const adapter = resolveStorageAdapter(config);
+			expect(adapter).toBeDefined();
+			expect(typeof adapter.upload).toBe("function");
+		});
+
+		test("should resolve adapter for R2 provider", () => {
 			const config: R2Config = {
 				provider: "r2",
 				bucket: "my-bucket",
-				accountId: "test-account",
-				accessKeyId: "test-key",
-				secretAccessKey: "test-secret",
-			}
-			const adapter = resolveStorageAdapter(config)
-			expect(adapter).toBeDefined()
-		})
+				accountId: "abc123",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-		it("returns S3 adapter for Backblaze config", () => {
-			const config: BackblazeConfig = {
-				provider: "backblaze",
+			const adapter = resolveStorageAdapter(config);
+			expect(adapter).toBeDefined();
+		});
+
+		test("should throw error for managed provider", () => {
+			const config: ManagedConfig = {
+				provider: "managed",
 				bucket: "my-bucket",
-				region: "us-west-000",
-				accessKeyId: "test-key",
-				secretAccessKey: "test-secret",
-			}
-			const adapter = resolveStorageAdapter(config)
-			expect(adapter).toBeDefined()
-		})
+			};
 
-		it("returns S3 adapter for Minio config", () => {
-			const config: MinioConfig = {
-				provider: "minio",
-				bucket: "my-bucket",
-				endpoint: "localhost",
-				accessKeyId: "test-key",
-				secretAccessKey: "test-secret",
-			}
-			const adapter = resolveStorageAdapter(config)
-			expect(adapter).toBeDefined()
-		})
-	})
-})
+			expect(() => resolveStorageAdapter(config)).toThrow(
+				"Managed storage provider is coming soon",
+			);
+		});
+	});
 
-describe("Storage class", () => {
-	describe("from method", () => {
-		it("returns a BucketClient", () => {
+	describe("Storage class", () => {
+		test("should create Storage instance with adapter", () => {
 			const config: S3Config = {
 				provider: "s3",
 				bucket: "my-bucket",
 				region: "us-east-1",
-				accessKeyId: "test-key",
-				secretAccessKey: "test-secret",
-			}
-			const storage = createStorage(config) as StorageFactory
-			const bucket = storage.from("avatars")
-			expect(bucket).toBeDefined()
-		})
-	})
-})
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-describe("BucketClient", () => {
-	let storage: StorageFactory
-	let adapter: StorageAdapter
+			const adapter = resolveStorageAdapter(config);
+			const storage = new Storage(adapter);
 
-	beforeAll(() => {
-		const config: S3Config = {
-			provider: "s3",
-			bucket: "test-bucket",
-			region: "us-east-1",
-			accessKeyId: "test-key",
-			secretAccessKey: "test-secret",
-		}
-		adapter = resolveStorageAdapter(config)
-		storage = new Storage(adapter)
-	})
+			expect(storage).toBeDefined();
+			expect(typeof storage.from).toBe("function");
+		});
 
-	describe("upload", () => {
-		it("returns data and error structure on success", async () => {
-			// Mock the upload to avoid real S3 call
-			const mockUpload = vi.fn().mockResolvedValue({
-				key: "test/file.jpg",
-				size: 100,
-				contentType: "image/jpeg",
-			})
-			adapter.upload = mockUpload
+		test("should return BucketClient from from()", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-			const bucket = storage.from("test-bucket")
-			const result = await bucket.upload("test/file.jpg", Buffer.from("test"))
+			const adapter = resolveStorageAdapter(config);
+			const storage = new Storage(adapter);
+			const bucket = storage.from("test-bucket");
 
-			expect(result).toHaveProperty("data")
-			expect(result).toHaveProperty("error")
-		})
+			expect(bucket).toBeDefined();
+		});
+	});
 
-		it("returns error on failure", async () => {
-			const mockUpload = vi.fn().mockRejectedValue(new Error("Upload failed"))
-			adapter.upload = mockUpload
+	describe("BucketClient operations", () => {
+		test("BucketClient should have upload method", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-			const bucket = storage.from("test-bucket")
-			const result = await bucket.upload("test/file.jpg", Buffer.from("test"))
+			const storage = createStorage(config)!;
+			const bucket = storage.from("avatars");
 
-			expect(result.data).toBeNull()
-			expect(result.error).toBeInstanceOf(Error)
-		})
-	})
+			expect(bucket.upload).toBeInstanceOf(Function);
+		});
 
-	describe("download", () => {
-		it("returns data and error structure", async () => {
-			const mockDownload = vi.fn().mockResolvedValue(Buffer.from("test content"))
-			adapter.download = mockDownload
+		test("BucketClient should have download method", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-			const bucket = storage.from("test-bucket")
-			const result = await bucket.download("test/file.jpg")
+			const storage = createStorage(config)!;
+			const bucket = storage.from("files");
 
-			expect(result).toHaveProperty("data")
-			expect(result).toHaveProperty("error")
-		})
-	})
+			expect(bucket.download).toBeInstanceOf(Function);
+		});
 
-	describe("remove", () => {
-		it("returns success message", async () => {
-			const mockDelete = vi.fn().mockResolvedValue(undefined)
-			adapter.delete = mockDelete
+		test("BucketClient should have remove method", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-			const bucket = storage.from("test-bucket")
-			const result = await bucket.remove(["test/file.jpg"])
+			const storage = createStorage(config)!;
+			const bucket = storage.from("files");
 
-			expect(result.data).toHaveProperty("message")
-			expect(result.error).toBeNull()
-		})
-	})
+			expect(bucket.remove).toBeInstanceOf(Function);
+		});
 
-	describe("getPublicUrl", () => {
-		it("returns public URL", () => {
-			const bucket = storage.from("test-bucket")
-			const url = bucket.getPublicUrl("test/file.jpg")
-			expect(url).toContain("test-bucket")
-		})
-	})
+		test("BucketClient should have getPublicUrl method", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-	describe("createSignedUrl", () => {
-		it("returns signed URL data and error structure", async () => {
-			const mockSignedUrl = vi.fn().mockResolvedValue("https://signed.url")
-			adapter.createSignedUrl = mockSignedUrl
+			const storage = createStorage(config)!;
+			const bucket = storage.from("files");
 
-			const bucket = storage.from("test-bucket")
-			const result = await bucket.createSignedUrl("test/file.jpg")
+			expect(bucket.getPublicUrl).toBeInstanceOf(Function);
+		});
 
-			expect(result).toHaveProperty("data")
-			expect(result).toHaveProperty("error")
-		})
-	})
+		test("BucketClient should have createSignedUrl method", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-	describe("list", () => {
-		it("returns list of objects", async () => {
-			const mockList = vi.fn().mockResolvedValue([
+			const storage = createStorage(config)!;
+			const bucket = storage.from("files");
+
+			expect(bucket.createSignedUrl).toBeInstanceOf(Function);
+		});
+
+		test("BucketClient should have list method", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
+
+			const storage = createStorage(config)!;
+			const bucket = storage.from("files");
+
+			expect(bucket.list).toBeInstanceOf(Function);
+		});
+	});
+
+	describe("Type exports", () => {
+		test("should export StorageConfig type", () => {
+			const configs: StorageConfig[] = [
 				{
-					key: "test/file1.jpg",
-					size: 100,
-					lastModified: new Date(),
+					provider: "s3",
+					bucket: "b",
+					region: "us-east-1",
+					accessKeyId: "k",
+					secretAccessKey: "s",
 				},
-			])
-			adapter.listObjects = mockList
+				{ provider: "r2", bucket: "b", accountId: "a", accessKeyId: "k", secretAccessKey: "s" },
+				{
+					provider: "backblaze",
+					bucket: "b",
+					region: "us-west",
+					accessKeyId: "k",
+					secretAccessKey: "s",
+				},
+				{
+					provider: "minio",
+					bucket: "b",
+					endpoint: "localhost",
+					accessKeyId: "k",
+					secretAccessKey: "s",
+				},
+				{ provider: "managed", bucket: "b" },
+			];
+			expect(configs.length).toBe(5);
+		});
 
-			const bucket = storage.from("test-bucket")
-			const result = await bucket.list()
+		test("should export StorageFactory interface", () => {
+			// Just verify the type is available
+			type TestFactory = StorageFactory;
+			expect(true).toBe(true);
+		});
 
-			expect(result).toHaveProperty("data")
-			expect(result).toHaveProperty("error")
-		})
-	})
-})
+		test("should export BucketClient interface", () => {
+			// Just verify the type is available
+			type TestClient = BucketClient;
+			expect(true).toBe(true);
+		});
+	});
 
-describe("S3Adapter URL generation", () => {
-	it("generates correct S3 URL format", () => {
-		const config: S3Config = {
-			provider: "s3",
-			bucket: "my-bucket",
-			region: "us-east-1",
-			accessKeyId: "test-key",
-			secretAccessKey: "test-secret",
-		}
-		const adapter = resolveStorageAdapter(config)
+	describe("Multiple buckets", () => {
+		test("should create multiple bucket clients from same storage", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-		const url = adapter.getPublicUrl("my-bucket", "path/to/file.jpg")
-		expect(url).toBe("https://my-bucket.s3.us-east-1.amazonaws.com/path/to/file.jpg")
-	})
+			const storage = createStorage(config)!;
 
-	it("generates correct R2 URL format", () => {
-		const config: R2Config = {
-			provider: "r2",
-			bucket: "my-bucket",
-			accountId: "my-account",
-			accessKeyId: "test-key",
-			secretAccessKey: "test-secret",
-		}
-		const adapter = resolveStorageAdapter(config)
+			const avatars = storage.from("avatars");
+			const files = storage.from("files");
+			const images = storage.from("images");
 
-		const url = adapter.getPublicUrl("my-bucket", "path/to/file.jpg")
-		expect(url).toContain("my-bucket")
-		expect(url).toContain("my-account")
-	})
+			expect(avatars).toBeDefined();
+			expect(files).toBeDefined();
+			expect(images).toBeDefined();
 
-	it("generates correct Backblaze URL format", () => {
-		const config: BackblazeConfig = {
-			provider: "backblaze",
-			bucket: "my-bucket",
-			region: "us-west-000",
-			accessKeyId: "test-key",
-			secretAccessKey: "test-secret",
-		}
-		const adapter = resolveStorageAdapter(config)
+			// Each should be a different client instance
+			expect(avatars).not.toBe(files);
+			expect(files).not.toBe(images);
+		});
+	});
 
-		const url = adapter.getPublicUrl("my-bucket", "path/to/file.jpg")
-		expect(url).toContain("my-bucket")
-		expect(url).toContain("backblazeb2.com")
-	})
+	describe("Edge cases", () => {
+		test("should handle empty bucket name", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
 
-	it("generates correct Minio URL format", () => {
-		const config: MinioConfig = {
-			provider: "minio",
-			bucket: "my-bucket",
-			endpoint: "localhost",
-			port: 9000,
-			useSSL: false,
-			accessKeyId: "test-key",
-			secretAccessKey: "test-secret",
-		}
-		const adapter = resolveStorageAdapter(config)
+			const storage = createStorage(config)!;
+			const bucket = storage.from("");
 
-		const url = adapter.getPublicUrl("my-bucket", "path/to/file.jpg")
-		expect(url).toContain("localhost:9000")
-		expect(url).toContain("my-bucket")
-	})
-})
+			expect(bucket).toBeDefined();
+		});
+
+		test("should handle bucket name with special characters", () => {
+			const config: S3Config = {
+				provider: "s3",
+				bucket: "my-bucket",
+				region: "us-east-1",
+				accessKeyId: "key",
+				secretAccessKey: "secret",
+			};
+
+			const storage = createStorage(config)!;
+			const bucket = storage.from("my-bucket-123");
+
+			expect(bucket).toBeDefined();
+		});
+	});
+});

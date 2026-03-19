@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { type AutoRestOptions, mountAutoRest } from "@betterbase/core";
 import { initializeWebhooks } from "@betterbase/core/webhooks";
 import { Hono } from "hono";
 import { upgradeWebSocket, websocket } from "hono/bun";
@@ -66,6 +67,51 @@ if (graphqlEnabled) {
 		if (env.NODE_ENV === "development") {
 			console.log('ℹ️  Run "bb graphql generate" to enable GraphQL API');
 		}
+	}
+}
+
+// Mount Auto-REST API if enabled
+const autoRestEnabled = config.autoRest?.enabled ?? true;
+if (autoRestEnabled) {
+	let dbModule: { schema?: unknown; db?: unknown } | null = null;
+	let schema: unknown;
+
+	try {
+		// Dynamic import to handle case where db module may not exist
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		dbModule = require("./db");
+		schema = dbModule?.schema;
+	} catch (error) {
+		// Module doesn't exist - this is expected in development without DB setup
+		if (env.NODE_ENV === "development") {
+			console.log("ℹ️  Auto-REST requires a database schema to be defined");
+		}
+		dbModule = null;
+	}
+
+	// Check if schema is absent/undefined after module loaded
+	if (!schema && dbModule === null) {
+		// Module missing - expected in some configurations
+		if (env.NODE_ENV === "development") {
+			console.log("ℹ️  Auto-REST requires a database schema to be defined");
+		}
+	} else if (!schema) {
+		// Schema is undefined - expected when db module exists but has no schema
+		if (env.NODE_ENV === "development") {
+			console.log("ℹ️  Auto-REST requires a database schema to be defined");
+		}
+	} else if (dbModule?.db && schema) {
+		// Both db and schema exist - mount Auto-REST
+		mountAutoRest(app, dbModule.db, schema, {
+			enabled: true,
+			excludeTables: config.autoRest?.excludeTables ?? [],
+			basePath: "/api",
+			enableRLS: true,
+		});
+		console.log("⚡ Auto-REST API enabled");
+	} else {
+		// db module exists but db or schema is missing - rethrow
+		throw new Error("Database module or schema not properly configured");
 	}
 }
 

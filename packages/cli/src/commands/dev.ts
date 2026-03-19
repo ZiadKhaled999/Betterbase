@@ -6,43 +6,79 @@ import * as logger from "../utils/logger";
 const RESTART_DELAY_MS = 1000;
 const DEBOUNCE_MS = 250;
 const SERVER_ENTRY = "src/index.ts";
+const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 10000; // 10 seconds timeout for graceful shutdown
+
+/**
+ * Server state enumeration for proper state machine
+ */
+enum ServerState {
+	STOPPED = "stopped",
+	STARTING = "starting",
+	RUNNING = "running",
+	STOPPING = "stopping",
+	RESTARTING = "restarting",
+}
 
 /**
  * Manages the dev server lifecycle with hot reload support
+ * Fixed version with proper process lifecycle management
  */
 class ServerManager {
 	private process: ReturnType<typeof Bun.spawn> | null = null;
 	private projectRoot: string;
-	private isRunning = false;
+	private state: ServerState = ServerState.STOPPED;
 	private restartTimeout: ReturnType<typeof setTimeout> | null = null;
+	private abortController: AbortController | null = null;
+	private exitPromise: Promise<void> | null = null;
+	private resolveExit: (() => void) | null = null;
 
 	constructor(projectRoot: string) {
 		this.projectRoot = projectRoot;
 	}
 
 	/**
+	 * Get current running state
+	 */
+	isRunning(): boolean {
+		return this.state === ServerState.RUNNING || this.state === ServerState.STARTING;
+	}
+
+	/**
 	 * Start the dev server
 	 */
 	start(): void {
-		if (this.isRunning) {
+		if (this.isRunning()) {
 			logger.warn("Server is already running");
 			return;
 		}
 
 		logger.info("Starting dev server...");
-		this.spawnProcess();
-		this.isRunning = true;
+		this.state = ServerState.STARTING;
+		this.abortController = new AbortController();
+
+		try {
+			this.spawnProcess();
+			this.state = ServerState.RUNNING;
+		} catch (error) {
+			// Spawn failed - reset to stopped state
+			this.state = ServerState.STOPPED;
+			this.abortController = null;
+			const message = error instanceof Error ? error.message : String(error);
+			logger.error(`Failed to start dev server: ${message}`);
+			throw error;
+		}
 	}
 
 	/**
-	 * Stop the dev server gracefully using SIGTERM
+	 * Stop the dev server gracefully using SIGTERM with guaranteed termination
 	 */
-	stop(): void {
-		if (!this.isRunning || !this.process) {
+	async stop(): Promise<void> {
+		if (this.state === ServerState.STOPPED || this.state === ServerState.STOPPING) {
 			return;
 		}
 
 		logger.info("Stopping dev server...");
+		this.state = ServerState.STOPPING;
 
 		// Clear any pending restart
 		if (this.restartTimeout) {
@@ -50,23 +86,57 @@ class ServerManager {
 			this.restartTimeout = null;
 		}
 
-		// Set isRunning to false to prevent restart on crash
-		this.isRunning = false;
+		// Cancel any pending restarts via abort controller
+		if (this.abortController) {
+			this.abortController.abort();
+			this.abortController = null;
+		}
 
-		// Send SIGTERM for graceful shutdown
-		this.process.kill("SIGTERM");
+		// Send SIGTERM for graceful shutdown if process exists
+		if (this.process) {
+			this.process.kill("SIGTERM");
 
-		// Note: We don't immediately null out this.process here because
-		// the onExit callback needs to handle cleanup when the process actually exits.
-		// Instead, we rely on isRunning=false to prevent restart behavior.
+			// Wait for process to actually terminate with timeout
+			try {
+				await this.waitForTermination(GRACEFUL_SHUTDOWN_TIMEOUT_MS);
+			} catch {
+				// Timeout - force kill
+				logger.warn("Graceful shutdown timed out, forcing kill...");
+				this.process.kill("SIGKILL");
+				await this.waitForTermination(1000);
+			}
+		}
 
+		// Clean up
+		this.process = null;
+		this.state = ServerState.STOPPED;
 		logger.success("Dev server stopped");
 	}
 
 	/**
-	 * Restart the server (stop and start)
+	 * Wait for process termination with optional timeout
 	 */
-	restart(): void {
+	private async waitForTermination(timeoutMs: number): Promise<void> {
+		if (!this.process) {
+			return;
+		}
+
+		// Create exit promise that resolves when process exits
+		const exitPromise = this.process.exited;
+
+		// Create timeout promise
+		const timeoutPromise = new Promise<void>((_, reject) => {
+			setTimeout(() => reject(new Error("Termination timeout")), timeoutMs);
+		});
+
+		// Race between exit and timeout
+		await Promise.race([exitPromise, timeoutPromise]);
+	}
+
+	/**
+	 * Restart the server (stop and start) with proper synchronization
+	 */
+	async restart(): Promise<void> {
 		logger.info("Restarting dev server...");
 
 		// Clear any pending restart timeout to avoid double restarts
@@ -75,15 +145,44 @@ class ServerManager {
 			this.restartTimeout = null;
 		}
 
-		// If we're already running, stop first and let onExit handle the restart
-		if (this.isRunning && this.process) {
+		// Cancel any pending restart via abort controller
+		if (this.abortController) {
+			this.abortController.abort();
+		}
+
+		// If we're running or starting, stop first and wait for it
+		if (this.process) {
+			// Kill the current process
 			this.process.kill("SIGTERM");
-			// Don't set isRunning to false here - let onExit handle the restart
-			// This prevents race conditions between stop and auto-restart
-		} else {
-			// Not running, just start directly
+
+			// Wait for termination with timeout
+			try {
+				await this.waitForTermination(GRACEFUL_SHUTDOWN_TIMEOUT_MS);
+			} catch {
+				// Timeout - force kill
+				this.process.kill("SIGKILL");
+				await this.waitForTermination(1000);
+			}
+
+			// Clean up old process
+			this.process = null;
+		}
+
+		// Create new abort controller for new instance
+		this.abortController = new AbortController();
+
+		// Start the new process
+		this.state = ServerState.STARTING;
+
+		try {
 			this.spawnProcess();
-			this.isRunning = true;
+			this.state = ServerState.RUNNING;
+		} catch (error) {
+			this.state = ServerState.STOPPED;
+			this.abortController = null;
+			const message = error instanceof Error ? error.message : String(error);
+			logger.error(`Failed to restart dev server: ${message}`);
+			throw error;
 		}
 	}
 
@@ -91,36 +190,85 @@ class ServerManager {
 	 * Spawn the bun process with hot reload
 	 */
 	private spawnProcess(): void {
-		this.process = Bun.spawn({
-			cmd: [process.execPath, "--hot", SERVER_ENTRY],
-			cwd: this.projectRoot,
-			stdout: "inherit",
-			stderr: "inherit",
-			env: { ...process.env },
-			onExit: (proc, exitCode, signal) => {
-				if (this.isRunning) {
-					// Server crashed - schedule a restart
-					logger.warn(`Server exited with code ${exitCode} (signal: ${signal})`);
-					logger.info("Restarting server...");
+		// Check if we've been stopped/aborted while waiting
+		if (this.abortController?.signal.aborted) {
+			return;
+		}
 
-					// Clear any pending restart to avoid double restarts
-					if (this.restartTimeout) {
-						clearTimeout(this.restartTimeout);
-						this.restartTimeout = null;
-					}
+		let proc: ReturnType<typeof Bun.spawn>;
+		try {
+			proc = Bun.spawn({
+				cmd: [process.execPath, "--hot", SERVER_ENTRY],
+				cwd: this.projectRoot,
+				stdout: "inherit",
+				stderr: "inherit",
+				env: { ...process.env },
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			logger.error(`Failed to spawn process: ${message}`);
+			throw error;
+		}
 
-					// Delay before restarting to avoid rapid restarts
-					this.restartTimeout = setTimeout(() => {
-						this.spawnProcess();
-						this.isRunning = true; // Explicitly set state after spawn
-						this.restartTimeout = null;
-					}, RESTART_DELAY_MS);
-				} else {
-					// Explicit stop (via stop() or restart()) - clean up
-					this.process = null;
-					logger.info("Dev server stopped");
+		// Store process reference
+		this.process = proc;
+
+		// Set up exit handler with proper process tracking
+		// We capture the process in a local variable to avoid race conditions
+		const currentProcess = proc;
+
+		// Use proc.exited to properly wait for process termination
+		proc.exited.then(async (exitedCode) => {
+			// Check if we should restart or not
+			const shouldRestart = this.state === ServerState.RUNNING;
+			const isStopping = this.state === ServerState.STOPPING;
+
+			// Clear the process reference
+			this.process = null;
+
+			if (shouldRestart && !this.abortController?.signal.aborted) {
+				// Server crashed - schedule a restart
+				logger.warn(`Server exited with code ${exitedCode}`);
+				logger.info("Restarting server...");
+
+				// Clear any pending restart to avoid double restarts
+				if (this.restartTimeout) {
+					clearTimeout(this.restartTimeout);
+					this.restartTimeout = null;
 				}
-			},
+
+				// Delay before restarting to avoid rapid restarts
+				this.restartTimeout = setTimeout(() => {
+					// Check if we should still restart (not stopped in the meantime)
+					if (this.state === ServerState.RUNNING && this.abortController && !this.abortController.signal.aborted) {
+						try {
+							this.spawnProcess();
+						} catch (error) {
+							const message = error instanceof Error ? error.message : String(error);
+							logger.error(`Failed to restart: ${message}`);
+							this.state = ServerState.STOPPED;
+						}
+					}
+				}, RESTART_DELAY_MS);
+			} else if (isStopping) {
+				// Explicit stop - resolve exit promise if waiting
+				if (this.resolveExit) {
+					this.resolveExit();
+					this.resolveExit = null;
+				}
+				logger.info("Dev server stopped");
+			} else {
+				// Unexpected exit when not running - reset state
+				this.state = ServerState.STOPPED;
+			}
+		}).catch((error) => {
+			// Handle any errors in the exit promise
+			const message = error instanceof Error ? error.message : String(error);
+			logger.error(`Process exit error: ${message}`);
+			this.process = null;
+			if (this.state === ServerState.RUNNING) {
+				this.state = ServerState.STOPPED;
+			}
 		});
 
 		logger.success("Dev server started");
@@ -155,7 +303,7 @@ export async function runDevCommand(projectRoot: string = process.cwd()): Promis
 		try {
 			// Only use recursive option for directories on supported platforms (darwin/win32)
 			const isDir = statSync(watchPath).isDirectory();
-			const isSupportedPlatform = process.platform === 'darwin' || process.platform === 'win32';
+			const isSupportedPlatform = process.platform === "darwin" || process.platform === "win32";
 			const opts = isDir && isSupportedPlatform ? { recursive: true } : undefined;
 
 			const watcher = watch(watchPath, opts, (_eventType, filename) => {
@@ -166,17 +314,24 @@ export async function runDevCommand(projectRoot: string = process.cwd()): Promis
 					clearTimeout(existing);
 				}
 
-				const timer = setTimeout(async () => {
-					logger.info("Regenerating context...");
-					const start = Date.now();
+				const timer = setTimeout(() => {
+					// Wrap async callback to properly handle rejections
+					(async () => {
+						logger.info("Regenerating context...");
+						const start = Date.now();
 
-					try {
-						await generator.generate(projectRoot);
-						logger.success(`Context updated in ${Date.now() - start}ms`);
-					} catch (error) {
+						try {
+							await generator.generate(projectRoot);
+							logger.success(`Context updated in ${Date.now() - start}ms`);
+						} catch (error) {
+							const message = error instanceof Error ? error.message : String(error);
+							logger.error(`Failed to regenerate context: ${message}`);
+						}
+					})().catch((error: unknown) => {
+						// Handle any errors from the async callback to prevent unhandled rejections
 						const message = error instanceof Error ? error.message : String(error);
-						logger.error(`Failed to regenerate context: ${message}`);
-					}
+						logger.error(`Timer error: ${message}`);
+					});
 				}, DEBOUNCE_MS);
 
 				timers.set(watchPath, timer);
@@ -192,9 +347,9 @@ export async function runDevCommand(projectRoot: string = process.cwd()): Promis
 	logger.info("Watching for schema and route changes...");
 
 	// Return cleanup function
-	return () => {
-		// Stop the server
-		serverManager.stop();
+	return async () => {
+		// Stop the server (now async for proper process termination)
+		await serverManager.stop();
 
 		// Clear all debounce timers
 		for (const timer of timers.values()) {

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { StoragePolicy } from "../storage/types";
+import type { VectorConfig } from "../vector/types";
 
 /**
  * Supported database provider types in BetterBase
@@ -38,6 +40,15 @@ export const BetterBaseConfigSchema = z
 				bucket: z.string(),
 				region: z.string().optional(),
 				endpoint: z.string().optional(),
+				policies: z
+					.array(
+						z.object({
+							bucket: z.string(),
+							operation: z.enum(["upload", "download", "list", "delete", "*"]),
+							expression: z.string(),
+						}),
+					)
+					.default([]) as z.ZodType<StoragePolicy[]>,
 			})
 			.optional(),
 		webhooks: z
@@ -61,6 +72,30 @@ export const BetterBaseConfigSchema = z
 		graphql: z
 			.object({
 				enabled: z.boolean().default(true),
+			})
+			.optional(),
+		vector: z
+			.object({
+				enabled: z.boolean().default(false),
+				provider: z.enum(["openai", "cohere", "huggingface", "custom"]).default("openai"),
+				apiKey: z.string().optional(),
+				model: z.string().optional(),
+				dimensions: z.number().int().min(1).optional(),
+				endpoint: z.string().optional(),
+			})
+			.optional(),
+		autoRest: z
+			.object({
+				enabled: z.boolean().default(true),
+				excludeTables: z.array(z.string()).default([]),
+			})
+			.optional(),
+		branching: z
+			.object({
+				enabled: z.boolean().default(true),
+				maxPreviews: z.number().int().min(1).max(50).default(10),
+				defaultSleepTimeout: z.number().int().min(60).default(3600),
+				storageEnabled: z.boolean().default(true),
 			})
 			.optional(),
 	})

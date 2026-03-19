@@ -26,6 +26,7 @@ export interface Session {
 	ipAddress: string | null;
 	userAgent: string | null;
 	userId: string;
+	requiresMFA?: boolean;
 }
 
 interface StorageAdapter {
@@ -51,17 +52,29 @@ export class AuthClient {
 	private storage: StorageAdapter | null;
 	private onAuthStateChange?: (token: string | null) => void;
 	private fetchImpl: typeof fetch;
+	private _headers: Record<string, string>;
 
 	constructor(
 		private url: string,
-		private headers: Record<string, string>,
+		headers: Record<string, string>,
 		onAuthStateChange?: (token: string | null) => void,
 		fetchImpl: typeof fetch = fetch,
 		storage?: StorageAdapter | null,
 	) {
 		this.fetchImpl = fetchImpl;
 		this.storage = storage ?? getStorage();
-		this.onAuthStateChange = onAuthStateChange;
+		this._headers = { ...headers };
+
+		// Store wrapped callback that updates headers when auth state changes
+		this.onAuthStateChange = (token) => {
+			if (token) {
+				this._headers.Authorization = `Bearer ${token}`;
+			} else {
+				const { Authorization: _, ...rest } = this._headers;
+				this._headers = rest;
+			}
+			onAuthStateChange?.(token);
+		};
 
 		this.authClient = createAuthClient({
 			baseURL: this.url,
@@ -285,6 +298,444 @@ export class AuthClient {
 			this.storage?.removeItem("betterbase_session");
 		}
 		this.onAuthStateChange?.(token);
+	}
+
+	async sendMagicLink(email: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			// Make direct API call since better-auth client may not have the plugin typed
+			const response = await this.fetchImpl(`${this.url}/api/auth/magic-link/send`, {
+				method: "POST",
+				headers: this._headers,
+				body: JSON.stringify({ email }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to send magic link", data),
+				};
+			}
+
+			return {
+				data: { message: "Magic link sent successfully" },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async verifyMagicLink(
+		token: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			// Make direct API call to verify magic link
+			const response = await this.fetchImpl(
+				`${this.url}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`,
+				{
+					method: "GET",
+					headers: this._headers,
+				},
+			);
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid or expired token", data),
+				};
+			}
+
+			if (data.token) {
+				this.storage?.setItem("betterbase_session", data.token);
+				this.onAuthStateChange?.(data.token);
+			}
+
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: data.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: data.user?.id ?? "",
+			};
+			const user: User = {
+				id: data.user?.id ?? "",
+				name: data.user?.name ?? "",
+				email: data.user?.email ?? "",
+				emailVerified: data.user?.emailVerified ?? false,
+				image: data.user?.image ?? null,
+				createdAt: data.user?.createdAt ? new Date(data.user.createdAt) : new Date(),
+				updatedAt: data.user?.updatedAt ? new Date(data.user.updatedAt) : new Date(),
+			};
+
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async sendOtp(email: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			// Make direct API call
+			const response = await this.fetchImpl(`${this.url}/api/auth/otp/send`, {
+				method: "POST",
+				headers: this._headers,
+				body: JSON.stringify({ email }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to send OTP", data),
+				};
+			}
+
+			return {
+				data: { message: "OTP sent successfully" },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async verifyOtp(
+		email: string,
+		code: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			// Make direct API call to verify OTP
+			const response = await this.fetchImpl(`${this.url}/api/auth/otp/verify`, {
+				method: "POST",
+				headers: this._headers,
+				body: JSON.stringify({ email, code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid or expired OTP", data),
+				};
+			}
+
+			if (data.token) {
+				this.storage?.setItem("betterbase_session", data.token);
+				this.onAuthStateChange?.(data.token);
+			}
+
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: data.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: data.user?.id ?? "",
+			};
+			const user: User = {
+				id: data.user?.id ?? "",
+				name: data.user?.name ?? "",
+				email: data.user?.email ?? "",
+				emailVerified: data.user?.emailVerified ?? false,
+				image: data.user?.image ?? null,
+				createdAt: data.user?.createdAt ? new Date(data.user.createdAt) : new Date(),
+				updatedAt: data.user?.updatedAt ? new Date(data.user.updatedAt) : new Date(),
+			};
+
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	// Two-Factor Authentication methods
+	async mfaEnable(
+		code: string,
+	): Promise<BetterBaseResponse<{ qrUri: string; backupCodes: string[] }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/enable`, {
+				method: "POST",
+				headers: this._headers,
+				body: JSON.stringify({ code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to enable MFA", data),
+				};
+			}
+
+			return {
+				data: { qrUri: data.qrUri, backupCodes: data.backupCodes },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async mfaVerify(code: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/verify`, {
+				method: "POST",
+				headers: this._headers,
+				body: JSON.stringify({ code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid TOTP code", data),
+				};
+			}
+
+			return {
+				data: { message: data.message },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async mfaDisable(code: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/disable`, {
+				method: "POST",
+				headers: this._headers,
+				body: JSON.stringify({ code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to disable MFA", data),
+				};
+			}
+
+			return {
+				data: { message: data.message },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async mfaChallenge(code: string): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/mfa/challenge`, {
+				method: "POST",
+				headers: this._headers,
+				body: JSON.stringify({ code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid TOTP code", data),
+				};
+			}
+
+			if (data.token) {
+				this.storage?.setItem("betterbase_session", data.token);
+				this.onAuthStateChange?.(data.token);
+			}
+
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: data.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: data.user?.id ?? "",
+			};
+			const user: User = {
+				id: data.user?.id ?? "",
+				name: data.user?.name ?? "",
+				email: data.user?.email ?? "",
+				emailVerified: data.user?.emailVerified ?? false,
+				image: data.user?.image ?? null,
+				createdAt: data.user?.createdAt ? new Date(data.user.createdAt) : new Date(),
+				updatedAt: data.user?.updatedAt ? new Date(data.user.updatedAt) : new Date(),
+			};
+
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	// Phone / SMS Authentication methods
+	async sendPhoneOtp(phone: string): Promise<BetterBaseResponse<{ message: string }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/phone/send`, {
+				method: "POST",
+				headers: this._headers,
+				body: JSON.stringify({ phone }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Failed to send SMS", data),
+				};
+			}
+
+			return {
+				data: { message: "SMS code sent successfully" },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
+	}
+
+	async verifyPhoneOtp(
+		phone: string,
+		code: string,
+	): Promise<BetterBaseResponse<{ user: User; session: Session }>> {
+		try {
+			const response = await this.fetchImpl(`${this.url}/api/auth/phone/verify`, {
+				method: "POST",
+				headers: this._headers,
+				body: JSON.stringify({ phone, code }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				return {
+					data: null,
+					error: new AuthError(data.error?.message ?? "Invalid or expired code", data),
+				};
+			}
+
+			if (data.token) {
+				this.storage?.setItem("betterbase_session", data.token);
+				this.onAuthStateChange?.(data.token);
+			}
+
+			const session: Session = {
+				id: "",
+				expiresAt: new Date(),
+				token: data.token ?? "",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				ipAddress: null,
+				userAgent: null,
+				userId: data.user?.id ?? "",
+			};
+			const user: User = {
+				id: data.user?.id ?? "",
+				name: data.user?.name ?? "",
+				email: data.user?.email ?? "",
+				emailVerified: data.user?.emailVerified ?? false,
+				image: data.user?.image ?? null,
+				createdAt: data.user?.createdAt ? new Date(data.user.createdAt) : new Date(),
+				updatedAt: data.user?.updatedAt ? new Date(data.user.updatedAt) : new Date(),
+			};
+
+			return {
+				data: { user, session },
+				error: null,
+			};
+		} catch (error) {
+			return {
+				data: null,
+				error: new NetworkError(
+					error instanceof Error ? error.message : "Network request failed",
+					error,
+				),
+			};
+		}
 	}
 }
 

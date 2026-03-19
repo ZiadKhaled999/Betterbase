@@ -98,7 +98,12 @@ async function initializeGitRepository(projectPath: string): Promise<void> {
 	}
 }
 
-function buildPackageJson(projectName: string, provider: ProviderType, useAuth: boolean, storageProvider: StorageProvider | null): string {
+function buildPackageJson(
+	projectName: string,
+	provider: ProviderType,
+	useAuth: boolean,
+	storageProvider: StorageProvider | null,
+): string {
 	const dependencies: Record<string, string> = {
 		hono: "^4.11.9",
 		"drizzle-orm": "^0.45.1",
@@ -724,9 +729,7 @@ export function registerRoutes(app: Hono): void {
 function buildStorageRoute(provider: StorageProvider): string {
 	const regionLine = `  region: process.env.STORAGE_REGION ?? "us-east-1",`;
 	const endpointLine =
-		provider === "s3"
-			? regionLine
-			: `  endpoint: process.env.STORAGE_ENDPOINT,\n${regionLine}`;
+		provider === "s3" ? regionLine : `  endpoint: process.env.STORAGE_ENDPOINT,\n${regionLine}`;
 
 	return `import { Hono } from 'hono';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -828,9 +831,9 @@ STORAGE_BUCKET=
 		provider === "turso"
 			? `  TURSO_URL: z.string().url(),
   TURSO_AUTH_TOKEN: z.string().min(1),`
-		: provider !== "managed"
-			? `  DATABASE_URL: z.string().min(1),`
-			: "";
+			: provider !== "managed"
+				? "  DATABASE_URL: z.string().min(1),"
+				: "";
 
 	const authEnvFields = useAuth
 		? `  AUTH_SECRET: z.string().min(32),
@@ -1332,9 +1335,7 @@ export async function runInitCommand(rawOptions: InitCommandOptions): Promise<vo
 
 		const message = error instanceof Error ? error.message : String(error);
 		logger.error(
-			`Failed to install dependencies.\n` +
-			`Try running manually: cd ${projectName} && bun install\n` +
-			`Error: ${message}`
+			`Failed to install dependencies.\nTry running manually: cd ${projectName} && bun install\nError: ${message}`,
 		);
 
 		throw error;
