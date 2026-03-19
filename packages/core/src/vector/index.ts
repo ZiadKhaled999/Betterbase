@@ -42,15 +42,15 @@ import type { VectorColumnConfig } from "./types";
 
 /**
  * Creates a vector column for Drizzle schema
- * 
+ *
  * @param config - Configuration for the vector column
  * @returns A Drizzle vector column definition
- * 
+ *
  * @example
  * ```typescript
  * import { pgTable } from 'drizzle-orm/pg-core';
  * import { vector } from './vector';
- * 
+ *
  * const documents = pgTable('documents', {
  *   id: serial('id').primaryKey(),
  *   content: text('content'),
@@ -65,7 +65,7 @@ export function createVectorColumn(name: string, config: VectorColumnConfig) {
 /**
  * Creates a vector column with custom configuration
  * Useful for specifying notNull, default, etc.
- * 
+ *
  * @param config - Configuration including dimensions, nullable, default
  * @returns A configured Drizzle vector column
  */
@@ -111,16 +111,18 @@ export function createVectorColumnSQL(
 ): string {
 	// Validate columnName is a valid SQL identifier
 	if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName)) {
-		throw new Error(`Invalid column name: ${columnName}. Column names must start with a letter or underscore and contain only alphanumeric characters and underscores.`);
+		throw new Error(
+			`Invalid column name: ${columnName}. Column names must start with a letter or underscore and contain only alphanumeric characters and underscores.`,
+		);
 	}
-	
+
 	// Validate dimensions is a positive integer
 	if (!Number.isInteger(dimensions) || dimensions <= 0) {
 		throw new Error(`Invalid dimensions: ${dimensions}. Dimensions must be a positive integer.`);
 	}
-	
+
 	const nullable = options.nullable ? "" : "NOT NULL";
-	
+
 	// Validate and sanitize default array elements
 	let defaultVal = "";
 	if (options.default) {
@@ -132,10 +134,12 @@ export function createVectorColumnSQL(
 		});
 		// Verify the number of default values matches dimensions
 		if (sanitizedDefaults.length !== dimensions) {
-			throw new Error(`Default array length (${sanitizedDefaults.length}) must match dimensions (${dimensions}).`);
+			throw new Error(
+				`Default array length (${sanitizedDefaults.length}) must match dimensions (${dimensions}).`,
+			);
 		}
 		defaultVal = `DEFAULT '[${sanitizedDefaults.join(",")}]'::vector`;
 	}
-	
+
 	return `"${columnName}" vector(${dimensions}) ${nullable} ${defaultVal}`.trim();
 }

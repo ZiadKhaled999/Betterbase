@@ -7,9 +7,9 @@
 
 import { and, eq } from "drizzle-orm";
 
-// Vector search imports
-import { vectorSearch, validateEmbedding } from "../vector/search";
 import { generateEmbedding } from "../vector/embeddings";
+// Vector search imports
+import { validateEmbedding, vectorSearch } from "../vector/search";
 
 /**
  * Type for database connection - using any for flexibility
@@ -645,7 +645,8 @@ export interface VectorSearchResolverConfig {
  * // Add to your resolvers
  * const resolvers = {
  *   Query: {
- *     searchDocuments: vectorResolvers.search,
+ *     searchDocumentsByVector: vectorResolvers.searchByVector,
+ *     searchDocumentsByText: vectorResolvers.searchByText,
  *   },
  * };
  * ```
@@ -669,10 +670,12 @@ export function generateVectorSearchResolver<T = Record<string, unknown>>(
 		): Promise<Array<{ item: T; score: number }>> => {
 			try {
 				const embedding = args.embedding as number[];
-				const limit = (args.limit as number) || config.defaultOptions?.limit || 10;
+				const limit = (args.limit as number) ?? config.defaultOptions?.limit ?? 10;
 				const threshold = args.threshold as number | undefined;
-				const metric = (args.metric as "cosine" | "euclidean" | "inner_product") ||
-					config.defaultOptions?.metric || "cosine";
+				const metric =
+					(args.metric as "cosine" | "euclidean" | "inner_product") ??
+					config.defaultOptions?.metric ??
+					"cosine";
 				const filter = args.filter as Record<string, unknown> | undefined;
 
 				if (!embedding || !Array.isArray(embedding)) {
@@ -692,7 +695,9 @@ export function generateVectorSearchResolver<T = Record<string, unknown>>(
 				return results as Array<{ item: T; score: number }>;
 			} catch (error) {
 				console.error(`[Vector Search Error]: ${error}`);
-				throw new Error(`Vector search failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+				throw new Error(
+					`Vector search failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+				);
 			}
 		},
 
@@ -706,36 +711,52 @@ export function generateVectorSearchResolver<T = Record<string, unknown>>(
 		): Promise<Array<{ item: T; score: number }>> => {
 			try {
 				const text = args.text as string;
-				const limit = (args.limit as number) || config.defaultOptions?.limit || 10;
+				const limit = (args.limit as number) ?? config.defaultOptions?.limit ?? 10;
 				const threshold = args.threshold as number | undefined;
-				const metric = (args.metric as "cosine" | "euclidean" | "inner_product") ||
-					config.defaultOptions?.metric || "cosine";
+				const metric =
+					(args.metric as "cosine" | "euclidean" | "inner_product") ??
+					config.defaultOptions?.metric ??
+					"cosine";
 				const filter = args.filter as Record<string, unknown> | undefined;
 
 				if (!text || typeof text !== "string") {
 					throw new Error("text is required and must be a string");
 				}
 
+				// Use textColumn if specified, otherwise use the text directly
+				const textToEmbed = config.textColumn ? (args[config.textColumn] as string) : text;
+				if (!textToEmbed) {
+					throw new Error(`textColumn "${config.textColumn}" not found in args`);
+				}
+
 				// Generate embedding from text
-				const embeddingResult = await generateEmbedding(text, {
+				const embeddingResult = await generateEmbedding(textToEmbed, {
 					provider: config.embeddingConfig?.provider || "openai",
 					model: config.embeddingConfig?.model,
 					dimensions: config.embeddingConfig?.dimensions,
 					apiKey: config.embeddingConfig?.apiKey,
 				});
 
-				const results = await vectorSearch(db, table, config.vectorColumn, embeddingResult.embedding, {
-					limit,
-					threshold,
-					metric,
-					filter,
-					includeScore: true,
-				});
+				const results = await vectorSearch(
+					db,
+					table,
+					config.vectorColumn,
+					embeddingResult.embedding,
+					{
+						limit,
+						threshold,
+						metric,
+						filter,
+						includeScore: true,
+					},
+				);
 
 				return results as Array<{ item: T; score: number }>;
 			} catch (error) {
 				console.error(`[Vector Search Error]: ${error}`);
-				throw new Error(`Vector search failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+				throw new Error(
+					`Vector search failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+				);
 			}
 		},
 	};

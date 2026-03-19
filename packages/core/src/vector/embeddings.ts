@@ -6,11 +6,11 @@
  */
 
 import type {
+	BatchEmbeddingResult,
 	EmbeddingConfig,
 	EmbeddingInput,
-	EmbeddingResult,
-	BatchEmbeddingResult,
 	EmbeddingProvider,
+	EmbeddingResult,
 } from "./types";
 
 /**
@@ -45,10 +45,7 @@ export const DEFAULT_EMBEDDING_CONFIGS: Record<EmbeddingProvider, Partial<Embedd
  * @param expectedDimensions - Expected number of dimensions
  * @throws Error if dimensions don't match
  */
-export function validateEmbeddingDimensions(
-	embedding: number[],
-	expectedDimensions: number,
-): void {
+export function validateEmbeddingDimensions(embedding: number[], expectedDimensions: number): void {
 	if (embedding.length !== expectedDimensions) {
 		throw new Error(
 			`Embedding dimension mismatch: expected ${expectedDimensions}, got ${embedding.length}`,
@@ -201,7 +198,7 @@ export class OpenAIEmbeddingProvider extends EmbeddingProviderBase {
 				throw new Error(`OpenAI API error: ${error}`);
 			}
 
-			const data = await response.json() as {
+			const data = (await response.json()) as {
 				data: Array<{ embedding: number[] }>;
 			};
 
@@ -258,7 +255,7 @@ export class OpenAIEmbeddingProvider extends EmbeddingProviderBase {
 					throw new Error(`OpenAI API error: ${error}`);
 				}
 
-				const data = await response.json() as {
+				const data = (await response.json()) as {
 					data: Array<{ embedding: number[] }>;
 				};
 
@@ -338,7 +335,7 @@ export class CohereEmbeddingProvider extends EmbeddingProviderBase {
 			throw new Error(`Cohere API error: ${error}`);
 		}
 
-		const data = await response.json() as {
+		const data = (await response.json()) as {
 			embeddings: number[][];
 		};
 
@@ -406,7 +403,7 @@ export class CohereEmbeddingProvider extends EmbeddingProviderBase {
 						continue;
 					}
 
-					const data = await response.json() as {
+					const data = (await response.json()) as {
 						embeddings: number[][];
 					};
 
@@ -482,8 +479,7 @@ export function createEmbeddingProvider(config: EmbeddingConfig): EmbeddingProvi
 		case "custom":
 			// For custom/huggingface, users should extend EmbeddingProviderBase
 			throw new Error(
-				`Provider '${config.provider}' requires a custom implementation. ` +
-				"Extend EmbeddingProviderBase to implement custom providers.",
+				`Provider '${config.provider}' requires a custom implementation. Extend EmbeddingProviderBase to implement custom providers.`,
 			);
 		default:
 			throw new Error(`Unknown embedding provider: ${(config as { provider?: string }).provider}`);

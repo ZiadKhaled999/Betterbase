@@ -52,8 +52,8 @@ export function evaluateStoragePolicy(
 	const uidPathMatch = expression.match(/auth\.uid\(\)\s*=\s*path\.split\(["'](.+)["']\)\[(\d+)\]/);
 	if (uidPathMatch) {
 		const delimiter = uidPathMatch[1];
-		const index = parseInt(uidPathMatch[2], 10);
-		
+		const index = Number.parseInt(uidPathMatch[2], 10);
+
 		if (userId === null) {
 			return false; // Deny anonymous users
 		}
@@ -70,10 +70,12 @@ export function evaluateStoragePolicy(
 	}
 
 	// Handle auth.uid() = path segment directly
-	const uidDirectMatch = expression.match(/auth\.uid\(\)\s*=\s*path\.split\(["'\/]+["']\)\[(\d+)\]/);
+	const uidDirectMatch = expression.match(
+		/auth\.uid\(\)\s*=\s*path\.split\(["'\/]+["']\)\[(\d+)\]/,
+	);
 	if (uidDirectMatch) {
-		const index = parseInt(uidDirectMatch[1], 10);
-		
+		const index = Number.parseInt(uidDirectMatch[1], 10);
+
 		if (userId === null) {
 			return false;
 		}

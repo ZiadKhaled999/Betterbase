@@ -1,16 +1,16 @@
 /**
  * Auto-REST: Automatic CRUD route generation from Drizzle schema
- * 
+ *
  * This module provides runtime route registration that automatically
  * exposes full CRUD operations for all tables in the Drizzle schema.
- * 
+ *
  * SECURITY: When enableRLS is true, all routes require authentication and
  * apply RLS filtering. Unauthenticated access is rejected.
  */
 
-import type { Context } from "hono";
-import { Hono } from "hono";
 import type { BetterBaseResponse } from "@betterbase/shared";
+import type { Context } from "hono";
+import type { Hono } from "hono";
 import { getRLSUserId, isRLSSessionSet } from "./middleware/rls-session";
 
 // Type for Drizzle table
@@ -42,21 +42,30 @@ export interface AutoRestOptions {
 /**
  * Error response for unauthorized requests
  */
-function unauthorizedResponse(c: Context, message = "Unauthorized: authentication required"): Response {
-	return c.json({
-		data: null,
-		error: message,
-	} as BetterBaseResponse<null>, 401);
+function unauthorizedResponse(
+	c: Context,
+	message = "Unauthorized: authentication required",
+): Response {
+	return c.json(
+		{
+			data: null,
+			error: message,
+		} as BetterBaseResponse<null>,
+		401,
+	);
 }
 
 /**
  * Error response for forbidden requests
  */
 function forbiddenResponse(c: Context, message = "Forbidden: insufficient permissions"): Response {
-	return c.json({
-		data: null,
-		error: message,
-	} as BetterBaseResponse<null>, 403);
+	return c.json(
+		{
+			data: null,
+			error: message,
+		} as BetterBaseResponse<null>,
+		403,
+	);
 }
 
 /**
@@ -65,16 +74,19 @@ function forbiddenResponse(c: Context, message = "Forbidden: insufficient permis
  * @param allowedColumns - Array of allowed column names
  * @returns Sanitized body with only allowed columns
  */
-function sanitizeInputBody(body: Record<string, unknown>, allowedColumns: string[]): Record<string, unknown> {
+function sanitizeInputBody(
+	body: Record<string, unknown>,
+	allowedColumns: string[],
+): Record<string, unknown> {
 	const sanitized: Record<string, unknown> = {};
 	const allowedSet = new Set(allowedColumns);
-	
+
 	for (const [key, value] of Object.entries(body)) {
 		if (allowedSet.has(key)) {
 			sanitized[key] = value;
 		}
 	}
-	
+
 	return sanitized;
 }
 
@@ -87,7 +99,7 @@ function getTableColumns(table: DrizzleTable): string[] {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	table as any;
 	const columns: string[] = [];
-	
+
 	// Try to get columns from table metadata
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const tableConfig = (table as any).config;
@@ -96,7 +108,7 @@ function getTableColumns(table: DrizzleTable): string[] {
 			columns.push(col.name);
 		}
 	}
-	
+
 	return columns;
 }
 
@@ -110,31 +122,31 @@ function checkRLSAuth(c: Context, enableRLS: boolean): string | null {
 	if (!enableRLS) {
 		return null; // No RLS required
 	}
-	
+
 	// Check if RLS session is set (user is authenticated)
 	if (!isRLSSessionSet(c)) {
 		return null;
 	}
-	
+
 	const userId = getRLSUserId(c);
 	return userId || null;
 }
 
 /**
  * Mount auto-generated REST routes for all tables in the schema
- * 
+ *
  * @param app - Hono application instance
  * @param db - Drizzle database instance
  * @param schema - Record of table name to Drizzle table
  * @param options - Optional configuration
- * 
+ *
  * Routes generated:
  * - GET /api/:table - List all rows (paginated)
  * - GET /api/:table/:id - Get single row by ID
  * - POST /api/:table - Insert new row
  * - PATCH /api/:table/:id - Update existing row
  * - DELETE /api/:table/:id - Delete row
- * 
+ *
  * SECURITY: When enableRLS is true, all routes require authentication.
  */
 export function mountAutoRest(
@@ -210,7 +222,7 @@ function getPrimaryKey(table: DrizzleTable): string | null {
 	if (tableMeta?.primaryKey?.columns?.length > 0) {
 		return tableMeta.primaryKey.columns[0].name;
 	}
-	
+
 	// Fallback: look for common primary key names
 	const commonPKs = ["id", "uuid", "pk"];
 	for (const pk of commonPKs) {
@@ -225,7 +237,7 @@ function getPrimaryKey(table: DrizzleTable): string | null {
 
 /**
  * Register CRUD routes for a single table
- * 
+ *
  * SECURITY: When enableRLS is true, all routes require authentication and apply:
  * - Per-row filtering using ownerColumn (if specified)
  * - Column whitelisting for insert/update operations
@@ -251,24 +263,27 @@ function registerTableRoutes(
 			return unauthorizedResponse(c);
 		}
 
-		const limit = Math.min(parseInt(c.req.query("limit") || "20", 10), 100);
-		const offset = parseInt(c.req.query("offset") || "0", 10);
+		const limit = Math.min(Number.parseInt(c.req.query("limit") || "20", 10), 100);
+		const offset = Number.parseInt(c.req.query("offset") || "0", 10);
 
 		try {
 			// Build query with RLS filtering if enabled and owner column specified
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			let query = db.select().from(table).limit(limit).offset(offset);
-			
+
 			if (enableRLS && userId && ownerColumn) {
 				// Apply per-row RLS filtering
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				query = query.where((table as any)[ownerColumn].eq(userId));
 			}
-			
+
 			const rows = await query;
-			
+
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const countResult = await db.select({ count: () => 0 }).from(table).limit(1);
+			const countResult = await db
+				.select({ count: () => 0 })
+				.from(table)
+				.limit(1);
 			const total = countResult.length; // This is approximate
 
 			const response: BetterBaseResponse<typeof rows> = {
@@ -305,16 +320,20 @@ function registerTableRoutes(
 		try {
 			// Build query with RLS filtering if enabled
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			let query = db.select().from(table).where((table as any)[primaryKey].eq(id)).limit(1);
-			
+			let query = db
+				.select()
+				.from(table)
+				.where((table as any)[primaryKey].eq(id))
+				.limit(1);
+
 			if (enableRLS && userId && ownerColumn) {
 				// Apply per-row RLS filtering
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				query = query.where((table as any)[ownerColumn].eq(userId));
 			}
-			
+
 			const rows = await query;
-			
+
 			if (rows.length === 0) {
 				const response: BetterBaseResponse<null> = {
 					data: null,
@@ -323,7 +342,7 @@ function registerTableRoutes(
 				return c.json(response, 404);
 			}
 
-			const response: BetterBaseResponse<typeof rows[0]> = {
+			const response: BetterBaseResponse<(typeof rows)[0]> = {
 				data: rows[0],
 				error: null,
 			};
@@ -367,8 +386,8 @@ function registerTableRoutes(
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const result = await db.insert(table).values(sanitizedBody).returning();
-			
-			const response: BetterBaseResponse<typeof result[0]> = {
+
+			const response: BetterBaseResponse<(typeof result)[0]> = {
 				data: result[0] || null,
 				error: null,
 			};
@@ -414,19 +433,24 @@ function registerTableRoutes(
 		try {
 			// Build update query with RLS filtering if enabled
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			let query = db.update(table).set(sanitizedBody).where((table as any)[primaryKey].eq(id)).returning();
-			
+			let query = db
+				.update(table)
+				.set(sanitizedBody)
+				.where((table as any)[primaryKey].eq(id))
+				.returning();
+
 			if (enableRLS && userId && ownerColumn) {
 				// Apply per-row RLS filtering - only update rows owned by user
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				query = db.update(table)
+				query = db
+					.update(table)
 					.set(sanitizedBody)
 					.where((table as any)[primaryKey].eq(id).and((table as any)[ownerColumn].eq(userId)))
 					.returning();
 			}
-			
+
 			const result = await query;
-			
+
 			if (result.length === 0) {
 				const response: BetterBaseResponse<null> = {
 					data: null,
@@ -435,7 +459,7 @@ function registerTableRoutes(
 				return c.json(response, 404);
 			}
 
-			const response: BetterBaseResponse<typeof result[0]> = {
+			const response: BetterBaseResponse<(typeof result)[0]> = {
 				data: result[0],
 				error: null,
 			};
@@ -463,18 +487,22 @@ function registerTableRoutes(
 		try {
 			// Build delete query with RLS filtering if enabled
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			let query = db.delete(table).where((table as any)[primaryKey].eq(id)).returning();
-			
+			let query = db
+				.delete(table)
+				.where((table as any)[primaryKey].eq(id))
+				.returning();
+
 			if (enableRLS && userId && ownerColumn) {
 				// Apply per-row RLS filtering - only delete rows owned by user
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				query = db.delete(table)
+				query = db
+					.delete(table)
 					.where((table as any)[primaryKey].eq(id).and((table as any)[ownerColumn].eq(userId)))
 					.returning();
 			}
-			
+
 			const result = await query;
-			
+
 			if (result.length === 0) {
 				const response: BetterBaseResponse<null> = {
 					data: null,
@@ -483,7 +511,7 @@ function registerTableRoutes(
 				return c.json(response, 404);
 			}
 
-			const response: BetterBaseResponse<typeof result[0]> = {
+			const response: BetterBaseResponse<(typeof result)[0]> = {
 				data: result[0],
 				error: null,
 			};

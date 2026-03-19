@@ -6,8 +6,8 @@
  * evaluates them against the current user session and record data.
  */
 
-import type { PolicyDefinition } from "./types";
 import { UnauthorizedError } from "@betterbase/shared";
+import type { PolicyDefinition } from "./types";
 
 /**
  * Evaluate a policy expression at runtime
@@ -208,10 +208,7 @@ export function applyRLSDelete(
  * @param getUserId - Function to get current user ID from request context
  * @returns RLS middleware functions
  */
-export function createRLSMiddleware(
-	policies: PolicyDefinition[],
-	getUserId: () => string | null,
-) {
+export function createRLSMiddleware(policies: PolicyDefinition[], getUserId: () => string | null) {
 	return {
 		/**
 		 * Apply RLS to SELECT operations

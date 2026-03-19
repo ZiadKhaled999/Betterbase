@@ -5,13 +5,9 @@
  * Supports cosine similarity, euclidean distance, and inner product.
  */
 
-import { and, sql, asc, desc } from "drizzle-orm";
-import type { PgTable, PgColumn } from "drizzle-orm/pg-core";
-import type {
-	SearchOptions,
-	VectorSearchResult,
-	SimilarityMetric,
-} from "./types";
+import { and, asc, desc, sql } from "drizzle-orm";
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
+import type { SearchOptions, SimilarityMetric, VectorSearchResult } from "./types";
 
 /**
  * pgvector operator mappings
@@ -73,7 +69,7 @@ export function vectorDistance(
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	return sql<any>`${column} ${sql.raw(operator)} (${sql.join(
 		queryEmbedding.map((v) => sql`${v}::float8`),
-		", "
+		", ",
 	)})::vector`;
 }
 
@@ -140,13 +136,7 @@ export async function vectorSearch<TItem = Record<string, unknown>>(
 	queryEmbedding: number[],
 	options: SearchOptions = {},
 ): Promise<VectorSearchResult<TItem>[]> {
-	const {
-		limit = 10,
-		threshold,
-		metric = "cosine",
-		filter,
-		includeScore = true,
-	} = options;
+	const { limit = 10, threshold, metric = "cosine", filter, includeScore = true } = options;
 
 	const distanceExpr = vectorDistance(table, vectorColumn, queryEmbedding, metric);
 
@@ -167,14 +157,16 @@ export async function vectorSearch<TItem = Record<string, unknown>>(
 
 	// Apply filters if provided
 	if (filter && Object.keys(filter).length > 0) {
-		const conditions = Object.entries(filter).map(([key, value]) => {
-			const column = table.columns[key];
-			if (column) {
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				return (column as any).eq(value);
-			}
-			return null;
-		}).filter(Boolean);
+		const conditions = Object.entries(filter)
+			.map(([key, value]) => {
+				const column = table.columns[key];
+				if (column) {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					return (column as any).eq(value);
+				}
+				return null;
+			})
+			.filter(Boolean);
 
 		if (conditions.length > 0) {
 			queryBuilder = queryBuilder.where(and(...conditions));
@@ -238,12 +230,7 @@ export function buildVectorSearchQuery(
 	queryEmbedding: number[],
 	options: SearchOptions = {},
 ): { query: string; params: unknown[] } {
-	const {
-		limit = 10,
-		threshold: _threshold,
-		metric = "cosine",
-		filter,
-	} = options;
+	const { limit = 10, threshold: _threshold, metric = "cosine", filter } = options;
 
 	const operator = VECTOR_OPERATORS[metric];
 	const embeddingStr = `[${queryEmbedding.join(",")}]`;
@@ -343,11 +330,11 @@ export function validateEmbedding(embedding: number[]): void {
 		throw new Error("Embedding cannot be empty");
 	}
 
-	if (embedding.some((val) => typeof val !== "number" || isNaN(val))) {
+	if (embedding.some((val) => typeof val !== "number" || Number.isNaN(val))) {
 		throw new Error("Embedding must contain only valid numbers");
 	}
 
-	if (embedding.some((val) => !isFinite(val))) {
+	if (embedding.some((val) => !Number.isFinite(val))) {
 		throw new Error("Embedding contains non-finite numbers");
 	}
 }
