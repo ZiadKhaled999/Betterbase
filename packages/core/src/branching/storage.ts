@@ -7,6 +7,7 @@
 
 import type { StorageAdapter, StorageConfig, StorageObject } from "../storage/types";
 import type { PreviewStorage } from "./types";
+import { logger } from "../logger";
 
 /**
  * Generate a unique bucket name for a preview branch
@@ -91,7 +92,7 @@ export class StorageBranching {
 
 				copiedCount++;
 			} catch (error) {
-				console.warn(`Failed to copy file ${obj.key} to preview bucket:`, error);
+				logger.warn({ err: error, key: obj.key }, `Failed to copy file ${obj.key} to preview bucket`);
 			}
 		}
 
@@ -116,9 +117,9 @@ export class StorageBranching {
 			// Note: Actual bucket deletion depends on the provider
 			// For S3-compatible storage, we don't delete the bucket itself
 			// as it may require special permissions or may not be supported
-			console.log(`Preview storage bucket '${previewBucket}' has been cleaned up`);
+			logger.info({ bucket: previewBucket }, `Preview storage bucket '${previewBucket}' has been cleaned up`);
 		} catch (error) {
-			console.warn(`Failed to teardown preview storage bucket '${previewBucket}':`, error);
+			logger.warn({ err: error, bucket: previewBucket }, `Failed to teardown preview storage bucket '${previewBucket}'`);
 			// Don't throw - cleanup should be best-effort
 		}
 	}
