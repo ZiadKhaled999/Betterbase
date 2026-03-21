@@ -14,8 +14,10 @@ import {
 	S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { ImageTransformer } from "./image-transformer";
 import type {
 	BackblazeConfig,
+	ImageTransformOptions,
 	MinioConfig,
 	R2Config,
 	S3Config,
@@ -34,12 +36,14 @@ export class S3StorageAdapter implements StorageAdapter {
 	private client: S3Client;
 	private config: StorageConfig;
 	private region: string;
+	private transformer: ImageTransformer;
 
 	constructor(config: StorageConfig) {
 		this.config = config;
 		this.region = this.getRegion(config);
 
 		this.client = this.createClient(config);
+		this.transformer = new ImageTransformer();
 	}
 
 	/**
@@ -356,6 +360,53 @@ export class S3StorageAdapter implements StorageAdapter {
 			lastModified: item.LastModified || new Date(),
 			contentType: undefined,
 		}));
+	}
+
+	/**
+	 * Download a file with optional image transformations
+	 *
+	 * Architecture:
+	 * 1. If no transform options → return original file
+	 * 2. If transform options → check cache first
+	 * 3. If cached → return cached version
+	 * 4. If not cached → transform original, cache result, return
+	 */
+	async downloadWithTransform(
+		bucket: string,
+		key: string,
+		options?: ImageTransformOptions,
+	): Promise<Buffer> {
+		// If no transform options, return original file
+		if (!options || Object.keys(options).length === 0) {
+			return this.download(bucket, key);
+		}
+
+		// Generate cache key and path
+		const cacheKey = this.transformer.generateCacheKey(key, options);
+		const cachePath = this.transformer.buildCachePath(cacheKey, options.format || "webp");
+
+		// Check if cached version exists
+		try {
+			const cachedBuffer = await this.download(bucket, cachePath);
+			// Return cached version if it exists
+			return cachedBuffer;
+		} catch {
+			// Cache miss - proceed with transformation
+		}
+
+		// Download original file
+		const originalBuffer = await this.download(bucket, key);
+
+		// Transform the image
+		const transformResult = await this.transformer.transform(originalBuffer, options);
+
+		// Upload to cache
+		const contentType = this.transformer.getContentType(transformResult.format);
+		await this.upload(bucket, cachePath, transformResult.buffer, {
+			contentType,
+		});
+
+		return transformResult.buffer;
 	}
 }
 
