@@ -552,8 +552,14 @@ export function generateGraphQLSchema(
 			const typeName = mergedConfig.typePrefix + singularize(pascalCase(tableInfo.name));
 			const typeRef = objectTypes.find((t) => t.name === typeName)!;
 
+			// Subscribe to all changes (insert, update, delete)
+			subscriptionFieldsConfig[`${tableInfo.name}Changes`] = {
+				type: typeRef,
+				args: {},
+			};
+
 			// Subscribe to created records
-			subscriptionFieldsConfig[`${tableInfo.name}Created`] = {
+			subscriptionFieldsConfig[`${tableInfo.name}Inserted`] = {
 				type: typeRef,
 				args: {},
 			};
