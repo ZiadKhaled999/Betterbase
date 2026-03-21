@@ -16,6 +16,8 @@
 		"chalk": "^5.3.0",
 		"commander": "^12.1.0",
 		"inquirer": "^10.2.2",
+		"nanoid": "^5.0.0",
+		"postgres": "^3.4.0",
 		"zod": "^3.23.8"
 	},
 	"devDependencies": {

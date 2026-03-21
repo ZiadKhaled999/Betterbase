@@ -88,6 +88,14 @@ export const BetterBaseConfigSchema = z
 			.object({
 				enabled: z.boolean().default(true),
 				excludeTables: z.array(z.string()).default([]),
+				tables: z
+					.record(
+						z.object({
+							advancedFilters: z.boolean().default(false),
+							maxLimit: z.number().default(1000),
+						}),
+					)
+					.optional(),
 			})
 			.optional(),
 		branching: z

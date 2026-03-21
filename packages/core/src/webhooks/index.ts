@@ -1,6 +1,6 @@
 // Webhook types and interfaces
 export type { WebhookConfig, WebhookPayload } from "./types";
-export type { WebhookDeliveryLog } from "./dispatcher";
+export type { WebhookDeliveryLog, WebhookDbClient } from "./dispatcher";
 
 // HMAC signing utilities
 export { signPayload, verifySignature } from "./signer";

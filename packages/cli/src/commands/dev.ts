@@ -1,7 +1,53 @@
-import { type FSWatcher, existsSync, statSync, watch } from "node:fs";
+import { type FSWatcher, existsSync, readFileSync, statSync, watch } from "node:fs";
 import path from "node:path";
 import { ContextGenerator } from "../utils/context-generator";
 import * as logger from "../utils/logger";
+
+/**
+ * Load environment variables from .env file
+ * 
+ * @param projectRoot - Project root directory
+ * @returns Record of environment variables
+ */
+function loadEnvFile(projectRoot: string): Record<string, string> {
+	const envPath = path.join(projectRoot, '.env');
+	const envVars: Record<string, string> = {};
+
+	if (existsSync(envPath)) {
+		try {
+			const content = readFileSync(envPath, 'utf-8');
+			const lines = content.split('\n');
+			
+			for (const line of lines) {
+				const trimmed = line.trim();
+				// Skip comments and empty lines
+				if (!trimmed || trimmed.startsWith('#')) {
+					continue;
+				}
+				
+				const equalIndex = trimmed.indexOf('=');
+				if (equalIndex > 0) {
+					const key = trimmed.substring(0, equalIndex).trim();
+					let value = trimmed.substring(equalIndex + 1).trim();
+					
+					// Remove quotes if present
+					if ((value.startsWith('"') && value.endsWith('"')) ||
+						(value.startsWith("'") && value.endsWith("'"))) {
+						value = value.slice(1, -1);
+					}
+					
+					envVars[key] = value;
+				}
+			}
+			
+			logger.info('Loaded environment variables from .env');
+		} catch (error) {
+			logger.warn(`Failed to load .env file: ${error}`);
+		}
+	}
+
+	return envVars;
+}
 
 const RESTART_DELAY_MS = 1000;
 const DEBOUNCE_MS = 250;
@@ -26,14 +72,16 @@ enum ServerState {
 class ServerManager {
 	private process: ReturnType<typeof Bun.spawn> | null = null;
 	private projectRoot: string;
+	private envVars: Record<string, string>;
 	private state: ServerState = ServerState.STOPPED;
 	private restartTimeout: ReturnType<typeof setTimeout> | null = null;
 	private abortController: AbortController | null = null;
 	private exitPromise: Promise<void> | null = null;
 	private resolveExit: (() => void) | null = null;
 
-	constructor(projectRoot: string) {
+	constructor(projectRoot: string, envVars: Record<string, string> = {}) {
 		this.projectRoot = projectRoot;
+		this.envVars = envVars;
 	}
 
 	/**
@@ -57,7 +105,7 @@ class ServerManager {
 		this.abortController = new AbortController();
 
 		try {
-			this.spawnProcess();
+			this.spawnProcess(this.envVars);
 			this.state = ServerState.RUNNING;
 		} catch (error) {
 			// Spawn failed - reset to stopped state
@@ -175,7 +223,7 @@ class ServerManager {
 		this.state = ServerState.STARTING;
 
 		try {
-			this.spawnProcess();
+			this.spawnProcess(this.envVars);
 			this.state = ServerState.RUNNING;
 		} catch (error) {
 			this.state = ServerState.STOPPED;
@@ -189,7 +237,7 @@ class ServerManager {
 	/**
 	 * Spawn the bun process with hot reload
 	 */
-	private spawnProcess(): void {
+	private spawnProcess(envVars: Record<string, string> = {}): void {
 		// Check if we've been stopped/aborted while waiting
 		if (this.abortController?.signal.aborted) {
 			return;
@@ -197,12 +245,15 @@ class ServerManager {
 
 		let proc: ReturnType<typeof Bun.spawn>;
 		try {
+			// Merge loaded env vars with process.env
+			const mergedEnv = { ...process.env, ...envVars };
+			
 			proc = Bun.spawn({
 				cmd: [process.execPath, "--hot", SERVER_ENTRY],
 				cwd: this.projectRoot,
 				stdout: "inherit",
 				stderr: "inherit",
-				env: { ...process.env },
+				env: mergedEnv,
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -242,7 +293,7 @@ class ServerManager {
 					// Check if we should still restart (not stopped in the meantime)
 					if (this.state === ServerState.RUNNING && this.abortController && !this.abortController.signal.aborted) {
 						try {
-							this.spawnProcess();
+							this.spawnProcess(this.envVars);
 						} catch (error) {
 							const message = error instanceof Error ? error.message : String(error);
 							logger.error(`Failed to restart: ${message}`);
@@ -278,12 +329,23 @@ class ServerManager {
 export async function runDevCommand(projectRoot: string = process.cwd()): Promise<() => void> {
 	const generator = new ContextGenerator();
 
+	// Load environment variables from .env file
+	const envVars = loadEnvFile(projectRoot);
+
+	// Check if functions directory exists
+	const functionsDir = path.join(projectRoot, 'src', 'functions');
+	const functionsEnabled = existsSync(functionsDir);
+
+	if (functionsEnabled) {
+		logger.info('Functions directory detected - functions will be available at /functions/:name');
+	}
+
 	// Generate initial context
 	logger.info("Generating initial context...");
 	await generator.generate(projectRoot);
 
-	// Start the server manager
-	const serverManager = new ServerManager(projectRoot);
+	// Start the server manager with env vars
+	const serverManager = new ServerManager(projectRoot, envVars);
 	serverManager.start();
 
 	// Set up file watchers for context regeneration
@@ -291,6 +353,11 @@ export async function runDevCommand(projectRoot: string = process.cwd()): Promis
 		path.join(projectRoot, "src/db/schema.ts"),
 		path.join(projectRoot, "src/routes"),
 	];
+
+	// Add functions directory to watch paths if it exists
+	if (functionsEnabled) {
+		watchPaths.push(functionsDir);
+	}
 	const timers = new Map<string, ReturnType<typeof setTimeout>>();
 	const watchers: FSWatcher[] = [];
 

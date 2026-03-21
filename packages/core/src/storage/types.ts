@@ -219,4 +219,82 @@ export interface StorageAdapter {
 	 * @returns Promise resolving to array of storage objects
 	 */
 	listObjects(bucket: string, prefix?: string): Promise<StorageObject[]>;
+
+	/**
+	 * Download a file with optional image transformations
+	 * @param bucket - The bucket name
+	 * @param key - The object key (path) within the bucket
+	 * @param options - Optional transform options for image processing
+	 * @returns Promise resolving to file content as Buffer (transformed if options provided)
+	 */
+	downloadWithTransform(
+		bucket: string,
+		key: string,
+		options?: ImageTransformOptions,
+	): Promise<Buffer>;
+}
+
+// IMAGE TRANSFORMATION TYPES
+
+/**
+ * Options for image transformations
+ * All dimensions are validated: 1-4000 pixels
+ */
+export type ImageTransformOptions = {
+	/** Output width in pixels (max: 4000) */
+	width?: number;
+	/** Output height in pixels (max: 4000) */
+	height?: number;
+	/** Output format (default: preserve original or webp) */
+	format?: "webp" | "jpeg" | "png" | "avif";
+	/** Quality 1-100 (default: 80) */
+	quality?: number;
+	/** Fit mode for resizing */
+	fit?: "cover" | "contain" | "fill" | "inside" | "outside";
+};
+
+/**
+ * Result of an image transformation
+ */
+export type TransformResult = {
+	/** Transformed image buffer */
+	buffer: Buffer;
+	/** Output format (webp, jpeg, png, avif) */
+	format: string;
+	/** Size in bytes */
+	size: number;
+	/** Output width in pixels */
+	width: number;
+	/** Output height in pixels */
+	height: number;
+};
+
+/**
+ * Cache key for transformed images
+ */
+export type TransformCacheKey = {
+	/** Original file path */
+	path: string;
+	/** MD5 hash of transform options */
+	hash: string;
+};
+
+/**
+ * Supported image MIME types that Sharp can process
+ */
+export const SUPPORTED_IMAGE_TYPES = [
+	"image/jpeg",
+	"image/png",
+	"image/webp",
+	"image/gif",
+	"image/tiff",
+	"image/avif",
+	"image/heif",
+] as const;
+
+/**
+ * Check if a MIME type is supported for transformation
+ */
+export function isTransformableImage(contentType: string): boolean {
+	return SUPPORTED_IMAGE_TYPES.includes(contentType as (typeof SUPPORTED_IMAGE_TYPES)[number]);
 }

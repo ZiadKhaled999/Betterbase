@@ -8,6 +8,34 @@ interface SubscriberEntry {
 	filter?: Record<string, unknown>;
 }
 
+/**
+ * Channel subscription options
+ */
+interface ChannelSubscribeOptions {
+	user_id?: string;
+	presence?: Record<string, unknown>;
+}
+
+/**
+ * Presence event from server
+ */
+interface PresenceEvent {
+	type: "presence";
+	event: "join" | "leave" | "sync" | "update";
+	channel: string;
+	payload: unknown;
+}
+
+/**
+ * Broadcast event from server
+ */
+interface BroadcastEvent {
+	type: "broadcast";
+	event: string;
+	channel: string;
+	payload: unknown;
+}
+
 export class RealtimeClient {
 	private ws: WebSocket | null = null;
 	private subscriptions = new Map<string, Map<string, SubscriberEntry>>();
@@ -17,6 +45,7 @@ export class RealtimeClient {
 	private subscriberSequence = 0;
 	private disabled = false;
 	private token: string | null;
+	private eventHandlers = new Map<string, Set<(data: unknown) => void>>();
 
 	constructor(
 		private url: string,
@@ -27,6 +56,16 @@ export class RealtimeClient {
 
 	setToken(token: string | null): void {
 		this.token = token;
+	}
+
+	/**
+	 * Send a message through the WebSocket
+	 */
+	private send(message: object): void {
+		if (this.disabled) return;
+		if (this.ws?.readyState === WebSocket.OPEN) {
+			this.ws.send(JSON.stringify(message));
+		}
 	}
 
 	private scheduleReconnect(): void {
@@ -103,21 +142,46 @@ export class RealtimeClient {
 		this.ws.onmessage = (event) => {
 			try {
 				const data = JSON.parse(event.data as string);
-				if (data.type !== "update") return;
 
-				const tableSubscribers = this.subscriptions.get(data.table);
-				if (!tableSubscribers) {
+				// Handle table update events
+				if (data.type === "update") {
+					const tableSubscribers = this.subscriptions.get(data.table);
+					if (!tableSubscribers) {
+						return;
+					}
+
+					for (const subscriber of tableSubscribers.values()) {
+						if (subscriber.event === "*" || subscriber.event === data.event) {
+							subscriber.callback({
+								event: data.event,
+								data: data.data,
+								timestamp: data.timestamp,
+							});
+						}
+					}
 					return;
 				}
 
-				for (const subscriber of tableSubscribers.values()) {
-					if (subscriber.event === "*" || subscriber.event === data.event) {
-						subscriber.callback({
-							event: data.event,
-							data: data.data,
-							timestamp: data.timestamp,
-						});
+				// Handle presence events
+				if (data.type === "presence") {
+					const handlers = this.eventHandlers.get("presence");
+					if (handlers) {
+						for (const handler of handlers) {
+							handler(data as PresenceEvent);
+						}
 					}
+					return;
+				}
+
+				// Handle broadcast events
+				if (data.type === "broadcast") {
+					const handlers = this.eventHandlers.get("broadcast");
+					if (handlers) {
+						for (const handler of handlers) {
+							handler(data as BroadcastEvent);
+						}
+					}
+					return;
 				}
 			} catch {
 				// noop
@@ -201,6 +265,90 @@ export class RealtimeClient {
 		};
 	}
 
+	/**
+	 * Subscribe to a channel for presence and broadcast messaging
+	 */
+	channel(channelName: string) {
+		// Ensure connection is established
+		if (!this.disabled) {
+			this.connect();
+		}
+
+		return {
+			subscribe: (options?: ChannelSubscribeOptions) => {
+				this.send({
+					type: "subscribe",
+					channel: channelName,
+					payload: options,
+				});
+
+				return {
+					unsubscribe: () => {
+						this.send({ type: "unsubscribe", channel: channelName });
+					},
+
+					broadcast: (event: string, data: unknown) => {
+						this.send({
+							type: "broadcast",
+							channel: channelName,
+							payload: { event, data },
+						});
+					},
+
+					track: (state: Record<string, unknown>) => {
+						this.send({
+							type: "presence",
+							channel: channelName,
+							payload: { action: "update", state },
+						});
+					},
+
+					onPresence: (callback: (event: PresenceEvent) => void) => {
+						this.on("presence", (data) => {
+							const event = data as PresenceEvent;
+							if (event.channel === channelName) {
+								callback(event);
+							}
+						});
+					},
+
+					onBroadcast: (callback: (event: string, data: unknown) => void) => {
+						this.on("broadcast", (data) => {
+							const event = data as BroadcastEvent;
+							if (event.channel === channelName) {
+								callback(event.event, event.payload);
+							}
+						});
+					},
+				};
+			},
+		};
+	}
+
+	/**
+	 * Register an event handler for a specific event type
+	 */
+	on(eventType: string, callback: (data: unknown) => void): void {
+		let handlers = this.eventHandlers.get(eventType);
+		if (!handlers) {
+			handlers = new Set();
+			this.eventHandlers.set(eventType, handlers);
+		}
+		handlers.add(callback);
+	}
+
+	/**
+	 * Remove an event handler
+	 */ off(eventType: string, callback: (data: unknown) => void): void {
+		const handlers = this.eventHandlers.get(eventType);
+		if (handlers) {
+			handlers.delete(callback);
+			if (handlers.size === 0) {
+				this.eventHandlers.delete(eventType);
+			}
+		}
+	}
+
 	disconnect(): void {
 		if (this.reconnectTimeout) {
 			clearTimeout(this.reconnectTimeout);
@@ -210,6 +358,7 @@ export class RealtimeClient {
 		this.ws?.close();
 		this.ws = null;
 		this.subscriptions.clear();
+		this.eventHandlers.clear();
 		this.reconnectAttempts = 0;
 	}
 }

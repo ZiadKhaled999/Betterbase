@@ -10,6 +10,10 @@ import { and, eq } from "drizzle-orm";
 import { generateEmbedding } from "../vector/embeddings";
 // Vector search imports
 import { validateEmbedding, vectorSearch } from "../vector/search";
+import { logger } from "../logger";
+
+// Import pubsub from server for subscriptions
+import { pubsub } from "./server";
 
 /**
  * Type for database connection - using any for flexibility
@@ -96,7 +100,7 @@ const defaultConfig: Required<ResolverGenerationConfig> = {
 	mutations: true,
 	hooks: {},
 	onError: (error: Error) => {
-		console.error(`[GraphQL Resolver Error]: ${error.message}`);
+		logger.error({ err: error }, `[GraphQL Resolver Error]: ${error.message}`);
 	},
 };
 
@@ -543,6 +547,69 @@ export function generateResolvers(
 	}
 
 	return resolvers;
+}
+
+/**
+ * Generate subscription resolvers for all tables in a schema
+ *
+ * This function creates subscription resolvers that connect to the PubSub system
+ * for realtime updates when database changes occur.
+ *
+ * @param tables - Object mapping table names to Drizzle table definitions
+ * @returns A map of subscription resolvers
+ *
+ * @example
+ * ```typescript
+ * import { users, posts } from './db/schema';
+ *
+ * const subscriptionResolvers = generateSubscriptionResolvers({
+ *   users,
+ *   posts,
+ * });
+ *
+ * // Add to your resolvers
+ * const resolvers = {
+ *   Subscription: subscriptionResolvers,
+ * };
+ * ```
+ */
+export function generateSubscriptionResolvers(
+	tables: Record<string, DrizzleTable>,
+): Record<string, unknown> {
+	const subscriptions: Record<string, unknown> = {};
+
+	for (const [tableName] of Object.entries(tables)) {
+		// Subscribe to all changes (insert, update, delete)
+		subscriptions[`${tableName}Changes`] = {
+			subscribe: () => pubsub.subscribe(`${tableName}:change`),
+			resolve: (payload: unknown) => payload,
+		};
+
+		// Subscribe to inserts
+		subscriptions[`${tableName}Inserted`] = {
+			subscribe: () => pubsub.subscribe(`${tableName}:insert`),
+			resolve: (payload: unknown) => payload,
+		};
+
+		// Subscribe to updates
+		subscriptions[`${tableName}Updated`] = {
+			subscribe: () => pubsub.subscribe(`${tableName}:update`),
+			resolve: (payload: unknown) => payload,
+		};
+
+		// Subscribe to deletes
+		subscriptions[`${tableName}Deleted`] = {
+			subscribe: () => pubsub.subscribe(`${tableName}:delete`),
+			resolve: (payload: unknown) => payload,
+		};
+	}
+
+	logger.info(
+		{ tableCount: Object.keys(tables).length },
+		"Generated subscription resolvers",
+	);
+
+	return subscriptions;
 }
 
 /**

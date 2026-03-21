@@ -3,6 +3,7 @@ import type { BetterBaseConfig } from "../config/schema";
 import { WebhookDispatcher } from "./dispatcher";
 import { connectToRealtime } from "./integrator";
 import type { WebhookConfig } from "./types";
+import type { WebhookDbClient } from "./dispatcher";
 
 /**
  * Resolved webhook configuration with actual env var values
@@ -23,11 +24,13 @@ interface ResolvedWebhookConfig extends WebhookConfig {
  *
  * @param config - The BetterBase configuration
  * @param realtimeEmitter - The event emitter from the realtime layer
+ * @param db - Optional database client for persistent delivery logging
  * @returns The webhook dispatcher if webhooks are configured, null otherwise
  */
 export function initializeWebhooks(
 	config: BetterBaseConfig,
 	realtimeEmitter: EventEmitter,
+	db?: WebhookDbClient,
 ): WebhookDispatcher | null {
 	const webhooks = config.webhooks;
 
@@ -99,13 +102,23 @@ export function initializeWebhooks(
 		return null;
 	}
 
-	// Create dispatcher with resolved configs
-	const dispatcher = new WebhookDispatcher(resolvedWebhooks);
+	// Create dispatcher with resolved configs and optional database client
+	let dispatcher: WebhookDispatcher;
+	if (db) {
+		dispatcher = new WebhookDispatcher(resolvedWebhooks, db);
+	} else {
+		dispatcher = new WebhookDispatcher(resolvedWebhooks);
+	}
 
 	// Connect to realtime emitter
 	connectToRealtime(dispatcher, realtimeEmitter);
 
 	console.log(`[webhooks] Active: ${resolvedWebhooks.length} webhook(s) configured`);
+	if (db) {
+		console.log("[webhooks] Delivery logging: enabled (database)");
+	} else {
+		console.log("[webhooks] Delivery logging: enabled (in-memory only)");
+	}
 
 	return dispatcher;
 }

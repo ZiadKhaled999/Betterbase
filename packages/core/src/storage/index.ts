@@ -16,12 +16,15 @@
  */
 
 import { createS3Adapter } from "./s3-adapter";
+import { ImageTransformer, imageTransformer } from "./image-transformer";
 import type {
+	ImageTransformOptions,
 	SignedUrlOptions,
 	StorageAdapter,
 	StorageConfig,
 	StorageObject,
 	StorageProvider,
+	TransformResult,
 	UploadOptions,
 	UploadResult,
 } from "./types";
@@ -38,9 +41,12 @@ export type {
 	StoragePolicy,
 	AllowedMimeTypes,
 	BucketConfig,
+	ImageTransformOptions,
+	TransformResult,
 } from "./types";
 export { createS3Adapter } from "./s3-adapter";
 export { checkStorageAccess, getPolicyDenialMessage } from "./policy-engine";
+export { ImageTransformer, imageTransformer } from "./image-transformer";
 
 /**
  * Fluent API client bound to a specific bucket.
@@ -54,6 +60,16 @@ export interface BucketClient {
 	): Promise<{ data: UploadResult | null; error: Error | null }>;
 
 	download(path: string): Promise<{ data: Buffer | null; error: Error | null }>;
+
+	/**
+	 * Download a file with optional image transformations
+	 * @param path - The file path within the bucket
+	 * @param options - Optional image transformation options
+	 */
+	downloadWithTransform(
+		path: string,
+		options?: ImageTransformOptions,
+	): Promise<{ data: Buffer | null; error: Error | null }>;
 
 	remove(paths: string[]): Promise<{ data: { message: string } | null; error: Error | null }>;
 
@@ -122,6 +138,21 @@ class BucketClientImpl implements BucketClient {
 	async download(path: string): Promise<{ data: Buffer | null; error: Error | null }> {
 		try {
 			const result = await this.adapter.download(this.bucket, path);
+			return { data: result, error: null };
+		} catch (err) {
+			return {
+				data: null,
+				error: err instanceof Error ? err : new Error(String(err)),
+			};
+		}
+	}
+
+	async downloadWithTransform(
+		path: string,
+		options?: ImageTransformOptions,
+	): Promise<{ data: Buffer | null; error: Error | null }> {
+		try {
+			const result = await this.adapter.downloadWithTransform(this.bucket, path, options);
 			return { data: result, error: null };
 		} catch (err) {
 			return {

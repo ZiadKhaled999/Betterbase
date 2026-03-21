@@ -15,3 +15,12 @@ export * from "./vector";
 
 // Branching / Preview environments
 export * from "./branching";
+
+// Functions
+export * from "./functions";
+
+// Logging
+export * from "./logger";
+
+// Realtime (Channel Manager)
+export * from "./realtime";

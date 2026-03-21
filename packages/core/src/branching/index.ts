@@ -20,6 +20,7 @@ import type {
 	PreviewEnvironment,
 } from "./types";
 import { BranchStatus as BranchStatusEnum } from "./types";
+import { logger } from "../logger";
 
 /**
  * Default branching configuration
@@ -72,7 +73,7 @@ export class BranchManager {
 					betterbaseConfig.storage as StorageConfig,
 				);
 			} catch (error) {
-				console.warn("Failed to initialize storage branching:", error);
+				logger.warn({ err: error }, "Failed to initialize storage branching");
 			}
 		}
 	}
@@ -179,7 +180,7 @@ export class BranchManager {
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				warnings.push(`Storage bucket creation failed: ${message}`);
-				console.warn("Storage branching failed:", error);
+				logger.warn({ err: error }, "Storage branching failed");
 			}
 		}
 

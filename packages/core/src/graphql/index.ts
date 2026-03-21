@@ -25,6 +25,7 @@ export {
 // Resolvers
 export {
 	generateResolvers,
+	generateSubscriptionResolvers,
 	createGraphQLContext,
 	requireAuth,
 	type DatabaseConnection,
@@ -38,8 +39,21 @@ export {
 export {
 	createGraphQLServer,
 	startGraphQLServer,
+	pubsub,
+	publishGraphQLEvent,
 	type GraphQLConfig,
 } from "./server";
+
+// Realtime Bridge
+export {
+	bridgeRealtimeToGraphQL,
+	publishDbEvent,
+	stopRealtimeBridge,
+	type DbInsertEvent,
+	type DbUpdateEvent,
+	type DbDeleteEvent,
+	type RealtimeBridgeConfig,
+} from "./realtime-bridge";
 
 // SDL Exporter
 export {

@@ -1,5 +1,6 @@
 import type { DBEvent, DBEventType, ProviderType } from "@betterbase/shared";
 import postgres from "postgres";
+import { logger } from "../logger";
 import type {
 	DatabaseConnection,
 	DrizzleMigrationDriver,
@@ -47,7 +48,7 @@ class PostgresConnection implements PostgresDatabaseConnection {
 				try {
 					data = JSON.parse(payload);
 				} catch (error) {
-					console.error("[CDC] Failed to parse notification payload:", error);
+					logger.error({ err: error }, "[CDC] Failed to parse notification payload");
 					return;
 				}
 
@@ -64,12 +65,12 @@ class PostgresConnection implements PostgresDatabaseConnection {
 					try {
 						callback(event);
 					} catch (callbackError) {
-						console.error("[CDC] Callback error:", callbackError);
+						logger.error({ err: callbackError }, "[CDC] Callback error");
 					}
 				}
 			});
 		} catch (error) {
-			console.error("[CDC] Failed to start listening:", error);
+			logger.error({ err: error }, "[CDC] Failed to start listening");
 			this._listening = false;
 		}
 	}
@@ -96,7 +97,7 @@ class PostgresConnection implements PostgresDatabaseConnection {
 		// Start listening on first callback registration
 		if (!this._listening) {
 			this._startListening().catch((error) => {
-				console.error("[CDC] Failed to initialize LISTEN:", error);
+				logger.error({ err: error }, "[CDC] Failed to initialize LISTEN");
 			});
 		}
 	}
@@ -115,12 +116,12 @@ class PostgresMigrationDriver implements DrizzleMigrationDriver {
 	async migrate(_migrations: string[], _direction: "up" | "down"): Promise<void> {
 		// Migration implementation would go here
 		// For now, this is a placeholder
-		console.log("Running migrations with Postgres driver...");
+		logger.info("Running migrations with Postgres driver...");
 	}
 
 	async createMigrationTable(): Promise<void> {
 		// Create the __drizzle_migrations table if it doesn't exist
-		console.log("Creating migration table with Postgres driver...");
+		logger.info("Creating migration table with Postgres driver...");
 	}
 
 	async getPendingMigrations(): Promise<string[]> {

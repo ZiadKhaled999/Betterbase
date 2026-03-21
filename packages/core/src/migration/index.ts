@@ -7,6 +7,7 @@
 import type { DatabaseConnection, ProviderAdapter } from "../providers/types";
 import { scanPolicies } from "../rls/scanner";
 import { applyAuthFunction, applyPolicies, applyRLSMigration } from "./rls-migrator";
+import { logger } from "../logger";
 
 // Re-export RLS migrator functions
 export {
@@ -43,7 +44,7 @@ export async function runMigration(
 	const supportsRLS = provider.supportsRLS();
 
 	if (!supportsRLS) {
-		console.warn("⚠️  Provider does not support Row Level Security. Skipping RLS migration.");
+		logger.warn("Provider does not support Row Level Security. Skipping RLS migration.");
 		return;
 	}
 
@@ -51,25 +52,25 @@ export async function runMigration(
 	const { policies, errors } = await scanPolicies(projectRoot);
 
 	if (errors.length > 0) {
-		console.warn(
-			"⚠️  Some policies failed to load:",
+		logger.warn(
+			"Some policies failed to load:",
 			errors.map((e) => e.message),
 		);
 	}
 
 	if (policies.length === 0) {
-		console.log("ℹ️  No RLS policies found to apply.");
+		logger.info("No RLS policies found to apply.");
 		return;
 	}
 
 	// Log the tables being processed
 	const tables = [...new Set(policies.map((p) => p.table))];
-	console.log(`Applying RLS policies: ${tables.join(", ")} (${policies.length} policies)`);
+	logger.info({ tables, policyCount: policies.length }, `Applying RLS policies: ${tables.join(", ")}`);
 
 	// Apply RLS migration
 	await applyRLSMigration(policies, db);
 
-	console.log("✅ RLS policies applied successfully.");
+	logger.info("RLS policies applied successfully.");
 }
 
 /**

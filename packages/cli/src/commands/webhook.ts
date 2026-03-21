@@ -458,9 +458,39 @@ export async function runWebhookTestCommand(projectRoot: string, webhookId: stri
 }
 
 /**
+ * Options for webhook logs command
+ */
+interface WebhookLogsOptions {
+	limit?: number;
+}
+
+/**
+ * Find database path from project
+ */
+function findDatabasePath(projectRoot: string): string | null {
+	const dbPathVariants = [
+		path.join(projectRoot, ".betterbase", "dev.db"),
+		path.join(projectRoot, "dev.db"),
+		path.join(projectRoot, ".data", "dev.db"),
+	];
+
+	for (const dbPath of dbPathVariants) {
+		if (fsExistsSync(dbPath)) {
+			return dbPath;
+		}
+	}
+
+	return null;
+}
+
+/**
  * Run webhook logs command
  */
-export async function runWebhookLogsCommand(projectRoot: string, webhookId: string): Promise<void> {
+export async function runWebhookLogsCommand(
+	projectRoot: string,
+	webhookId: string,
+	options: WebhookLogsOptions = {},
+): Promise<void> {
 	const config = await loadConfig(projectRoot);
 
 	if (!config) {
@@ -476,28 +506,115 @@ export async function runWebhookLogsCommand(projectRoot: string, webhookId: stri
 		return;
 	}
 
-	// Note: In this implementation, delivery logs are stored in-memory in the dispatcher
-	// For CLI, we need to either:
-	// 1. Access logs from a running server (not implemented in v1)
-	// 2. Show a message explaining this limitation
+	const limit = options.limit ?? 50;
 
 	logger.info(`Webhook: ${webhook.id}`);
 	logger.info(`Table: ${webhook.table}`);
 	logger.info(`Events: ${webhook.events.join(", ")}`);
+	logger.info(`Limit: ${limit}`);
 
 	console.log("\n\x1b[1mDelivery Logs\x1b[0m");
 	console.log("─".repeat(80));
 
-	// In v1, logs are stored in-memory only and not persisted
-	// The CLI cannot access server-side logs
-	logger.info("Note: Delivery logs are stored in-memory on the server.");
-	logger.info("To view logs, you would need to access the running server.");
+	// Try to find and query the database
+	const dbPath = findDatabasePath(projectRoot);
 
-	// Show a placeholder for demonstration
-	console.log("\n  No delivery logs available in CLI mode.");
-	console.log("  Logs are stored in-memory during server runtime.\n");
+	if (!dbPath) {
+		logger.info("No local database found.");
+		logger.info("Delivery logs are stored in the project's database.");
+		console.log("\n  To view logs, either:");
+		console.log("  1. Run the dev server and access the API: GET /api/webhooks/:webhookId/deliveries");
+		console.log("  2. Check the dashboard if deployed\n");
+		console.log("─".repeat(80));
+		return;
+	}
 
-	console.log("─".repeat(80));
+	try {
+		// Use Bun's sqlite to query the database directly
+		const { Database } = await import("bun:sqlite");
+		const db = new Database(dbPath, { readonly: true });
+
+		// Try to query the deliveries table
+		interface DeliveryLog {
+			id: string;
+			webhook_id: string;
+			status: string;
+			request_url: string;
+			response_code: number | null;
+			response_body: string | null;
+			error: string | null;
+			attempt_count: number;
+			created_at: string;
+			updated_at: string;
+		}
+
+		const result: DeliveryLog[] = db
+			.query(
+				`SELECT 
+					id,
+					webhook_id,
+					status,
+					request_url,
+					response_code,
+					response_body,
+					error,
+					attempt_count,
+					created_at,
+					updated_at
+				FROM _betterbase_webhook_deliveries
+				WHERE webhook_id = ?
+				ORDER BY created_at DESC
+				LIMIT ?`,
+			)
+			.all(webhookId, limit) as DeliveryLog[];
+
+		db.close();
+
+		if (result.length === 0) {
+			console.log("\n  No delivery logs found for this webhook.\n");
+			console.log("─".repeat(80));
+			return;
+		}
+
+		// Print table header
+		console.log(
+			`\x1b[1m${"Status".padEnd(10)} ${"Code".padEnd(6)} ${"Attempts".padEnd(10)} ${"Created At".padEnd(24)} ${"Error".padEnd(20)}\x1b[0m`,
+		);
+		console.log("─".repeat(80));
+
+		// Print each log entry
+		for (const log of result) {
+			const status = log.status.padEnd(10);
+			const code = (log.response_code?.toString() ?? "N/A").padEnd(6);
+			const attempts = log.attempt_count.toString().padEnd(10);
+			const createdAt = log.created_at
+				? new Date(log.created_at).toISOString().replace("T", " ").substring(0, 19)
+				: "N/A";
+			const error = log.error ? log.error.substring(0, 20) : "";
+
+			// Color code status
+			const statusColored =
+				log.status === "success"
+					? "\x1b[32m" + status + "\x1b[0m"
+					: log.status === "failed"
+						? "\x1b[31m" + status + "\x1b[0m"
+						: "\x1b[33m" + status + "\x1b[0m";
+
+			console.log(`${statusColored} ${code} ${attempts} ${createdAt} ${error}`);
+		}
+
+		console.log("─".repeat(80));
+		console.log(`\nTotal: ${result.length} delivery log(s)\n`);
+	} catch (error) {
+		// Table might not exist or other error
+		logger.warn("Could not fetch delivery logs from database.");
+		if (error instanceof Error) {
+			logger.warn(error.message);
+		}
+		console.log("\n  Make sure migrations have been run.");
+		console.log("  Run: bb migrate\n");
+		console.log("─".repeat(80));
+	}
 }
 
 /**
@@ -526,11 +643,12 @@ export async function runWebhookCommand(args: string[], projectRoot: string): Pr
 
 		case "logs":
 			if (remainingArgs.length === 0) {
-				logger.error("Usage: bb webhook logs <webhook-id>");
+				logger.error("Usage: bb webhook logs <webhook-id> [-l, --limit <number>]");
 				logger.info('Run "bb webhook list" to see available webhooks.');
 				return;
 			}
-			await runWebhookLogsCommand(projectRoot, remainingArgs[0]);
+			const limit = remainingArgs[1] ? parseInt(remainingArgs[1], 10) : undefined;
+			await runWebhookLogsCommand(projectRoot, remainingArgs[0], { limit });
 			break;
 
 		default:

@@ -12,6 +12,100 @@ import type { BetterBaseResponse } from "@betterbase/shared";
 import type { Context } from "hono";
 import type { Hono } from "hono";
 import { getRLSUserId, isRLSSessionSet } from "./middleware/rls-session";
+import { logger } from "./logger";
+import {
+	eq,
+	ne,
+	gt,
+	gte,
+	lt,
+	lte,
+	like,
+	ilike,
+	inArray,
+	isNull,
+	isNotNull,
+	and,
+	asc,
+	desc,
+} from "drizzle-orm";
+
+/**
+ * Query operators supported by Auto-REST advanced filtering
+ * Maps operator names to Drizzle filter functions
+ */
+export const QUERY_OPERATORS = {
+	eq: (col: DrizzleTable, val: unknown) => eq(col, val),
+	neq: (col: DrizzleTable, val: unknown) => ne(col, val),
+	gt: (col: DrizzleTable, val: unknown) => gt(col, val),
+	gte: (col: DrizzleTable, val: unknown) => gte(col, val),
+	lt: (col: DrizzleTable, val: unknown) => lt(col, val),
+	lte: (col: DrizzleTable, val: unknown) => lte(col, val),
+	like: (col: DrizzleTable, val: unknown) => like(col, `%${val}%`),
+	ilike: (col: DrizzleTable, val: unknown) => ilike(col, `%${val}%`),
+	in: (col: DrizzleTable, val: unknown) => {
+		const values = typeof val === "string" ? val.split(",") : val;
+		return inArray(col, values as unknown[]);
+	},
+	is_null: (col: DrizzleTable, val: unknown) => {
+		const check = val === "true" || val === true;
+		return check ? isNull(col) : isNotNull(col);
+	},
+} as const;
+
+/**
+ * Parse a filter key-value pair into a Drizzle filter condition
+ * @param key - Query parameter key (e.g., 'age_gte', 'name_like', 'status_is_null')
+ * @param value - Query parameter value
+ * @param table - Drizzle table schema
+ * @returns Drizzle filter condition or null if invalid
+ */
+function parseFilter(key: string, value: string, table: DrizzleTable): unknown | null {
+	const parts = key.split("_");
+
+	let operator: string | null = null;
+	let columnName: string | null = null;
+
+	// Try two-word operators first (is_null)
+	if (parts.length >= 3) {
+		const twoWord = `${parts[parts.length - 2]}_${parts[parts.length - 1]}`;
+		if (twoWord in QUERY_OPERATORS) {
+			operator = twoWord;
+			columnName = parts.slice(0, -2).join("_");
+		}
+	}
+
+	// Try one-word operators (eq, gt, like, etc.)
+	if (!operator && parts.length >= 2) {
+		const oneWord = parts[parts.length - 1];
+		if (oneWord in QUERY_OPERATORS) {
+			operator = oneWord;
+			columnName = parts.slice(0, -1).join("_");
+		}
+	}
+
+	// No operator found - use equality
+	if (!operator) {
+		operator = "eq";
+		columnName = key;
+	}
+
+	// Get column from table schema
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const column = (table as any)[columnName as string];
+	if (!column) {
+		logger.warn({ key, columnName }, "[Auto-REST] Filter column not found in table schema");
+		return null;
+	}
+
+	const opFn = QUERY_OPERATORS[operator as keyof typeof QUERY_OPERATORS];
+	if (!opFn) {
+		logger.warn({ key, operator }, "[Auto-REST] Invalid filter operator");
+		return null;
+	}
+
+	return opFn(column, value);
+}
 
 // Type for Drizzle table
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -165,29 +259,29 @@ export function mountAutoRest(
 	} = options;
 
 	if (!enabled) {
-		console.log("[Auto-REST] Disabled - skipping route registration");
+		logger.info("[Auto-REST] Disabled - skipping route registration");
 		return;
 	}
 
 	// Security check: if enableRLS is true, we should have a warning
 	if (enableRLS) {
-		console.log("[Auto-REST] RLS enforcement enabled - all routes require authentication");
+		logger.info("[Auto-REST] RLS enforcement enabled - all routes require authentication");
 	}
 
-	console.log("[Auto-REST] Starting automatic CRUD route generation...");
+	logger.info("[Auto-REST] Starting automatic CRUD route generation...");
 
 	// Iterate over all tables in the schema
 	for (const [tableName, table] of Object.entries(schema)) {
 		// Skip excluded tables
 		if (excludeTables.includes(tableName)) {
-			console.log(`[Auto-REST] Skipping excluded table: ${tableName}`);
+			logger.info(`[Auto-REST] Skipping excluded table: ${tableName}`);
 			continue;
 		}
 
 		// Get the primary key column name
 		const primaryKey = getPrimaryKey(table);
 		if (!primaryKey) {
-			console.warn(`[Auto-REST] Skipping table ${tableName}: no primary key found`);
+			logger.warn({ tableName }, `[Auto-REST] Skipping table ${tableName}: no primary key found`);
 			continue;
 		}
 
@@ -209,7 +303,7 @@ export function mountAutoRest(
 		);
 	}
 
-	console.log("[Auto-REST] Automatic CRUD route generation complete");
+	logger.info("[Auto-REST] Automatic CRUD route generation complete");
 }
 
 /**
@@ -255,7 +349,7 @@ function registerTableRoutes(
 ): void {
 	const routePath = `${basePath}/${tableName}`;
 
-	// GET /api/:table - List all rows (paginated)
+	// GET /api/:table - List all rows (paginated with advanced filtering)
 	app.get(routePath, async (c) => {
 		// Security: Check RLS authentication
 		const userId = checkRLSAuth(c, enableRLS);
@@ -263,22 +357,96 @@ function registerTableRoutes(
 			return unauthorizedResponse(c);
 		}
 
-		const limit = Math.min(Number.parseInt(c.req.query("limit") || "20", 10), 100);
-		const offset = Number.parseInt(c.req.query("offset") || "0", 10);
+		// Parse query parameters
+		const queryParams = c.req.query();
+
+		// Special query parameters (not filters)
+		const specialParams = ["limit", "offset", "order_by", "order"];
+
+		// Validate and parse pagination parameters with width/height validation
+		const rawLimit = queryParams.limit;
+		const rawOffset = queryParams.offset;
+
+		let limit = 20;
+		let offset = 0;
+
+		if (rawLimit !== undefined) {
+			const parsedLimit = Number.parseInt(rawLimit, 10);
+			if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
+				logger.warn({ limit: rawLimit }, "[Auto-REST] Invalid limit parameter, using default");
+			} else {
+				limit = Math.min(parsedLimit, 1000); // Cap at 1000 for security
+			}
+		}
+
+		if (rawOffset !== undefined) {
+			const parsedOffset = Number.parseInt(rawOffset, 10);
+			if (Number.isNaN(parsedOffset) || parsedOffset < 0) {
+				logger.warn({ offset: rawOffset }, "[Auto-REST] Invalid offset parameter, using default");
+			} else {
+				offset = parsedOffset;
+			}
+		}
 
 		try {
-			// Build query with RLS filtering if enabled and owner column specified
+			// Build base query
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			let query = db.select().from(table).limit(limit).offset(offset);
+			let query = db.select().from(table);
 
+			// Collect all filter conditions
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const filters: any[] = [];
+
+			// Apply RLS filtering if enabled and owner column specified
 			if (enableRLS && userId && ownerColumn) {
-				// Apply per-row RLS filtering
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				query = query.where((table as any)[ownerColumn].eq(userId));
+				filters.push((table as any)[ownerColumn].eq(userId));
 			}
+
+			// Parse query parameter filters
+			for (const [key, value] of Object.entries(queryParams)) {
+				// Skip special parameters
+				if (specialParams.includes(key)) continue;
+
+				// Skip empty values
+				if (value === "" || value === undefined) continue;
+
+				// Parse filter from key_value format
+				const filter = parseFilter(key, value, table);
+				if (filter) {
+					filters.push(filter);
+					logger.debug({ key, value }, "[Auto-REST] Applied filter");
+				}
+			}
+
+			// Apply all filters with AND logic
+			if (filters.length > 0) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				query = query.where(and(...filters));
+			}
+
+			// Apply ordering if specified
+			const orderBy = queryParams.order_by;
+			const orderDirection = queryParams.order;
+
+			if (orderBy) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const orderColumn = (table as any)[orderBy];
+				if (orderColumn) {
+					const direction = orderDirection === "desc" ? desc : asc;
+					query = query.orderBy(direction(orderColumn));
+					logger.debug({ orderBy, orderDirection }, "[Auto-REST] Applied ordering");
+				} else {
+					logger.warn({ orderBy }, "[Auto-REST] Order column not found in table schema");
+				}
+			}
+
+			// Apply pagination
+			query = query.limit(limit).offset(offset);
 
 			const rows = await query;
 
+			// Get total count for pagination
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const countResult = await db
 				.select({ count: () => 0 })

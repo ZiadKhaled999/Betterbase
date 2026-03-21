@@ -1,6 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import deepEqual from "fast-deep-equal";
 import { z } from "zod";
+import { ChannelManager, type PresenceState } from "@betterbase/core";
 
 export interface Subscription {
 	table: string;
@@ -12,6 +13,7 @@ interface Client {
 	userId: string;
 	claims: string[];
 	subscriptions: Map<string, Subscription>;
+	connectionId: string;
 }
 
 interface RealtimeUpdatePayload {
@@ -38,7 +40,38 @@ const messageSchema = z.union([
 		type: z.literal("unsubscribe"),
 		table: z.string().min(1).max(255),
 	}),
+	// Channel subscription messages
+	z.object({
+		type: z.literal("subscribe"),
+		channel: z.string().min(1).max(255),
+		payload: z.object({
+			user_id: z.string().optional(),
+			presence: z.record(z.string(), z.unknown()).optional(),
+		}).optional(),
+	}),
+	z.object({
+		type: z.literal("unsubscribe"),
+		channel: z.string().min(1).max(255),
+	}),
+	z.object({
+		type: z.literal("broadcast"),
+		channel: z.string().min(1).max(255),
+		payload: z.object({
+			event: z.string(),
+			data: z.unknown(),
+		}),
+	}),
+	z.object({
+		type: z.literal("presence"),
+		channel: z.string().min(1).max(255),
+		payload: z.object({
+			action: z.literal("update"),
+			state: z.record(z.string(), z.unknown()),
+		}),
+	}),
 ]);
+
+type ChannelMessage = z.infer<typeof messageSchema>;
 
 const realtimeLogger = {
 	debug: (message: string): void => console.debug(`[realtime] ${message}`),
@@ -49,6 +82,7 @@ const realtimeLogger = {
 export class RealtimeServer {
 	private clients = new Map<ServerWebSocket<unknown>, Client>();
 	private tableSubscribers = new Map<string, Set<ServerWebSocket<unknown>>>();
+	private channelManager = new ChannelManager<ServerWebSocket<unknown>>();
 	private config: RealtimeConfig;
 
 	constructor(config?: Partial<RealtimeConfig>) {
@@ -109,12 +143,21 @@ export class RealtimeServer {
 		}
 
 		realtimeLogger.info(`Client connected (${identity.userId})`);
+		// Generate a unique connection ID for the channel manager
+		const connectionId = `${identity.userId}:${Date.now()}:${Math.random().toString(36).substring(2, 9)}`;
+		
 		this.clients.set(ws, {
 			ws,
 			userId: identity.userId,
 			claims: identity.claims,
 			subscriptions: new Map(),
+			connectionId,
 		});
+
+		// Register with channel manager
+		this.channelManager.registerConnection(connectionId, ws);
+		// Start heartbeat if not already running
+		this.channelManager.startHeartbeat(30000);
 
 		return true;
 	}
@@ -138,7 +181,15 @@ export class RealtimeServer {
 			return;
 		}
 
-		const data = result.data;
+		const data = result.data as ChannelMessage;
+
+		// Check if this is a channel message (has 'channel' property) or table message (has 'table' property)
+		if ('channel' in data) {
+			this.handleChannelMessage(ws, data);
+			return;
+		}
+
+		// Handle table subscription
 		if (data.type === "subscribe") {
 			this.subscribe(ws, data.table, data.filter);
 			return;
@@ -147,11 +198,87 @@ export class RealtimeServer {
 		this.unsubscribe(ws, data.table);
 	}
 
+	private handleChannelMessage(ws: ServerWebSocket<unknown>, data: ChannelMessage): void {
+		// Only process channel messages (type is subscribe/unsubscribe with channel property)
+		if (!('channel' in data)) {
+			return;
+		}
+
+		const client = this.clients.get(ws);
+		if (!client) {
+			this.safeSend(ws, { error: "Unauthorized client" });
+			return;
+		}
+
+		const channelName = data.channel;
+
+		switch (data.type) {
+			case "subscribe": {
+				// Join channel with optional user_id and presence
+				const options = data.payload || {};
+				const userId = options.user_id || client.userId;
+				
+				try {
+					this.channelManager.joinChannel(client.connectionId, channelName, {
+						user_id: userId,
+						presence: options.presence,
+					});
+					this.safeSend(ws, { type: "subscribed", channel: channelName });
+					realtimeLogger.debug(`Client subscribed to channel ${channelName}`);
+				} catch (error) {
+					realtimeLogger.warn(
+						`Failed to join channel ${channelName}: ${error instanceof Error ? error.message : String(error)}`
+					);
+					this.safeSend(ws, { error: "Failed to join channel" });
+				}
+				break;
+			}
+
+			case "unsubscribe": {
+				// Leave channel
+				this.channelManager.leaveChannel(client.connectionId, channelName);
+				this.safeSend(ws, { type: "unsubscribed", channel: channelName });
+				realtimeLogger.debug(`Client unsubscribed from channel ${channelName}`);
+				break;
+			}
+
+			case "broadcast": {
+				// Broadcast to channel
+				if (!this.channelManager.isInChannel(client.connectionId, channelName)) {
+					this.safeSend(ws, { error: "Not subscribed to channel" });
+					return;
+				}
+
+				this.channelManager.broadcastToChannel(channelName, {
+					type: "broadcast",
+					event: data.payload.event,
+					channel: channelName,
+					payload: data.payload.data,
+				}, client.connectionId);
+				break;
+			}
+
+			case "presence": {
+				// Update presence state
+				if (!this.channelManager.isInChannel(client.connectionId, channelName)) {
+					this.safeSend(ws, { error: "Not subscribed to channel" });
+					return;
+				}
+
+				if (data.payload.action === "update") {
+					this.channelManager.updatePresence(client.connectionId, channelName, data.payload.state);
+				}
+				break;
+			}
+		}
+	}
+
 	handleClose(ws: ServerWebSocket<unknown>): void {
 		realtimeLogger.info("Client disconnected");
 
 		const client = this.clients.get(ws);
 		if (client) {
+			// Clean up table subscriptions
 			for (const table of client.subscriptions.keys()) {
 				const subscribers = this.tableSubscribers.get(table);
 				subscribers?.delete(ws);
@@ -160,6 +287,9 @@ export class RealtimeServer {
 					this.tableSubscribers.delete(table);
 				}
 			}
+
+			// Clean up channel subscriptions
+			this.channelManager.unregisterConnection(client.connectionId);
 		}
 
 		this.clients.delete(ws);
