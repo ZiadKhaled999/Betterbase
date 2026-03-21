@@ -20,8 +20,8 @@ interface ChannelSubscribeOptions {
  * Presence event from server
  */
 interface PresenceEvent {
-	type: 'presence';
-	event: 'join' | 'leave' | 'sync' | 'update';
+	type: "presence";
+	event: "join" | "leave" | "sync" | "update";
 	channel: string;
 	payload: unknown;
 }
@@ -30,7 +30,7 @@ interface PresenceEvent {
  * Broadcast event from server
  */
 interface BroadcastEvent {
-	type: 'broadcast';
+	type: "broadcast";
 	event: string;
 	channel: string;
 	payload: unknown;
@@ -277,19 +277,19 @@ export class RealtimeClient {
 		return {
 			subscribe: (options?: ChannelSubscribeOptions) => {
 				this.send({
-					type: 'subscribe',
+					type: "subscribe",
 					channel: channelName,
 					payload: options,
 				});
 
 				return {
 					unsubscribe: () => {
-						this.send({ type: 'unsubscribe', channel: channelName });
+						this.send({ type: "unsubscribe", channel: channelName });
 					},
 
 					broadcast: (event: string, data: unknown) => {
 						this.send({
-							type: 'broadcast',
+							type: "broadcast",
 							channel: channelName,
 							payload: { event, data },
 						});
@@ -297,14 +297,14 @@ export class RealtimeClient {
 
 					track: (state: Record<string, unknown>) => {
 						this.send({
-							type: 'presence',
+							type: "presence",
 							channel: channelName,
-							payload: { action: 'update', state },
+							payload: { action: "update", state },
 						});
 					},
 
 					onPresence: (callback: (event: PresenceEvent) => void) => {
-						this.on('presence', (data) => {
+						this.on("presence", (data) => {
 							const event = data as PresenceEvent;
 							if (event.channel === channelName) {
 								callback(event);
@@ -313,7 +313,7 @@ export class RealtimeClient {
 					},
 
 					onBroadcast: (callback: (event: string, data: unknown) => void) => {
-						this.on('broadcast', (data) => {
+						this.on("broadcast", (data) => {
 							const event = data as BroadcastEvent;
 							if (event.channel === channelName) {
 								callback(event.event, event.payload);
@@ -339,7 +339,7 @@ export class RealtimeClient {
 
 	/**
 	 * Remove an event handler
-	 */	off(eventType: string, callback: (data: unknown) => void): void {
+	 */ off(eventType: string, callback: (data: unknown) => void): void {
 		const handlers = this.eventHandlers.get(eventType);
 		if (handlers) {
 			handlers.delete(callback);

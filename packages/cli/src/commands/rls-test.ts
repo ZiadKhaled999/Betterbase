@@ -13,6 +13,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
 import { nanoid } from "nanoid";
+import postgres from "postgres";
 import * as logger from "../utils/logger";
 import { getDatabaseType } from "./migrate-utils";
 
@@ -203,7 +204,7 @@ async function getTableColumns(
 		ORDER BY ordinal_position
 	`;
 
-	return result.map((row) => row.column_name);
+	return result.map((row) => row.column_name as string);
 }
 
 /**

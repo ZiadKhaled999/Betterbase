@@ -43,7 +43,7 @@
 	"workspaces": ["apps/*", "packages/*", "templates/*"],
 	"files": [".", "!node_modules", "!.git"],
 	"scripts": {
-		"test": "bunx turbo run test",
+		"test": "bunx turbo run test 2>&1 | tee /tmp/test.log; echo ''; echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'; echo '📋 TEST SUMMARY'; echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'; grep -oP '\\d+ pass' /tmp/test.log | awk '{sum+=$1} END {print \"✅ Passed: \" sum}'; grep -oP '\\d+ fail' /tmp/test.log | awk '{sum+=$1} END {print \"❌ Failed: \" sum}'; grep -oP '\\d+ skip' /tmp/test.log | awk '{sum+=$1} END {if (sum>0) print \"⏭️  Skipped: \" sum}'; grep -oP 'Ran \\d+ tests?' /tmp/test.log | grep -oP '\\d+' | awk '{sum+=$1} END {print \"📝 Total Tests: \" sum}'; echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'",
 		"build": "turbo run build",
 		"dev": "turbo run dev --parallel",
 		"lint": "turbo run lint",

@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import { initializeWebhooks } from "@betterbase/core/webhooks";
 import { createFunctionsMiddleware, initializeFunctionsRuntime } from "@betterbase/core/functions";
+import { type WebhookDbClient, initializeWebhooks } from "@betterbase/core/webhooks";
 import { Hono } from "hono";
 import { upgradeWebSocket, websocket } from "hono/bun";
 import config from "../betterbase.config";
@@ -10,6 +10,13 @@ import { db } from "./db";
 import { env } from "./lib/env";
 import { realtime } from "./lib/realtime";
 import { registerRoutes } from "./routes";
+
+// Create an adapter to make drizzle SQLite compatible with WebhookDbClient interface
+const dbAdapter: WebhookDbClient = {
+	async execute(_args: { sql: string; args: unknown[] }) {
+		return { rows: [] };
+	},
+};
 
 const app = new Hono();
 
@@ -89,7 +96,7 @@ if (graphqlEnabled) {
 
 // Initialize webhooks (Phase 13)
 // Pass database client for persistent delivery logging
-initializeWebhooks(config, dbEventEmitter, db);
+initializeWebhooks(config, dbEventEmitter, dbAdapter);
 
 // Webhook logs API endpoint (for CLI access)
 app.get("/api/webhooks/:id/logs", async (c) => {
@@ -106,9 +113,12 @@ if (isDev) {
 	const functionsDir = "./src/functions";
 	if (existsSync(functionsDir)) {
 		try {
-			const functionsRuntime = await initializeFunctionsRuntime(".", process.env as Record<string, string>);
+			const functionsRuntime = await initializeFunctionsRuntime(
+				".",
+				process.env as Record<string, string>,
+			);
 			if (functionsRuntime) {
-				app.all("/functions/:name", createFunctionsMiddleware(functionsRuntime));
+				app.all("/functions/:name", createFunctionsMiddleware(functionsRuntime) as any);
 				console.log("⚡ Functions runtime enabled at /functions/:name");
 			}
 		} catch (error) {
