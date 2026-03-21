@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import * as logger from "../utils/logger";
 import { confirm } from "../utils/prompts";
+import { getProviderTemplate, getAvailableProviders } from "./auth-providers";
 
 const AUTH_INSTANCE_FILE = (provider: string) => `import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
@@ -356,4 +357,110 @@ export async function runAuthSetupCommand(
 	logger.info("3. Use requireAuth middleware on protected routes:");
 	logger.info("   import { requireAuth } from './middleware/auth'");
 	logger.info("   app.use('*', requireAuth)");
+}
+
+export async function runAuthAddProviderCommand(
+	projectRoot: string,
+	providerName: string,
+): Promise<void> {
+	const resolvedRoot = path.resolve(projectRoot);
+	const template = getProviderTemplate(providerName);
+
+	if (!template) {
+		logger.error(`Unknown provider: ${providerName}`);
+		logger.info(`Available: ${getAvailableProviders().join(", ")}`);
+		process.exit(1);
+	}
+
+	logger.info(`Adding ${template.displayName} OAuth provider...`);
+
+	// Check if auth file exists
+	const authFile = path.join(resolvedRoot, "src", "auth", "index.ts");
+	if (!existsSync(authFile)) {
+		logger.error(
+			`Auth file not found at ${authFile}. Run 'bb auth setup' first.`,
+		);
+		process.exit(1);
+	}
+
+	let authContent = readFileSync(authFile, "utf-8");
+
+	// Check if provider already configured
+	if (authContent.includes(`${template.name}:`)) {
+		logger.warn(`${template.displayName} is already configured`);
+		return;
+	}
+
+	// Find socialProviders section
+	const socialRegex = /socialProviders:\s*\{([\s\S]*?)\n  \}/;
+	const match = authContent.match(socialRegex);
+
+	if (match) {
+		// Add to existing socialProviders - find the closing brace of the last provider
+		const existing = match[1];
+		
+		// Check if existing content ends with a closing brace (provider object)
+		const trimmed = existing.trim();
+		let newContent: string;
+		
+		if (trimmed.endsWith("}")) {
+			// Add comma and new provider
+			newContent = `${trimmed.slice(0, -1)},\n${template.configCode}\n  }`;
+		} else {
+			newContent = `${trimmed}\n${template.configCode}\n  }`;
+		}
+
+		authContent = authContent.replace(
+			socialRegex,
+			`socialProviders: {\n${newContent}`,
+		);
+	} else {
+		// Create socialProviders section
+		authContent = authContent.replace(
+			/betterAuth\(\s*{/,
+			`betterAuth({\n  socialProviders: {\n${template.configCode}\n  },`,
+		);
+	}
+
+	// Write updated file
+	writeFileSync(authFile, authContent, "utf-8");
+	logger.success(`✅ Added ${template.displayName} to ${authFile}`);
+
+	// Add env vars to .env
+	const envFile = path.join(resolvedRoot, ".env");
+	let envContent = "";
+	try {
+		envContent = readFileSync(envFile, "utf-8");
+	} catch {
+		// File doesn't exist, will be created
+	}
+
+	const envVarsToAdd: string[] = [];
+	for (const envVar of template.envVars) {
+		if (!envContent.includes(envVar.key)) {
+			envVarsToAdd.push(`${envVar.key}=""`);
+		}
+	}
+
+	if (envVarsToAdd.length > 0) {
+		const newEnv = envContent.trim()
+			? `${envContent}\n\n# ${template.displayName} OAuth\n${envVarsToAdd.join("\n")}\n`
+			: `# ${template.displayName} OAuth\n${envVarsToAdd.join("\n")}\n`;
+
+		writeFileSync(envFile, newEnv, "utf-8");
+		logger.success(`✅ Added env vars to .env`);
+	}
+
+	// Print setup instructions
+	const authUrl = "http://localhost:3000"; // Default fallback
+	const instructions = template.setupInstructions.replace(
+		/\$\{process\.env\.AUTH_URL \|\| 'http:\/\/localhost:3000'\}/g,
+		authUrl,
+	);
+
+	console.log("\n" + "=".repeat(60));
+	console.log(`${template.displayName} OAuth Setup Instructions:`);
+	console.log(instructions);
+	console.log("=".repeat(60));
+	console.log(`\nDocs: ${template.docsUrl}\n`);
 }
