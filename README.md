@@ -19,7 +19,7 @@ Betterbase is an open-source alternative to Supabase, built with Bun for blazing
 
 </div>
 
-**Last Updated: 2026-03-19**
+**Last Updated: 2026-03-21**
 
 ---
 
@@ -32,22 +32,28 @@ Traditional backend development is slow. You spend weeks setting up databases, a
 │                         BETTERBASE ARCHITECTURE                         │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐          │
-│   │   Frontend   │────▶│   Betterbase │────▶│   Database   │          │
-│   │   (React,    │     │     Core     │     │  (SQLite,    │          │
-│   │    Vue,      │     │              │     │   Postgres,  │          │
-│   │    Mobile)   │     │  ┌────────┐  │     │   MySQL,     │          │
-│   └──────────────┘     │  │ Auth   │  │     │   Neon...)   │          │
-│                        │  ├────────┤  │     └──────────────┘          │
-│   ┌──────────────┐     │  │ Realtime│  │                                │
-│   │  Serverless  │────▶│  ├────────┤  │     ┌──────────────┐          │
-│   │  Functions  │     │  │Storage │  │     │  S3 Storage  │          │
-│   └──────────────┘     │  ├────────┤  │     └──────────────┘          │
-│                        │  │GraphQL │  │                                │
-│   ┌──────────────┐     │  ├────────┤  │     ┌──────────────┐          │
-│   │   Webhooks   │────▶│  │  RLS   │  │     │  External   │          │
-│   └──────────────┘     │  └────────┘  │     │  Services   │          │
-│                        └──────────────┘     └──────────────┘          │
+│   ┌──────────────┐       ┌──────────────┐       ┌──────────────┐       │
+│   │   Frontend   │──────▶│   Betterbase │──────▶│   Database   │       │
+│   │   (React,    │       │     Core     │       │  (SQLite,    │       │
+│   │    Vue,      │       │              │       │   Postgres,  │       │
+│   │    Mobile)   │       │  ┌────────┐  │       │   MySQL,     │       │
+│   └──────────────┘       │  │ Auth   │  │       │   Neon...)   │       │
+│                          │  ├────────┤  │       └──────────────┘       │
+│   ┌──────────────┐       │  │ Realtime│  │                               │
+│   │  Serverless  │──────▶│  ├────────┤  │       ┌──────────────┐       │
+│   │  Functions   │       │  │ Storage │  │       │  S3 Storage  │       │
+│   └──────────────┘       │  ├────────┤  │       │  (R2, B2,    │       │
+│                          │  │GraphQL │  │       │   MinIO...)   │       │
+│   ┌──────────────┐       │  ├────────┤  │       └──────────────┘       │
+│   │   Webhooks   │──────▶│  │  RLS   │  │                               │
+│   └──────────────┘       │  ├────────┤  │       ┌──────────────┐       │
+│                          │  │ Vector │  │       │   External   │       │
+│   ┌──────────────┐       │  ├────────┤  │       │   Services   │       │
+│   │    Logger    │──────▶│  │ Branch │  │       │  (AI APIs,   │       │
+│   └──────────────┘       │  ├────────┤  │       │   OAuth...)   │       │
+│                          │  │ Logger │  │       └──────────────┘       │
+│                          │  └────────┘  │                               │
+│                          └──────────────┘                               │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -70,13 +76,17 @@ Betterbase provides a complete backend solution with enterprise-grade features:
 | **RLS (Row Level Security)** | Built-in policy engine for fine-grained access control |
 | **Serverless Functions** | Deploy custom API functions |
 | **Storage API** | S3-compatible object storage |
+| **Image Transformations** | On-the-fly image resizing, cropping, and format conversion |
 | **Webhooks** | Event-driven architecture with signed payloads |
 | **Vector Search** | pgvector-powered similarity search with embeddings support |
 | **Branching/Preview Environments** | Create isolated development environments for each branch |
 | **Auto-REST** | Automatic CRUD route generation from Drizzle schema |
+| **GraphQL** | GraphQL API with schema generation and subscriptions |
 | **Magic Link Auth** | Passwordless authentication via email magic links |
 | **MFA** | Multi-factor authentication support |
 | **Phone Auth** | Phone number verification via SMS/OTP |
+| **Project Templates** | Base and Auth templates for quick project initialization |
+| **Request Logging** | Built-in request logging with file transport |
 
 ---
 
@@ -202,6 +212,42 @@ Your backend is now running at `http://localhost:3000`:
 
 ---
 
+## Templates
+
+BetterBase provides project templates for quick project initialization:
+
+### Base Template
+
+The base template includes essential project structure:
+
+```bash
+bb init my-project --template base
+```
+
+**Includes:**
+- Basic Hono server setup
+- Database schema with users table
+- Authentication middleware
+- Storage routes
+- Health check endpoint
+
+### Auth Template
+
+The authentication template includes full BetterAuth integration:
+
+```bash
+bb init my-project --template auth
+```
+
+**Includes:**
+- Pre-configured BetterAuth setup
+- Email/password authentication
+- Social OAuth providers (configurable)
+- Session management
+- Auth middleware examples
+
+---
+
 ## Architecture Overview
 
 ### System Design
@@ -248,6 +294,45 @@ Your backend is now running at `http://localhost:3000`:
 
 ### Package Architecture
 
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        TURBOREPO MONOREPO                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                     @betterbase/cli                              │   │
+│  │  CLI tool with 17 commands for development and deployment       │   │
+│  │  init, dev, migrate, auth, auth add-provider, generate,          │   │
+│  │  function, graphql, login, rls, rls test, storage,              │   │
+│  │  webhook, branch                                                 │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                     @betterbase/client                           │   │
+│  │  TypeScript SDK for frontend integration                         │   │
+│  │  Auth, Query Builder, Realtime, Storage, Errors                 │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                     @betterbase/core                             │   │
+│  │  Core backend engine with all server-side functionality         │   │
+│  │  Database, Auth, GraphQL, RLS, Storage, Webhooks, Functions,     │   │
+│  │  Vector Search, Branching, Auto-REST, Logger, Realtime          │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                     @betterbase/shared                           │   │
+│  │  Shared utilities, types, and constants across all packages      │   │
+│  │  Types, Errors, Constants, Utils                                 │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                     templates/                                   │   │
+│  │  Project templates for quick initialization                      │   │
+│  │  base, auth                                                     │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        TURBOREPO MONOREPO                               │
@@ -365,7 +450,7 @@ export default defineConfig({
 
 ## CLI Reference
 
-The Betterbase CLI (`bb`) provides 12 commands for development and deployment:
+The Betterbase CLI (`bb`) provides 17 commands for development and deployment:
 
 ### Core Commands
 
@@ -415,23 +500,36 @@ bb migrate down
 
 # Reset database (warning: destructive)
 bb migrate reset
+
+# Preview migration changes
+bb migrate preview
+
+# Run in production mode
+bb migrate production
 ```
 
 ### Authentication
 
-#### `bb auth`
+#### `bb auth setup`
 
-Manage authentication configuration.
+Setup and configure BetterAuth.
 
 ```bash
 # Setup authentication
 bb auth setup
+```
 
-# Add provider
+#### `bb auth add-provider`
+
+Add OAuth provider to your project.
+
+```bash
+# Add OAuth provider
 bb auth add-provider github
 
-# List providers
-bb auth list-providers
+# Available providers: google, github, discord, apple, microsoft, twitter, facebook
+bb auth add-provider google
+bb auth add-provider discord
 ```
 
 ### Code Generation
@@ -451,26 +549,6 @@ bb generate crud
 bb generate all
 ```
 
-### Serverless Functions
-
-#### `bb function`
-
-Manage serverless functions.
-
-```bash
-# Create new function
-bb function create my-function
-
-# Deploy function
-bb function deploy my-function
-
-# List functions
-bb function list
-
-# Invoke function locally
-bb function invoke my-function
-```
-
 ### GraphQL
 
 #### `bb graphql`
@@ -478,51 +556,37 @@ bb function invoke my-function
 GraphQL schema management.
 
 ```bash
-# Start GraphQL server
-bb graphql start
+# Generate GraphQL schema from database
+bb graphql generate
 
-# Export schema
-bb graphql schema export
+# Open GraphQL Playground
+bb graphql playground
 
-# Validate schema
-bb graphql schema validate
+# Export schema as SDL
+bb graphql export
 ```
 
-### Authentication (User Management)
-
-#### `bb login`
-
-Manage user authentication.
-
-```bash
-# Login user
-bb login --email user@example.com
-
-# Logout user
-bb logout
-
-# Get current session
-bb login status
-```
-
-### Security
+### RLS (Row Level Security)
 
 #### `bb rls`
 
 Manage Row Level Security policies.
 
 ```bash
-# Add RLS policy
-bb rls add --table posts --name users-own-posts --command SELECT --check "user_id = auth.uid()"
+# Create new RLS policy
+bb rls create --table posts --name users-own-posts --command SELECT
 
-# List policies
-bb rls list --table posts
+# List all RLS policies
+bb rls list
 
-# Disable RLS
+# Disable RLS for a table
 bb rls disable --table posts
 
-# Enable RLS
+# Enable RLS for a table
 bb rls enable --table posts
+
+# Test RLS policies
+bb rls test --table posts
 ```
 
 ### Storage
@@ -532,14 +596,14 @@ bb rls enable --table posts
 Manage file storage.
 
 ```bash
-# Setup storage
-bb storage setup
-
-# Create bucket
-bb storage create-bucket avatars
+# Initialize storage
+bb storage init
 
 # List buckets
 bb storage list
+
+# List objects in bucket
+bb storage buckets avatars
 
 # Upload file
 bb storage upload avatars avatar.png
@@ -561,9 +625,37 @@ bb webhook list
 # Test webhook
 bb webhook test my-webhook
 
-# Delete webhook
-bb webhook delete my-webhook
+# View webhook logs
+bb webhook logs my-webhook
 ```
+
+### Serverless Functions
+
+#### `bb function`
+
+Manage serverless functions.
+
+```bash
+# Create new function
+bb function create my-function
+
+# Run function in development mode
+bb function dev my-function
+
+# Build function
+bb function build my-function
+
+# Deploy function
+bb function deploy my-function
+
+# List all functions
+bb function list
+
+# View function logs
+bb function logs my-function
+```
+
+### Branching (Preview Environments)
 
 #### `bb branch`
 
@@ -573,11 +665,11 @@ Manage preview environments (branches) for isolated development.
 # Create a new preview environment
 bb branch create my-feature
 
-# Delete a preview environment
-bb branch delete my-feature
-
 # List all preview environments
 bb branch list
+
+# Delete a preview environment
+bb branch delete my-feature
 
 # Check branch status
 bb branch status my-feature
@@ -587,6 +679,23 @@ bb branch wake my-feature
 
 # Sleep a preview to save resources
 bb branch sleep my-feature
+```
+
+### Authentication (User Management)
+
+#### `bb login`
+
+Manage user authentication.
+
+```bash
+# Login user
+bb login --email user@example.com
+
+# Logout user
+bb logout
+
+# Get current session
+bb login status
 ```
 
 ---
