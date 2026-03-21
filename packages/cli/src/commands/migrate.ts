@@ -7,6 +7,13 @@ import { DEFAULT_DB_PATH } from "../constants";
 import * as logger from "../utils/logger";
 import * as prompts from "../utils/prompts";
 import { runGenerateGraphqlCommand } from "./graphql";
+import {
+	calculateChecksum,
+	loadMigrationFiles,
+	getMigrationsTableSql,
+	type AppliedMigration,
+	type MigrationFile,
+} from "./migrate-utils";
 
 const migrateOptionsSchema = z.object({
 	preview: z.boolean().optional(),
@@ -489,4 +496,255 @@ export async function runMigrateCommand(rawOptions: MigrateCommandOptions): Prom
 	} catch (err) {
 		logger.warn(`Failed to regenerate GraphQL: ${(err as Error).message}`);
 	}
+}
+
+/**
+ * Get database connection based on environment
+ * Supports both SQLite (local) and PostgreSQL (remote)
+ */
+async function getDatabaseConnection(): Promise<Database> {
+	const dbPath = process.env.DB_PATH ?? DEFAULT_DB_PATH;
+
+	// Try to load from DATABASE_URL first (for PostgreSQL)
+	const dbUrl = process.env.DATABASE_URL || process.env.DB_URL;
+
+	if (dbUrl && (dbUrl.startsWith("postgres") || dbUrl.startsWith("postgresql"))) {
+		// For PostgreSQL, we'll use a simple approach with the native driver
+		// This requires the project to have postgres installed
+		logger.info("Using PostgreSQL database...");
+		try {
+			// Dynamic import for postgres (only available in Node.js environment)
+			const { default: Postgres } = await import("postgres");
+			const sql = Postgres(dbUrl);
+			return sql as unknown as Database;
+		} catch {
+			logger.warn("postgres driver not available, falling back to SQLite");
+		}
+	}
+
+	// Default to SQLite
+	logger.info(`Using SQLite database at ${dbPath}...`);
+	return new Database(dbPath);
+}
+
+/**
+ * Ensure migrations tracking table exists
+ */
+async function ensureMigrationsTable(db: Database): Promise<void> {
+	const tableSql = getMigrationsTableSql();
+	const statements = splitStatements(tableSql);
+
+	for (const stmt of statements) {
+		if (stmt.trim()) {
+			try {
+				db.run(stmt);
+			} catch (err) {
+				// Ignore errors for SQLite (table might already exist with different schema)
+				const errorMessage = err instanceof Error ? err.message : String(err);
+				if (!errorMessage.includes("already exists")) {
+					logger.warn(`Migration table setup: ${errorMessage}`);
+				}
+			}
+		}
+	}
+}
+
+/**
+ * Get applied migrations from tracking table
+ */
+async function getAppliedMigrations(db: Database): Promise<AppliedMigration[]> {
+	await ensureMigrationsTable(db);
+
+	try {
+		const result = db.query("SELECT * FROM _betterbase_migrations ORDER BY id ASC").all();
+		return result as AppliedMigration[];
+	} catch {
+		// Table might not exist or be empty
+		return [];
+	}
+}
+
+/**
+ * Remove a migration from tracking table
+ */
+async function removeMigration(db: Database, name: string): Promise<void> {
+	try {
+		db.run("DELETE FROM _betterbase_migrations WHERE name = ?", [name]);
+	} catch (err) {
+		const errorMessage = err instanceof Error ? err.message : String(err);
+		logger.warn(`Failed to remove migration record: ${errorMessage}`);
+	}
+}
+
+/**
+ * Options for rollback command
+ */
+export interface MigrateRollbackOptions {
+	steps?: number;
+}
+
+/**
+ * Run the migration rollback command
+ * Rolls back the last N migrations
+ */
+export async function runMigrateRollbackCommand(
+	projectRoot: string,
+	options: MigrateRollbackOptions = {},
+): Promise<void> {
+	const { steps = 1 } = options;
+
+	logger.info(`Rolling back last ${steps} migration(s)...`);
+
+	// Change to project directory
+	const originalCwd = process.cwd();
+	if (projectRoot !== originalCwd) {
+		process.chdir(projectRoot);
+	}
+
+	let db: Database;
+	try {
+		db = await getDatabaseConnection();
+	} catch (err) {
+		logger.error(`Failed to connect to database: ${(err as Error).message}`);
+		process.chdir(originalCwd);
+		process.exit(1);
+	}
+
+	const migrationsDir = path.join(projectRoot, "migrations");
+
+	// Check if migrations directory exists
+	try {
+		await access(migrationsDir);
+	} catch {
+		logger.warn(`Migrations directory not found at ${migrationsDir}`);
+		logger.info("Create a 'migrations' folder with your migration files");
+		process.chdir(originalCwd);
+		return;
+	}
+
+	let allMigrations: MigrationFile[];
+	try {
+		allMigrations = await loadMigrationFiles(migrationsDir);
+	} catch (err) {
+		logger.error(`Failed to load migrations: ${(err as Error).message}`);
+		if (typeof db.close === "function") db.close();
+		process.chdir(originalCwd);
+		process.exit(1);
+	}
+
+	const applied = await getAppliedMigrations(db);
+
+	if (applied.length === 0) {
+		logger.warn("No migrations to rollback");
+		if (typeof db.close === "function") db.close();
+		process.chdir(originalCwd);
+		return;
+	}
+
+	let rolledBack = 0;
+	const appliedReversed = [...applied].reverse();
+
+	for (let i = 0; i < steps; i++) {
+		const lastMigration = appliedReversed[i];
+		if (!lastMigration) break;
+
+		const migration = allMigrations.find((m) => m.name === lastMigration.name);
+
+		if (!migration?.downSql) {
+			logger.error(`Migration ${lastMigration.name} has no down.sql file`);
+			logger.info(`Create ${lastMigration.name}_down.sql to enable rollback`);
+			if (typeof db.close === "function") db.close();
+			process.chdir(originalCwd);
+			process.exit(1);
+		}
+
+		logger.info(`Rolling back: ${migration.name}`);
+
+		try {
+			// Execute the down SQL
+			const statements = splitStatements(migration.downSql);
+			for (const stmt of statements) {
+				if (stmt.trim()) {
+					db.run(stmt);
+				}
+			}
+
+			// Remove from tracking table
+			removeMigration(db, migration.name);
+
+			logger.success(`✅ Rolled back: ${migration.name}`);
+			rolledBack++;
+		} catch (err) {
+			logger.error(`Failed to rollback: ${(err as Error).message}`);
+			if (typeof db.close === "function") db.close();
+			process.chdir(originalCwd);
+			process.exit(1);
+		}
+	}
+
+	logger.success(`✅ Rolled back ${rolledBack} migration(s)`);
+
+	if (typeof db.close === "function") db.close();
+	process.chdir(originalCwd);
+}
+
+/**
+ * Run the migration history command
+ * Displays all applied migrations
+ */
+export async function runMigrateHistoryCommand(projectRoot: string): Promise<void> {
+	// Change to project directory
+	const originalCwd = process.cwd();
+	if (projectRoot !== originalCwd) {
+		process.chdir(projectRoot);
+	}
+
+	let db: Database;
+	try {
+		db = await getDatabaseConnection();
+	} catch (err) {
+		logger.error(`Failed to connect to database: ${(err as Error).message}`);
+		process.chdir(originalCwd);
+		process.exit(1);
+	}
+
+	const applied = await getAppliedMigrations(db);
+
+	if (typeof db.close === "function") db.close();
+	process.chdir(originalCwd);
+
+	if (applied.length === 0) {
+		logger.info("No migrations applied");
+		return;
+	}
+
+	console.log("\n" + chalk.bold("Migration History:") + "\n");
+	console.log(
+		chalk.gray("ID") +
+			" | " +
+			chalk.gray("Name".padEnd(25)) +
+			" | " +
+			chalk.gray("Applied At") +
+			" | " +
+			chalk.gray("Checksum"),
+	);
+	console.log(chalk.gray("-".repeat(80)));
+
+	for (const m of applied) {
+		const appliedDate =
+			m.applied_at instanceof Date
+				? m.applied_at.toISOString().replace("T", " ").slice(0, 19)
+				: String(m.applied_at).replace("T", " ").slice(0, 19);
+		console.log(
+			m.id.toString().padEnd(2) +
+				" | " +
+				m.name.padEnd(25) +
+				" | " +
+				appliedDate +
+				" | " +
+				m.checksum.slice(0, 12) + "...",
+		);
+	}
+
+	console.log("");
 }
