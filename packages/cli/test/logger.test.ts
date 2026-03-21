@@ -30,8 +30,8 @@ describe("Logger utility", () => {
 
 	describe("error method", () => {
 		it("logs error messages", () => {
-			// The error method should log to stderr with red ✖ prefix
-			expect(() => logger.error("Test error message")).not.toThrow();
+			// The error method should log to stderr - use a message that won't confuse the test runner
+			expect(() => logger.error("[ERROR] Test error message")).not.toThrow();
 		});
 
 		it("handles empty string message", () => {
@@ -40,7 +40,7 @@ describe("Logger utility", () => {
 
 		it("handles error objects as messages", () => {
 			const error = new Error("Test error");
-			expect(() => logger.error(error.message)).not.toThrow();
+			expect(() => logger.error("[ERROR] " + error.message)).not.toThrow();
 		});
 	});
 
@@ -57,9 +57,10 @@ describe("Logger utility", () => {
 
 	describe("logging with different message types", () => {
 		it("handles string messages", () => {
+			// Use prefixed messages to avoid test runner confusion
 			expect(() => logger.info("string message")).not.toThrow();
 			expect(() => logger.warn("string message")).not.toThrow();
-			expect(() => logger.error("string message")).not.toThrow();
+			expect(() => logger.error("[ERROR] string message")).not.toThrow();
 			expect(() => logger.success("string message")).not.toThrow();
 		});
 

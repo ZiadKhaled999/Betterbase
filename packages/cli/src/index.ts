@@ -1,6 +1,6 @@
 import { Command, CommanderError } from "commander";
 import packageJson from "../package.json";
-import { runAuthSetupCommand } from "./commands/auth";
+import { runAuthSetupCommand, runAuthAddProviderCommand } from "./commands/auth";
 import { runBranchCommand } from "./commands/branch";
 import { runDevCommand } from "./commands/dev";
 import { runFunctionCommand } from "./commands/function";
@@ -8,8 +8,9 @@ import { runGenerateCrudCommand } from "./commands/generate";
 import { runGenerateGraphqlCommand, runGraphqlPlaygroundCommand } from "./commands/graphql";
 import { runInitCommand } from "./commands/init";
 import { runLoginCommand, runLogoutCommand, isAuthenticated } from "./commands/login";
-import { runMigrateCommand } from "./commands/migrate";
+import { runMigrateCommand, runMigrateRollbackCommand, runMigrateHistoryCommand } from "./commands/migrate";
 import { runRlsCommand } from "./commands/rls";
+import { runRLSTestCommand } from "./commands/rls-test";
 import {
 	runStorageBucketsListCommand,
 	runStorageInitCommand,
@@ -115,6 +116,15 @@ export function createProgram(): Command {
 			await runAuthSetupCommand(projectRoot);
 		});
 
+	auth
+		.command("add-provider")
+		.description("Add OAuth provider (google, github, discord, apple, microsoft, twitter, facebook)")
+		.argument("<provider>", "OAuth provider name")
+		.argument("[project-root]", "project root directory", process.cwd())
+		.action(async (provider: string, projectRoot: string) => {
+			await runAuthAddProviderCommand(projectRoot, provider);
+		});
+
 	const generate = program.command("generate").description("Code generation helpers");
 
 	generate
@@ -163,6 +173,23 @@ export function createProgram(): Command {
 		.description("Apply migrations to production (requires confirmation)")
 		.action(async () => {
 			await runMigrateCommand({ production: true });
+		});
+
+	migrate
+		.command("rollback")
+		.description("Rollback the last migration")
+		.option("-s, --steps <number>", "Number of migrations to rollback", "1")
+		.action(async (options: { steps?: string }) => {
+			await runMigrateRollbackCommand(process.cwd(), {
+				steps: options.steps ? parseInt(options.steps, 10) : 1,
+			});
+		});
+
+	migrate
+		.command("history")
+		.description("Show migration history")
+		.action(async () => {
+			await runMigrateHistoryCommand(process.cwd());
 		});
 
 	const storage = program.command("storage").description("Storage management");
@@ -231,6 +258,14 @@ export function createProgram(): Command {
 			await runRlsCommand(["disable", table]);
 		});
 
+	rls
+		.command("test")
+		.description("Test RLS policies for a table")
+		.argument("<table>", "table name to test")
+		.action(async (table: string) => {
+			await runRLSTestCommand(process.cwd(), table);
+		});
+
 	rls.action(async () => {
 		await runRlsCommand([]);
 	});
@@ -266,9 +301,11 @@ export function createProgram(): Command {
 		.command("logs")
 		.description("Show delivery logs for a webhook")
 		.argument("<webhook-id>", "webhook ID")
+		.option("-l, --limit <number>", "Limit number of logs to show", "50")
 		.argument("[project-root]", "project root directory", process.cwd())
-		.action(async (webhookId: string, projectRoot: string) => {
-			await runWebhookCommand(["logs", webhookId], projectRoot);
+		.action(async (webhookId: string, options: { limit?: string }, projectRoot: string) => {
+			const limit = options.limit ? parseInt(options.limit, 10) : 50;
+			await runWebhookCommand(["logs", webhookId, limit.toString()], projectRoot);
 		});
 
 	webhook.action(async () => {
