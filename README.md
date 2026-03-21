@@ -1448,7 +1448,7 @@ SOFTWARE.
 
 <div align="center">
 
-**Built with ❤️ using Bun**
+**Built with ❤️ using Weroperking**
 
 [Website](https://betterbase.io) • [Documentation](https://docs.betterbase.io) • [Discord](https://discord.gg/betterbase) • [Twitter](https://twitter.com/betterbase)
 
