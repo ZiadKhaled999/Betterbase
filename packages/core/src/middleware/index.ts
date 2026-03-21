@@ -15,3 +15,6 @@ export {
 	RLS_SESSION_SET_KEY,
 	type RLSCContext,
 } from "./rls-session";
+
+// Request Logger Middleware
+export { requestLogger } from "./request-logger";
