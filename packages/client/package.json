@@ -28,7 +28,7 @@
 		"dev": "bun --watch run src/build.ts",
 		"test": "bun test",
 		"typecheck": "tsc --noEmit --project tsconfig.json",
-		"lint": "biome check src test",
+		"lint": "bunx biome check src test",
 		"typecheck:test": "tsc --noEmit --project tsconfig.test.json"
 	},
 	"keywords": ["betterbase", "baas", "backend", "database", "realtime", "auth", "better-auth"],

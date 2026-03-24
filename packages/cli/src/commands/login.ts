@@ -1,153 +1,122 @@
-import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { info, error as logError, success, warn } from "../utils/logger";
+import chalk from "chalk";
+import type { Command } from "commander";
+import { clearCredentials, loadCredentials, saveCredentials } from "../utils/credentials";
+import { error, info, success } from "../utils/logger";
 
-export interface Credentials {
-	token: string;
-	email: string;
-	userId: string;
-	expiresAt: string;
+const DEFAULT_SERVER_URL = "https://api.betterbase.io";
+const POLL_INTERVAL_MS = 5000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+export function registerLoginCommand(program: Command) {
+	program
+		.command("login")
+		.description("Authenticate with a Betterbase instance")
+		.option("--url <url>", "Self-hosted Betterbase server URL", DEFAULT_SERVER_URL)
+		.action(async (opts) => {
+			await runLoginCommand({ serverUrl: opts.url });
+		});
+
+	program
+		.command("logout")
+		.description("Clear stored credentials")
+		.action(() => {
+			clearCredentials();
+			success("Logged out.");
+		});
 }
 
-const BETTERBASE_API =
-	process.env.BETTERBASE_API_URL ?? "https://gzmqjmgomlkpwntbivox.supabase.co/functions/v1";
-const AUTH_PAGE_URL =
-	process.env.BETTERBASE_AUTH_PAGE_URL ?? "https://betterbaseauthpage.vercel.app";
-const CREDENTIALS_PATH = path.join(os.homedir(), ".betterbase", "credentials.json");
-const POLL_INTERVAL_MS = 2000;
-const POLL_TIMEOUT_MS = 300000;
+export async function runLoginCommand(opts: { serverUrl?: string } = {}) {
+	const serverUrl = (opts.serverUrl ?? DEFAULT_SERVER_URL).replace(/\/$/, "");
 
-export async function runLoginCommand(): Promise<void> {
-	const existing = await getCredentials();
-	if (existing) {
-		info(`Already logged in as ${existing.email}`);
-		info("Run bb logout to sign out.");
+	info(`Logging in to ${chalk.cyan(serverUrl)} ...`);
+
+	// Step 1: Request device code
+	let deviceCode: string;
+	let userCode: string;
+	let verificationUri: string;
+
+	try {
+		const res = await fetch(`${serverUrl}/device/code`, { method: "POST" });
+		if (!res.ok) throw new Error(`Server returned ${res.status}`);
+		const data = (await res.json()) as {
+			device_code: string;
+			user_code: string;
+			verification_uri: string;
+		};
+		deviceCode = data.device_code;
+		userCode = data.user_code;
+		verificationUri = data.verification_uri;
+	} catch (err: any) {
+		error(`Could not reach server: ${err.message}`);
+		process.exit(1);
+	}
+
+	console.log("");
+	console.log(chalk.bold("Open this URL in your browser to authorize:"));
+	console.log(chalk.cyan(`${verificationUri}?code=${userCode}`));
+	console.log("");
+	console.log(`Your code: ${chalk.yellow.bold(userCode)}`);
+	console.log("Waiting for authorization...");
+
+	// Step 2: Poll for token
+	const deadline = Date.now() + POLL_TIMEOUT_MS;
+
+	while (Date.now() < deadline) {
+		await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+		const res = await fetch(`${serverUrl}/device/token`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ device_code: deviceCode }),
+		});
+
+		if (res.status === 202) continue; // authorization_pending
+
+		if (!res.ok) {
+			const body = (await res.json()) as { error?: string };
+			if (body.error === "authorization_pending") continue;
+			error(`Login failed: ${body.error ?? "unknown error"}`);
+			process.exit(1);
+		}
+
+		const { access_token } = (await res.json()) as { access_token: string };
+
+		// Get admin info
+		const meRes = await fetch(`${serverUrl}/admin/auth/me`, {
+			headers: { Authorization: `Bearer ${access_token}` },
+		});
+		const { admin } = (await meRes.json()) as { admin: { email: string } };
+
+		saveCredentials({
+			token: access_token,
+			admin_email: admin.email,
+			server_url: serverUrl,
+			created_at: new Date().toISOString(),
+		});
+
+		success(`Logged in as ${chalk.cyan(admin.email)}`);
 		return;
 	}
 
-	const code = generateDeviceCode();
+	error("Login timed out. Please try again.");
+	process.exit(1);
+}
 
-	// Register device code in DB before opening browser
-	try {
-		const res = await fetch(`${BETTERBASE_API}/cli-auth-device`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ code }),
-		});
-		if (!res.ok) {
-			logError("Failed to register device code. Check your connection and try again.");
-			process.exit(1);
-		}
-	} catch {
-		logError("Could not reach BetterBase API. Check your connection and try again.");
-		process.exit(1);
-	}
-
-	const authUrl = `${AUTH_PAGE_URL}?code=${code}`;
-	info("Opening browser for authentication...");
-	info(`Auth URL: ${authUrl}`);
-	info("Waiting for authentication... (timeout: 5 minutes)");
-
-	await openBrowser(authUrl);
-
-	const credentials = await pollForAuth(code);
-
-	if (!credentials) {
-		logError("Authentication timed out. Run bb login to try again.");
-		process.exit(1);
-	}
-
-	await saveCredentials(credentials);
-	success(`Logged in as ${credentials.email}`);
+// Legacy exports for compatibility
+export async function runLoginCommandLegacy(): Promise<void> {
+	await runLoginCommand({});
 }
 
 export async function runLogoutCommand(): Promise<void> {
-	if (existsSync(CREDENTIALS_PATH)) {
-		await fs.unlink(CREDENTIALS_PATH);
-		success("Logged out successfully.");
-	} else {
-		warn("Not currently logged in.");
-	}
+	clearCredentials();
+	success("Logged out.");
 }
 
-export async function getCredentials(): Promise<Credentials | null> {
-	if (!existsSync(CREDENTIALS_PATH)) return null;
-	try {
-		const raw = await fs.readFile(CREDENTIALS_PATH, "utf-8");
-		const creds = JSON.parse(raw) as Credentials;
-		if (new Date(creds.expiresAt) < new Date()) return null;
-		return creds;
-	} catch {
-		return null;
-	}
+export async function getCredentials() {
+	return loadCredentials();
 }
 
 export async function isAuthenticated(): Promise<boolean> {
 	const creds = await getCredentials();
 	return creds !== null;
-}
-
-export async function requireCredentials(): Promise<Credentials> {
-	const creds = await getCredentials();
-	if (!creds) {
-		logError(
-			"Not logged in. Run: bb login\n" +
-				"This connects your CLI with BetterBase so your project\n" +
-				"can be registered and managed from the dashboard.",
-		);
-		process.exit(1);
-	}
-	return creds;
-}
-
-function generateDeviceCode(): string {
-	const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-	const part1 = Array.from({ length: 4 }, () => chars[randomBytes(1)[0] % chars.length]).join("");
-	const part2 = Array.from({ length: 4 }, () => chars[randomBytes(1)[0] % chars.length]).join("");
-	return `${part1}-${part2}`;
-}
-
-async function openBrowser(url: string): Promise<void> {
-	try {
-		if (process.platform === "darwin") {
-			await Bun.spawn(["open", url]);
-		} else if (process.platform === "win32") {
-			await Bun.spawn(["cmd", "/c", "start", "", url]);
-		} else {
-			await Bun.spawn(["xdg-open", url]);
-		}
-	} catch {
-		// Browser open failed — URL already printed, user can open manually
-	}
-}
-
-async function pollForAuth(code: string): Promise<Credentials | null> {
-	const startTime = Date.now();
-
-	while (Date.now() - startTime < POLL_TIMEOUT_MS) {
-		await sleep(POLL_INTERVAL_MS);
-		try {
-			const response = await fetch(`${BETTERBASE_API}/cli-auth-poll?code=${code}`);
-			if (response.status === 200) {
-				return (await response.json()) as Credentials;
-			}
-		} catch {
-			// Network error — continue polling
-		}
-	}
-
-	return null;
-}
-
-async function saveCredentials(creds: Credentials): Promise<void> {
-	const dir = path.dirname(CREDENTIALS_PATH);
-	await fs.mkdir(dir, { recursive: true });
-	await fs.writeFile(CREDENTIALS_PATH, JSON.stringify(creds, null, 2), "utf-8");
-}
-
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -1,14 +1,18 @@
 import { Command, CommanderError } from "commander";
 import packageJson from "../package.json";
-import { runAuthSetupCommand, runAuthAddProviderCommand } from "./commands/auth";
+import { runAuthAddProviderCommand, runAuthSetupCommand } from "./commands/auth";
 import { runBranchCommand } from "./commands/branch";
 import { runDevCommand } from "./commands/dev";
 import { runFunctionCommand } from "./commands/function";
 import { runGenerateCrudCommand } from "./commands/generate";
 import { runGenerateGraphqlCommand, runGraphqlPlaygroundCommand } from "./commands/graphql";
 import { runInitCommand } from "./commands/init";
-import { runLoginCommand, runLogoutCommand, isAuthenticated } from "./commands/login";
-import { runMigrateCommand, runMigrateRollbackCommand, runMigrateHistoryCommand } from "./commands/migrate";
+import { isAuthenticated, runLoginCommand, runLogoutCommand } from "./commands/login";
+import {
+	runMigrateCommand,
+	runMigrateHistoryCommand,
+	runMigrateRollbackCommand,
+} from "./commands/migrate";
 import { runRlsCommand } from "./commands/rls";
 import { runRLSTestCommand } from "./commands/rls-test";
 import {
@@ -20,7 +24,7 @@ import { runWebhookCommand } from "./commands/webhook";
 import * as logger from "./utils/logger";
 
 // Commands that don't require authentication
-const PUBLIC_COMMANDS = ["login", "logout", "version", "help"];
+const PUBLIC_COMMANDS = ["login", "logout", "version", "help", "init"];
 
 /**
  * Check if the user is authenticated before running a command.
@@ -118,7 +122,9 @@ export function createProgram(): Command {
 
 	auth
 		.command("add-provider")
-		.description("Add OAuth provider (google, github, discord, apple, microsoft, twitter, facebook)")
+		.description(
+			"Add OAuth provider (google, github, discord, apple, microsoft, twitter, facebook)",
+		)
 		.argument("<provider>", "OAuth provider name")
 		.argument("[project-root]", "project root directory", process.cwd())
 		.action(async (provider: string, projectRoot: string) => {
@@ -181,7 +187,7 @@ export function createProgram(): Command {
 		.option("-s, --steps <number>", "Number of migrations to rollback", "1")
 		.action(async (options: { steps?: string }) => {
 			await runMigrateRollbackCommand(process.cwd(), {
-				steps: options.steps ? parseInt(options.steps, 10) : 1,
+				steps: options.steps ? Number.parseInt(options.steps, 10) : 1,
 			});
 		});
 
@@ -304,7 +310,7 @@ export function createProgram(): Command {
 		.option("-l, --limit <number>", "Limit number of logs to show", "50")
 		.argument("[project-root]", "project root directory", process.cwd())
 		.action(async (webhookId: string, options: { limit?: string }, projectRoot: string) => {
-			const limit = options.limit ? parseInt(options.limit, 10) : 50;
+			const limit = options.limit ? Number.parseInt(options.limit, 10) : 50;
 			await runWebhookCommand(["logs", webhookId, limit.toString()], projectRoot);
 		});
 
@@ -432,10 +438,13 @@ export function createProgram(): Command {
 
 	program
 		.command("login")
-		.description("Authenticate the CLI with app.betterbase.com")
-		.action(runLoginCommand);
+		.description("Authenticate with a Betterbase instance")
+		.option("--url <url>", "Self-hosted Betterbase server URL", "https://api.betterbase.io")
+		.action(async (opts) => {
+			await runLoginCommand({ serverUrl: opts.url });
+		});
 
-	program.command("logout").description("Sign out of app.betterbase.com").action(runLogoutCommand);
+	program.command("logout").description("Sign out of Betterbase").action(runLogoutCommand);
 
 	return program;
 }

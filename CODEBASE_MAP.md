@@ -226,7 +226,40 @@ betterbase/
 │   │       ├── constants.ts       # Shared constants
 │   │       └── utils.ts           # Utility functions
 │   │
+│   ├── server/                    # @betterbase/server - Self-hosted server
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   ├── Dockerfile
+│   │   ├── migrations/            # Database migrations
+│   │   │   ├── 001_initial_schema.sql
+│   │   │   ├── 002_admin_users.sql
+│   │   │   ├── 003_projects.sql
+│   │   │   └── 004_logs.sql
+│   │   └── src/
+│   │       ├── index.ts           # Server entry point
+│   │       ├── lib/
+│   │       │   ├── db.ts          # Database connection
+│   │       │   ├── migrate.ts    # Migration runner
+│   │       │   ├── env.ts         # Environment validation
+│   │       │   ├── auth.ts        # Auth utilities
+│   │       │   └── admin-middleware.ts  # Admin auth middleware
+│   │       └── routes/
+│   │           ├── admin/         # Admin API routes
+│   │           │   ├── index.ts
+│   │           │   ├── auth.ts
+│   │           │   ├── projects.ts
+│   │           │   ├── users.ts
+│   │           │   ├── metrics.ts
+│   │           │   ├── storage.ts
+│   │           │   ├── webhooks.ts
+│   │           │   ├── functions.ts
+│   │           │   └── logs.ts
+│   │           └── device/        # Device auth routes
+│   │               └── index.ts
+│   │
 ├── apps/
+│   ├── dashboard/                  # Admin dashboard for self-hosted
+│   │   ├── Dockerfile
 │   └── test-project/              # Example/test project
 │       ├── betterbase.config.ts   # Project configuration
 │       ├── drizzle.config.ts     # Drizzle configuration
@@ -306,6 +339,43 @@ betterbase/
 │
 └── scripts/                     # Build/release scripts
 ```
+
+---
+
+## Docker Deployment
+
+Betterbase includes production-ready Docker configuration for self-hosted deployment.
+
+### Docker Files
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Monorepo build (for developing Betterbase itself) |
+| `Dockerfile.project` | Project template for deploying user projects |
+| `docker-compose.yml` | Development environment with PostgreSQL |
+| `docker-compose.production.yml` | Production-ready configuration |
+| `.dockerignore` | Optimizes Docker builds |
+| `.env.example` | Environment variable template |
+
+### Quick Start
+
+```bash
+# Development with Docker Compose
+docker-compose up -d
+
+# Production deployment
+docker-compose -f docker-compose.production.yml up -d
+```
+
+### Docker Features
+
+- **Multi-stage builds** for minimal image size
+- **PostgreSQL** included in dev environment
+- **Health checks** for reliability
+- **Non-root user** for security
+- **Volume mounts** for hot-reload in development
+- **External database support** - Neon, Supabase, RDS, etc.
+- **S3-compatible storage** - R2, S3, B2, MinIO
 
 ---
 

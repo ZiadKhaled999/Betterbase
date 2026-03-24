@@ -952,36 +952,145 @@ bun run start
 
 ### Docker
 
-Create a `Dockerfile`:
+Betterbase includes production-ready Docker configuration for self-hosted deployment.
 
-```dockerfile
-FROM oven/bun:1 AS base
-WORKDIR /app
-
-FROM base AS deps
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
-
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN bun run build
-
-FROM base
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY package.json ./
-
-EXPOSE 3000
-CMD ["bun", "run", "start"]
-```
-
-Build and run:
+#### Quick Start with Docker Compose
 
 ```bash
-docker build -t betterbase-app .
-docker run -p 3000:3000 betterbase-app
+# Start development environment with PostgreSQL
+docker-compose up -d
+
+# View logs
+docker-compose logs -f app
+
+# Stop services
+docker-compose down
 ```
+
+#### Docker Files Included
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Monorepo build (for developing Betterbase itself) |
+| `Dockerfile.project` | Project template for deploying user projects |
+| `docker-compose.yml` | Development environment with PostgreSQL |
+| `docker-compose.production.yml` | Production-ready configuration |
+| `.env.example` | Environment variable template |
+
+#### Building a Project
+
+```bash
+# Copy the project Dockerfile to your project root
+cp Dockerfile.project ./Dockerfile
+
+# Configure environment variables
+cp .env.example .env
+# Edit .env with your database and storage settings
+
+# Build and run
+docker build -t my-betterbase-app .
+docker run -p 3000:3000 my-betterbase-app
+```
+
+#### Production Deployment
+
+```bash
+# Use production compose file
+docker-compose -f docker-compose.production.yml up -d
+
+# With external database (Neon, Supabase, RDS)
+DATABASE_URL=postgres://... docker-compose -f docker-compose.production.yml up -d
+
+# With Cloudflare R2 storage
+STORAGE_PROVIDER=r2 STORAGE_BUCKET=my-bucket docker-compose -f docker-compose.production.yml up -d
+```
+
+#### Docker Features
+
+- **Multi-stage builds** for minimal image size
+- **PostgreSQL** included in dev environment
+- **Health checks** for reliability
+- **Non-root user** for security
+- **Volume mounts** for hot-reload in development
+- **External database support** - Neon, Supabase, RDS, etc.
+- **S3-compatible storage** - R2, S3, B2, MinIO
+
+### Self-Hosted Deployment
+
+Betterbase can be self-hosted on your own infrastructure using Docker. This is ideal for teams wanting full control over their data and infrastructure.
+
+#### Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/betterbase/betterbase.git
+cd betterbase
+
+# Start self-hosted deployment
+docker-compose -f docker-compose.self-hosted.yml up -d
+```
+
+The self-hosted version includes:
+- **Admin Dashboard** - Web UI for managing projects, users, and settings
+- **Device Authentication** - CLI login flow for self-hosted instances
+- **Admin API** - Full API for administrative tasks
+- **Metrics** - Usage and performance tracking
+
+#### Configuration
+
+Copy the example environment file and configure:
+
+```bash
+cp .env.self-hosted.example .env
+```
+
+Key environment variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `AUTH_SECRET` | Secret for auth tokens (min 32 chars) | Yes |
+| `SERVER_URL` | Public URL of your instance | Yes |
+| `ADMIN_EMAIL` | Initial admin email | Yes |
+| `ADMIN_PASSWORD` | Initial admin password | Yes |
+| `STORAGE_PROVIDER` | Storage provider (local, s3, r2, backblaze, minio) | No |
+| `STORAGE_BUCKET` | Storage bucket name | No |
+
+#### CLI Login with Self-Hosted
+
+```bash
+# Login to your self-hosted instance
+bb login --url https://your-instance.com
+
+# This will initiate device authentication flow
+# 1. You'll be given a device code
+# 2. Open the admin dashboard
+# 3. Approve the device
+# 4. CLI will receive credentials automatically
+```
+
+#### Docker Compose Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| server | 3000 | Main API server |
+| dashboard | 3001 | Admin dashboard |
+| nginx | 80, 443 | Reverse proxy |
+
+#### For Development
+
+```bash
+# Start all services
+docker-compose -f docker-compose.self-hosted.yml up
+
+# View logs
+docker-compose -f docker-compose.self-hosted.yml logs -f
+
+# Stop services
+docker-compose -f docker-compose.self-hosted.yml down
+```
+
+See [SELF_HOSTED.md](SELF_HOSTED.md) for detailed documentation.
 
 ### Cloud Providers
 
