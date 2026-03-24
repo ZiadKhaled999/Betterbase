@@ -14,7 +14,7 @@ Comprehensive documentation for the BetterBase platform, covering all packages, 
 
 The documentation is organized into logical sections for easy navigation:
 
-```
+```text
 /docs
 ├── getting-started/           # Getting started guides
 │   ├── installation.md
@@ -156,6 +156,25 @@ This documentation corresponds to the current version of the BetterBase platform
 - Check the git tags for released versions
 - Refer to the CHANGELOG.md for version-specific changes
 - Documentation for older versions is available in the git history
+
+## Self-Hosted Deployment
+
+BetterBase can be self-hosted on your own infrastructure. See [SELF_HOSTED.md](../SELF_HOSTED.md) for detailed documentation on:
+
+- Docker-based deployment
+- Admin dashboard configuration
+- Device authentication for CLI
+- Admin API usage
+
+Quick start:
+
+```bash
+# Clone and start
+docker-compose -f docker-compose.self-hosted.yml up -d
+
+# Login to self-hosted instance
+bb login --url https://your-instance.com
+```
 
 ## License
 

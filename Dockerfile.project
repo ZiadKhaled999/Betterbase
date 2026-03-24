@@ -23,7 +23,7 @@ LABEL description="Betterbase Project - AI-Native Backend Platform"
 WORKDIR /app
 
 # Install system dependencies for image processing and database
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # For sharp image processing
     vips-tools \
     fftw3 \
@@ -91,7 +91,6 @@ RUN bun install --frozen-lockfile --production
 
 # Copy built artifacts
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 # Copy necessary source files for runtime
 COPY --from=builder /app/src ./src
@@ -114,7 +113,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/api/health || exit 1
+    CMD curl -f http://localhost:3000/health || exit 1
 
 # Start the application
 CMD ["bun", "run", "start"]

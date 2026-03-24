@@ -23,7 +23,7 @@ LABEL description="AI-Native Backend-as-a-Service Platform"
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # For sharp image processing
     vips-tools \
     fftw3 \
@@ -60,14 +60,9 @@ RUN bun install --frozen-lockfile
 # ----------------------------------------------------------------------------
 # Stage 3: Builder
 # ----------------------------------------------------------------------------
-FROM base AS builder
+FROM deps AS builder
 
 WORKDIR /app
-
-# Copy lockfile and install dependencies
-COPY package.json bun.lock ./
-COPY turbo.json ./
-RUN bun install --frozen-lockfile
 
 # Copy all source code
 COPY packages/ packages/
@@ -83,6 +78,10 @@ FROM base AS runner
 
 WORKDIR /app
 
+# Create non-root user for security
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 appuser
+
 # Copy package files for production
 COPY package.json bun.lock ./
 COPY turbo.json ./
@@ -96,11 +95,20 @@ COPY --from=builder /app/packages/cli/dist ./node_modules/@betterbase/cli/dist
 COPY --from=builder /app/packages/client/dist ./node_modules/@betterbase/client/dist
 COPY --from=builder /app/packages/shared/dist ./node_modules/@betterbase/shared/dist
 
+# Copy source files for runtime (needed for dynamic imports)
+COPY --from=builder /app/packages/core/src ./node_modules/@betterbase/core/src
+COPY --from=builder /app/packages/cli/src ./node_modules/@betterbase/cli/src
+COPY --from=builder /app/packages/client/src ./node_modules/@betterbase/client/src
+COPY --from=builder /app/packages/shared/src ./node_modules/@betterbase/shared/src
+
 # Copy package.json files to access exports
 COPY packages/core/package.json ./node_modules/@betterbase/core/
 COPY packages/cli/package.json ./node_modules/@betterbase/cli/
 COPY packages/client/package.json ./node_modules/@betterbase/client/
 COPY packages/shared/package.json ./node_modules/@betterbase/shared/
+
+# Switch to non-root user
+USER appuser
 
 # Set environment
 ENV NODE_ENV=production

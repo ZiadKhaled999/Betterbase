@@ -190,6 +190,49 @@ npm i -g vercel
 vercel --prod
 ```
 
+## Self-Hosted Deployment
+
+BetterBase can be self-hosted on your own infrastructure using Docker.
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/betterbase/betterbase.git
+cd betterbase
+
+# Start self-hosted deployment
+docker-compose -f docker-compose.self-hosted.yml up -d
+```
+
+### Configuration
+
+Copy and configure the environment file:
+
+```bash
+cp .env.self-hosted.example .env
+```
+
+Key variables:
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `AUTH_SECRET` | Auth secret (min 32 chars) |
+| `SERVER_URL` | Public URL of your instance |
+| `ADMIN_EMAIL` | Initial admin email |
+| `ADMIN_PASSWORD` | Initial admin password |
+
+### CLI Login
+
+```bash
+bb login --url https://your-instance.com
+```
+
+This uses device authentication flow - you'll approve the device in the admin dashboard.
+
+See [SELF_HOSTED.md](../../SELF_HOSTED.md) for complete documentation.
+
 ## Environment Configuration
 
 ### Production Environment Variables

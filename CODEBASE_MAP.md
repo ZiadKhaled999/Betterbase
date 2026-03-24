@@ -226,7 +226,40 @@ betterbase/
 │   │       ├── constants.ts       # Shared constants
 │   │       └── utils.ts           # Utility functions
 │   │
+│   ├── server/                    # @betterbase/server - Self-hosted server
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   ├── Dockerfile
+│   │   ├── migrations/            # Database migrations
+│   │   │   ├── 001_initial_schema.sql
+│   │   │   ├── 002_admin_users.sql
+│   │   │   ├── 003_projects.sql
+│   │   │   └── 004_logs.sql
+│   │   └── src/
+│   │       ├── index.ts           # Server entry point
+│   │       ├── lib/
+│   │       │   ├── db.ts          # Database connection
+│   │       │   ├── migrate.ts    # Migration runner
+│   │       │   ├── env.ts         # Environment validation
+│   │       │   ├── auth.ts        # Auth utilities
+│   │       │   └── admin-middleware.ts  # Admin auth middleware
+│   │       └── routes/
+│   │           ├── admin/         # Admin API routes
+│   │           │   ├── index.ts
+│   │           │   ├── auth.ts
+│   │           │   ├── projects.ts
+│   │           │   ├── users.ts
+│   │           │   ├── metrics.ts
+│   │           │   ├── storage.ts
+│   │           │   ├── webhooks.ts
+│   │           │   ├── functions.ts
+│   │           │   └── logs.ts
+│   │           └── device/        # Device auth routes
+│   │               └── index.ts
+│   │
 ├── apps/
+│   ├── dashboard/                  # Admin dashboard for self-hosted
+│   │   ├── Dockerfile
 │   └── test-project/              # Example/test project
 │       ├── betterbase.config.ts   # Project configuration
 │       ├── drizzle.config.ts     # Drizzle configuration

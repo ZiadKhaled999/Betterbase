@@ -1015,6 +1015,83 @@ STORAGE_PROVIDER=r2 STORAGE_BUCKET=my-bucket docker-compose -f docker-compose.pr
 - **External database support** - Neon, Supabase, RDS, etc.
 - **S3-compatible storage** - R2, S3, B2, MinIO
 
+### Self-Hosted Deployment
+
+Betterbase can be self-hosted on your own infrastructure using Docker. This is ideal for teams wanting full control over their data and infrastructure.
+
+#### Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/betterbase/betterbase.git
+cd betterbase
+
+# Start self-hosted deployment
+docker-compose -f docker-compose.self-hosted.yml up -d
+```
+
+The self-hosted version includes:
+- **Admin Dashboard** - Web UI for managing projects, users, and settings
+- **Device Authentication** - CLI login flow for self-hosted instances
+- **Admin API** - Full API for administrative tasks
+- **Metrics** - Usage and performance tracking
+
+#### Configuration
+
+Copy the example environment file and configure:
+
+```bash
+cp .env.self-hosted.example .env
+```
+
+Key environment variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `AUTH_SECRET` | Secret for auth tokens (min 32 chars) | Yes |
+| `SERVER_URL` | Public URL of your instance | Yes |
+| `ADMIN_EMAIL` | Initial admin email | Yes |
+| `ADMIN_PASSWORD` | Initial admin password | Yes |
+| `STORAGE_PROVIDER` | Storage provider (local, s3, r2, backblaze, minio) | No |
+| `STORAGE_BUCKET` | Storage bucket name | No |
+
+#### CLI Login with Self-Hosted
+
+```bash
+# Login to your self-hosted instance
+bb login --url https://your-instance.com
+
+# This will initiate device authentication flow
+# 1. You'll be given a device code
+# 2. Open the admin dashboard
+# 3. Approve the device
+# 4. CLI will receive credentials automatically
+```
+
+#### Docker Compose Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| server | 3000 | Main API server |
+| dashboard | 3001 | Admin dashboard |
+| nginx | 80, 443 | Reverse proxy |
+
+#### For Development
+
+```bash
+# Start all services
+docker-compose -f docker-compose.self-hosted.yml up
+
+# View logs
+docker-compose -f docker-compose.self-hosted.yml logs -f
+
+# Stop services
+docker-compose -f docker-compose.self-hosted.yml down
+```
+
+See [SELF_HOSTED.md](SELF_HOSTED.md) for detailed documentation.
+
 ### Cloud Providers
 
 | Provider | Deployment Method |

@@ -1,8 +1,7 @@
 # ============================================================================
 # Betterbase Docker Compose
 #
-# Development environment with PostgreSQL, Redis (for sessions), 
-# and the Betterbase application.
+# Development environment with PostgreSQL and the Betterbase application.
 #
 # Usage:
 #   docker-compose up -d          # Start all services
@@ -29,9 +28,12 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-your-super-secret-key-min-32-chars-long-change-in-production}
       AUTH_URL: http://localhost:3000
       
-      # Storage (local for development)
-      STORAGE_PROVIDER: local
-      STORAGE_PATH: /app/storage
+      # Storage (MinIO for S3-compatible storage)
+      STORAGE_PROVIDER: minio
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_BUCKET: betterbase
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
       
       # Node environment
       NODE_ENV: ${NODE_ENV:-development}
@@ -48,8 +50,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      # redis:
-      #   condition: service_started
+      minio:
+        condition: service_started
     restart: unless-stopped
     networks:
       - betterbase-network
@@ -79,21 +81,26 @@ services:
       - betterbase-network
 
   # --------------------------------------------------------------------------
-  # Optional: MinIO for S3-compatible storage (development)
+  # MinIO for S3-compatible storage (development)
   # --------------------------------------------------------------------------
-  # minio:
-  #   image: minio/minio:latest
-  #   command: server /data --console-address ":9001"
-  #   environment:
-  #     MINIO_ROOT_USER: minioadmin
-  #     MINIO_ROOT_PASSWORD: minioadmin
-  #   volumes:
-  #     - minio_data:/data
-  #   ports:
-  #     - "9000:9000"
-  #     - "9001:9001"
-  #   networks:
-  #     - betterbase-network
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - betterbase-network
 
   # --------------------------------------------------------------------------
   # Optional: Mailhog for email testing (development)
@@ -121,5 +128,5 @@ volumes:
     driver: local
   betterbase_storage:
     driver: local
-  # minio_data:
-  #   driver: local
+  minio_data:
+    driver: local
