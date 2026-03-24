@@ -1,0 +1,163 @@
+# ============================================================================
+# Betterbase Production Docker Compose
+#
+# Production-ready configuration with:
+# - PostgreSQL (managed externally or via this compose)
+# - S3-compatible storage (Cloudflare R2, MinIO, etc.)
+# - Health checks
+# - Proper security settings
+#
+# Usage:
+#   docker-compose -f docker-compose.production.yml up -d
+#
+# For production, it's recommended to:
+# 1. Use external managed database (Neon, Supabase, RDS, etc.)
+# 2. Use external S3 storage (R2, S3, B2)
+# 3. Use a reverse proxy (Caddy, Nginx, Traefik)
+# 4. Enable SSL/TLS
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # Betterbase Application
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.project
+      args:
+        # Build arguments
+        NODE_ENV: production
+    expose:
+      - "3000"
+    environment:
+      # Database - UPDATE THIS for your managed PostgreSQL
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Auth - IMPORTANT: Generate a secure secret in production
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL:-https://your-domain.com}
+      
+      # Storage - S3-compatible
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-r2}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-betterbase-storage}
+      STORAGE_REGION: ${STORAGE_REGION:-auto}
+      # For R2/S3-compatible
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-https://your-r2-endpoint.r2.cloudflarestorage.com}
+      STORAGE_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID}
+      STORAGE_SECRET_ACCESS_KEY: ${STORAGE_SECRET_ACCESS_KEY}
+      
+      # Node environment
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      
+      # Security
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://your-domain.com}
+      
+      # Optional: Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - betterbase-prod
+
+  # --------------------------------------------------------------------------
+  # Optional: Self-hosted PostgreSQL (if not using managed)
+  # Remove this service if using Neon, Supabase, RDS, etc.
+  # --------------------------------------------------------------------------
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: ${DB_USER:-betterbase}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #     POSTGRES_DB: ${DB_NAME:-betterbase}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: always
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-betterbase} -d ${DB_NAME:-betterbase}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - betterbase-prod
+  #   # Only expose ports if needed for debugging
+  #   # ports:
+  #   #   - "5432:5432"
+
+  # --------------------------------------------------------------------------
+  # Optional: MinIO for self-hosted S3 storage
+  # Remove this service if using R2, S3, B2
+  # --------------------------------------------------------------------------
+  # minio:
+  #   image: minio/minio:latest
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+  #   volumes:
+  #     - minio_data:/data
+  #   restart: always
+  #   networks:
+  #     - betterbase-prod
+
+  # --------------------------------------------------------------------------
+  # Optional: Traefik reverse proxy (uncomment for automatic HTTPS)
+  # --------------------------------------------------------------------------
+  # traefik:
+  #   image: traefik:v3.0
+  #   command:
+  #     - "--api.insecure=true"
+  #     - "--providers.docker=true"
+  #     - "--providers.docker.exposedbydefault=false"
+  #     - "--entrypoints.web.address=:80"
+  #     - "--entrypoints.websecure.address=:443"
+  #     - "--certificatesresolvers.letsencrypt.acme.email=your@email.com"
+  #     - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+  #     - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #     - "8080:8080"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #     - letsencrypt_data:/letsencrypt
+  #   networks:
+  #     - betterbase-prod
+
+  # --------------------------------------------------------------------------
+  # Optional: Caddy reverse proxy (simpler than Traefik)
+  # --------------------------------------------------------------------------
+  # caddy:
+  #   image: caddy:2-alpine
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile
+  #     - caddy_data:/data
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   networks:
+  #     - betterbase-prod
+
+# ----------------------------------------------------------------------------
+# Networks
+# ----------------------------------------------------------------------------
+networks:
+  betterbase-prod:
+    driver: bridge
+
+# ----------------------------------------------------------------------------
+# Volumes
+# ----------------------------------------------------------------------------
+volumes:
+  # postgres_data:
+  # minio_data:
+  # letsencrypt_data:
+  # caddy_data:

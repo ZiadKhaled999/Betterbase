@@ -309,6 +309,43 @@ betterbase/
 
 ---
 
+## Docker Deployment
+
+Betterbase includes production-ready Docker configuration for self-hosted deployment.
+
+### Docker Files
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Monorepo build (for developing Betterbase itself) |
+| `Dockerfile.project` | Project template for deploying user projects |
+| `docker-compose.yml` | Development environment with PostgreSQL |
+| `docker-compose.production.yml` | Production-ready configuration |
+| `.dockerignore` | Optimizes Docker builds |
+| `.env.example` | Environment variable template |
+
+### Quick Start
+
+```bash
+# Development with Docker Compose
+docker-compose up -d
+
+# Production deployment
+docker-compose -f docker-compose.production.yml up -d
+```
+
+### Docker Features
+
+- **Multi-stage builds** for minimal image size
+- **PostgreSQL** included in dev environment
+- **Health checks** for reliability
+- **Non-root user** for security
+- **Volume mounts** for hot-reload in development
+- **External database support** - Neon, Supabase, RDS, etc.
+- **S3-compatible storage** - R2, S3, B2, MinIO
+
+---
+
 ## Root-Level Files
 
 ### [`package.json`](package.json)

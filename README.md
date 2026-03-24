@@ -952,36 +952,68 @@ bun run start
 
 ### Docker
 
-Create a `Dockerfile`:
+Betterbase includes production-ready Docker configuration for self-hosted deployment.
 
-```dockerfile
-FROM oven/bun:1 AS base
-WORKDIR /app
-
-FROM base AS deps
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
-
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN bun run build
-
-FROM base
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY package.json ./
-
-EXPOSE 3000
-CMD ["bun", "run", "start"]
-```
-
-Build and run:
+#### Quick Start with Docker Compose
 
 ```bash
-docker build -t betterbase-app .
-docker run -p 3000:3000 betterbase-app
+# Start development environment with PostgreSQL
+docker-compose up -d
+
+# View logs
+docker-compose logs -f app
+
+# Stop services
+docker-compose down
 ```
+
+#### Docker Files Included
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Monorepo build (for developing Betterbase itself) |
+| `Dockerfile.project` | Project template for deploying user projects |
+| `docker-compose.yml` | Development environment with PostgreSQL |
+| `docker-compose.production.yml` | Production-ready configuration |
+| `.env.example` | Environment variable template |
+
+#### Building a Project
+
+```bash
+# Copy the project Dockerfile to your project root
+cp Dockerfile.project ./Dockerfile
+
+# Configure environment variables
+cp .env.example .env
+# Edit .env with your database and storage settings
+
+# Build and run
+docker build -t my-betterbase-app .
+docker run -p 3000:3000 my-betterbase-app
+```
+
+#### Production Deployment
+
+```bash
+# Use production compose file
+docker-compose -f docker-compose.production.yml up -d
+
+# With external database (Neon, Supabase, RDS)
+DATABASE_URL=postgres://... docker-compose -f docker-compose.production.yml up -d
+
+# With Cloudflare R2 storage
+STORAGE_PROVIDER=r2 STORAGE_BUCKET=my-bucket docker-compose -f docker-compose.production.yml up -d
+```
+
+#### Docker Features
+
+- **Multi-stage builds** for minimal image size
+- **PostgreSQL** included in dev environment
+- **Health checks** for reliability
+- **Non-root user** for security
+- **Volume mounts** for hot-reload in development
+- **External database support** - Neon, Supabase, RDS, etc.
+- **S3-compatible storage** - R2, S3, B2, MinIO
 
 ### Cloud Providers
 
