@@ -65,6 +65,9 @@ projectRoutes.post(
 			[nanoid(), name, slug, adminKeyHash],
 		);
 
+		// Provision project schema
+		await pool.query("SELECT betterbase_meta.provision_project_schema($1)", [slug]);
+
 		// Return admin key plaintext ONCE — not stored, cannot be recovered
 		return c.json({ project: rows[0], admin_key: adminKeyPlaintext }, 201);
 	},
