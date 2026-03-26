@@ -49,3 +49,49 @@ functionRoutes.delete("/:id", async (c) => {
 	if (rows.length === 0) return c.json({ error: "Not found" }, 404);
 	return c.json({ success: true });
 });
+
+// GET /admin/functions/:id/invocations?limit=50&status=error
+functionRoutes.get("/:id/invocations", async (c) => {
+	const limit = Math.min(Number.parseInt(c.req.query("limit") ?? "50"), 200);
+	const status = c.req.query("status");
+
+	const pool = getPool();
+
+	const { rows } = await pool.query(
+		`
+    SELECT id, function_name, status, duration_ms, cold_start,
+           request_method, request_path, response_status, error_msg, created_at
+    FROM betterbase_meta.function_invocation_logs
+    WHERE function_id = $1
+      ${status ? "AND status = $3" : ""}
+    ORDER BY created_at DESC LIMIT $2
+  `,
+		status ? [c.req.param("id"), limit, status] : [c.req.param("id"), limit],
+	);
+
+	return c.json({ invocations: rows });
+});
+
+// GET /admin/functions/:id/stats
+functionRoutes.get("/:id/stats", async (c) => {
+	const pool = getPool();
+
+	const { rows } = await pool.query(
+		`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE status='success')::int AS success,
+      COUNT(*) FILTER (WHERE status='error')::int AS errors,
+      COUNT(*) FILTER (WHERE cold_start=TRUE)::int AS cold_starts,
+      percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms)::int AS p50_ms,
+      percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)::int AS p95_ms,
+      AVG(duration_ms)::int AS avg_ms
+    FROM betterbase_meta.function_invocation_logs
+    WHERE function_id = $1
+      AND created_at > NOW() - INTERVAL '30 days'
+  `,
+		[c.req.param("id")],
+	);
+
+	return c.json({ stats: rows[0] });
+});

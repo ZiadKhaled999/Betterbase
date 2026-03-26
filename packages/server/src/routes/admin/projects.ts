@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getPool } from "../../lib/db";
+import { projectMetricsRoutes } from "./project-metrics";
 
 export const projectRoutes = new Hono();
 
@@ -107,3 +108,6 @@ projectRoutes.delete("/:id", async (c) => {
 	if (rows.length === 0) return c.json({ error: "Not found" }, 404);
 	return c.json({ success: true });
 });
+
+// Mount per-project metrics
+projectRoutes.route("/:projectId/metrics", projectMetricsRoutes);

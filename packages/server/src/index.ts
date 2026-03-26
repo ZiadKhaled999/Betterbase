@@ -30,11 +30,18 @@ app.use("*", async (c, next) => {
 	const start = Date.now();
 	await next();
 	const duration = Date.now() - start;
+
+	const projectId = c.req.header("X-Project-ID") ?? null;
+	const userAgent = c.req.header("User-Agent")?.slice(0, 255) ?? null;
+	const ip = c.req.header("X-Forwarded-For")?.split(",")[0] ?? null;
+
 	// Fire-and-forget log insert (don't await, don't fail requests on log error)
 	getPool()
 		.query(
-			"INSERT INTO betterbase_meta.request_logs (method, path, status, duration_ms) VALUES ($1, $2, $3, $4)",
-			[c.req.method, new URL(c.req.url).pathname, c.res.status, duration],
+			`INSERT INTO betterbase_meta.request_logs
+			(method, path, status, duration_ms, project_id, user_agent, ip)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			[c.req.method, new URL(c.req.url).pathname, c.res.status, duration, projectId, userAgent, ip],
 		)
 		.catch(() => {}); // Silently ignore log failures
 });

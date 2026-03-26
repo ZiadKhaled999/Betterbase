@@ -84,3 +84,47 @@ webhookRoutes.delete("/:id", async (c) => {
 	if (rows.length === 0) return c.json({ error: "Not found" }, 404);
 	return c.json({ success: true });
 });
+
+// GET /admin/webhooks/:id/deliveries?limit=50&status=failed
+webhookRoutes.get("/:id/deliveries", async (c) => {
+	const limit = Math.min(Number.parseInt(c.req.query("limit") ?? "50"), 200);
+	const status = c.req.query("status");
+
+	const pool = getPool();
+
+	const { rows } = await pool.query(
+		`
+    SELECT id, event_type, table_name, status, http_status,
+           duration_ms, error_msg, attempt, created_at
+    FROM betterbase_meta.webhook_delivery_logs
+    WHERE webhook_id = $1
+      ${status ? "AND status = $3" : ""}
+    ORDER BY created_at DESC LIMIT $2
+  `,
+		status ? [c.req.param("id"), limit, status] : [c.req.param("id"), limit],
+	);
+
+	return c.json({ deliveries: rows });
+});
+
+// GET /admin/webhooks/:id/stats
+webhookRoutes.get("/:id/stats", async (c) => {
+	const pool = getPool();
+
+	const { rows } = await pool.query(
+		`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE status='success')::int AS success,
+      COUNT(*) FILTER (WHERE status='failed')::int AS failed,
+      AVG(duration_ms)::int AS avg_duration_ms,
+      MAX(created_at) AS last_delivery
+    FROM betterbase_meta.webhook_delivery_logs
+    WHERE webhook_id = $1
+      AND created_at > NOW() - INTERVAL '30 days'
+  `,
+		[c.req.param("id")],
+	);
+
+	return c.json({ stats: rows[0] });
+});
