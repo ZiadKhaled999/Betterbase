@@ -41,11 +41,33 @@ The documentation is organized into logical sections for easy navigation:
 │   ├── cli-commands.md
 │   ├── rest-api.md
 │   └── graphql-api.md
-└── examples/                   # Example applications
-    ├── todo-app.md
-    ├── chat-app.md
-    ├── blog.md
-    └── ecommerce.md
+├── examples/                  # Example applications
+│   ├── todo-app.md
+│   ├── chat-app.md
+│   ├── blog.md
+│   └── ecommerce.md
+├── core/                      # Core SDK documentation
+│   ├── overview.md
+│   ├── auto-rest.md
+│   ├── branching.md
+│   ├── config.md
+│   ├── functions.md
+│   ├── graphql.md
+│   ├── logger.md
+│   ├── middleware.md
+│   ├── migration.md
+│   ├── providers.md
+│   ├── realtime.md
+├── client/                    # Client SDK documentation
+│   ├── overview.md
+│   ├── client.md
+│   └── realtime.md
+├── cli/                       # CLI documentation
+│   └── overview.md
+├── templates/                 # Template documentation
+│   └── overview.md
+└── test-project/              # Test project documentation
+    └── overview.md
 ```
 
 ## Getting Started

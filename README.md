@@ -19,7 +19,7 @@ Betterbase is an open-source alternative to Supabase, built with Bun for blazing
 
 </div>
 
-**Last Updated: 2026-03-21**
+**Last Updated: 2026-03-26**
 
 ---
 
@@ -28,34 +28,33 @@ Betterbase is an open-source alternative to Supabase, built with Bun for blazing
 Traditional backend development is slow. You spend weeks setting up databases, authentication, APIs, and infrastructure before writing business logic. Betterbase changes that.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         BETTERBASE ARCHITECTURE                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   ┌──────────────┐       ┌──────────────┐       ┌──────────────┐       │
-│   │   Frontend   │──────▶│   Betterbase │──────▶│   Database   │       │
-│   │   (React,    │       │     Core     │       │  (SQLite,    │       │
-│   │    Vue,      │       │              │       │   Postgres,  │       │
-│   │    Mobile)   │       │  ┌────────┐  │       │   MySQL,     │       │
-│   └──────────────┘       │  │ Auth   │  │       │   Neon...)   │       │
-│                          │  ├────────┤  │       └──────────────┘       │
-│   ┌──────────────┐       │  │ Realtime│  │                               │
-│   │  Serverless  │──────▶│  ├────────┤  │       ┌──────────────┐       │
-│   │  Functions   │       │  │ Storage │  │       │  S3 Storage  │       │
-│   └──────────────┘       │  ├────────┤  │       │  (R2, B2,    │       │
-│                          │  │GraphQL │  │       │   MinIO...)   │       │
-│   ┌──────────────┐       │  ├────────┤  │       └──────────────┘       │
-│   │   Webhooks   │──────▶│  │  RLS   │  │                               │
-│   └──────────────┘       │  ├────────┤  │       ┌──────────────┐       │
-│                          │  │ Vector │  │       │   External   │       │
-│   ┌──────────────┐       │  ├────────┤  │       │   Services   │       │
-│   │    Logger    │──────▶│  │ Branch │  │       │  (AI APIs,   │       │
-│   └──────────────┘       │  ├────────┤  │       │   OAuth...)   │       │
-│                          │  │ Logger │  │       └──────────────┘       │
-│                          │  └────────┘  │                               │
-│                          └──────────────┘                               │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                           BETTERBASE ARCHITECTURE                               │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│  ┌─────────────────┐        ┌────────────────────────────┐    ┌─────────────┐ │
+│  │    Frontend     │        │      Betterbase Core       │    │  Database   │ │
+│  │   (React,       │───────▶│                             │───▶│  (SQLite,   │ │
+│  │    Vue,         │        │  ┌───────┐ ┌───────┐        │    │   Postgres, │ │
+│  │    Mobile)      │        │  │ Auth  │ │Realtime│       │    │   MySQL,    │ │
+│  └─────────────────┘        │  ├───────┤ ├───────┤        │    │   Neon...)  │ │
+│                              │  │Storage │ │GraphQL│        │    └─────────────┘ │
+│  ┌─────────────────┐        │  ├───────┤ ├───────┤        │                     │
+│  │ Serverless      │───────▶│  │  RLS  │ │Vector │        │    ┌─────────────┐ │
+│  │ Functions       │        │  ├───────┤ ├───────┤        │    │  S3 Storage │ │
+│  └─────────────────┘        │  │Branch │ │Logger │        │    │ (R2, B2,    │ │
+│                              │  └───────┘ └───────┘        │    │  MinIO...)  │ │
+│  ┌─────────────────┐        └────────────────────────────┘    └─────────────┘ │
+│  │   Webhooks      │─────────────────────────────────────────▶               │
+│  └─────────────────┘                          │                             │
+│                                                │    ┌─────────────────────┐  │
+│  ┌─────────────────┐                           │    │   External Services │  │
+│  │    Logger       │──────────────────────────┼───▶│   (AI APIs, OAuth)   │  │
+│  └─────────────────┘                           │    └─────────────────────┘  │
+│                                                │                             │
+└────────────────────────────────────────────────┼─────────────────────────────┘
+                                                 │
+                                          (API Responses)
 ```
 
 ---
@@ -253,114 +252,96 @@ bb init my-project --template auth
 ### System Design
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          CLIENT LAYER                                    │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │   Web SDK   │  │  React Hooks│  │   Mobile    │  │   GraphQL   │    │
-│  │  @betterbase│  │   @betterbase│  │  SDK        │  │   Client    │    │
-│  │   /client   │  │   /client   │  │             │  │             │    │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
-└─────────┼────────────────┼────────────────┼────────────────┼──────────┘
-          │                │                │                │
-          ▼                ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          API GATEWAY (Hono)                             │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  REST API  │  GraphQL  │  Auth  │  Storage  │  Realtime  │  Webhooks│   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      CORE SERVICES LAYER                                │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
-│  │  Query   │  │  Auth    │  │ Realtime │  │ Storage  │  │Function │  │
-│  │  Engine  │  │ Service  │  │ Service  │  │ Service  │  │Runtime  │  │
-│  │ (Drizzle)│  │(BetterAuth│  │(WebSocket)│ │  (S3)   │  │ (Bun)   │  │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  │
-│       │            │            │            │            │         │
-│       └────────────┴────────────┴────────────┴────────────┘         │
-│                              │                                         │
-└──────────────────────────────┼────────────────────────────────────────┘
-                               ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      DATA LAYER                                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
-│  │ SQLite   │  │PostgreSQL│  │  MySQL   │  │  Neon    │  │  Turso   │  │
-│  │(dev)     │  │          │  │          │  │(serverless│  │(libSQL)  │  │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT LAYER                                       │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐   │
+│  │   Web SDK   │    │ React Hooks  │    │   Mobile    │    │  GraphQL   │   │
+│  │@betterbase  │    │ @betterbase  │    │    SDK      │    │   Client   │   │
+│  │   /client   │    │   /client    │    │             │    │            │   │
+│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘   │
+└─────────┼──────────────────┼──────────────────┼──────────────────┼──────────┘
+          │                  │                  │                  │
+          ▼                  ▼                  ▼                  ▼
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                          API GATEWAY (Hono)                                    │
+│  ┌──────────┐ ┌──────────┐ ┌────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐   │
+│  │ REST API │ │ GraphQL  │ │  Auth  │ │ Storage │ │ Realtime │ │ Webhooks │   │
+│  └────┬─────┘ └────┬─────┘ └────┬───┘ └────┬────┘ └────┬─────┘ └────┬─────┘   │
+└───────┼────────────┼────────────┼──────────┼────────────┼────────────┼────────┘
+        │            │            │          │            │            │
+        ▼            ▼            ▼          ▼            ▼            ▼
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                         CORE SERVICES LAYER                                     │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │  Query   │ │   Auth   │ │ Realtime │ │ Storage  │ │ Function │ │ Webhook  │  │
+│  │  Engine  │ │ Service  │ │ Service  │ │ Service  │ │ Runtime  │ │ Dispatch │  │
+│  │(Drizzle) │ │(Better   │ │(WebSocket│ │   (S3)   │ │   (Bun)  │ │          │  │
+│  │          │ │  Auth)   │ │)        │ │          │ │          │ │          │  │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘  │
+│       │            │            │            │            │            │        │
+│       └────────────┴────────────┴────────────┴────────────┴────────────┘        │
+│                                     │                                             │
+└─────────────────────────────────────┼────────────────────────────────────────────┘
+                                      ▼
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                            DATA LAYER                                            │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │  SQLite  │ │PostgreSQL│ │  MySQL   │ │  Neon    │ │  Turso   │ │ Supabase │  │
+│  │  (dev)   │ │          │ │          │ │(serverless│ │ (libSQL)  │ │          │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Package Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        TURBOREPO MONOREPO                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                     @betterbase/cli                              │   │
-│  │  CLI tool with 17 commands for development and deployment       │   │
-│  │  init, dev, migrate, auth, auth add-provider, generate,          │   │
-│  │  function, graphql, login, rls, rls test, storage,              │   │
-│  │  webhook, branch                                                 │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                     @betterbase/client                           │   │
-│  │  TypeScript SDK for frontend integration                         │   │
-│  │  Auth, Query Builder, Realtime, Storage, Errors                 │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                     @betterbase/core                             │   │
-│  │  Core backend engine with all server-side functionality         │   │
-│  │  Database, Auth, GraphQL, RLS, Storage, Webhooks, Functions,     │   │
-│  │  Vector Search, Branching, Auto-REST, Logger, Realtime          │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                     @betterbase/shared                           │   │
-│  │  Shared utilities, types, and constants across all packages      │   │
-│  │  Types, Errors, Constants, Utils                                 │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                     templates/                                   │   │
-│  │  Project templates for quick initialization                      │   │
-│  │  base, auth                                                     │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        TURBOREPO MONOREPO                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                     @betterbase/cli                              │   │
-│  │  CLI tool with 12 commands for development and deployment       │   │
-│  │  init, dev, migrate, auth, generate, function, graphql, login,  │   │
-│  │  rls, storage, webhook, branch                                   │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                     @betterbase/client                           │   │
-│  │  TypeScript SDK for frontend integration                         │   │
-│  │  Auth, Query Builder, Realtime, Storage                         │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                     @betterbase/core                             │   │
-│  │  Core backend engine with all server-side functionality         │   │
-│  │  Database, Auth, GraphQL, RLS, Storage, Webhooks, Functions    │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                         TURBOREPO MONOREPO                                     │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │                        @betterbase/cli                                    │ │
+│  │  CLI tool with 21 commands for development and deployment               │ │
+│  │  init, dev, migrate, auth, auth add-provider, generate, function,       │ │
+│  │  graphql, login, rls, rls test, storage, webhook, branch               │ │
+│  └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │                        @betterbase/client                                │ │
+│  │  TypeScript SDK for frontend integration                                 │ │
+│  │  Auth, Query Builder, Realtime, Storage, Errors                         │ │
+│  └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │                        @betterbase/core                                   │ │
+│  │  Core backend engine with all server-side functionality                │ │
+│  │  Database, Auth, GraphQL, RLS, Storage, Webhooks, Functions,           │ │
+│  │  Vector Search, Branching, Auto-REST, Logger, Realtime                  │ │
+│  └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │                        @betterbase/shared                                │ │
+│  │  Shared utilities, types, and constants across all packages            │ │
+│  │  Types, Errors, Constants, Utils                                         │ │
+│  └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │                        @betterbase/server                                 │ │
+│  │  Self-hosted server with admin API and device authentication            │ │
+│  │  Admin routes, metrics, project management, storage, webhooks           │ │
+│  └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │                        templates/                                        │ │
+│  │  Project templates for quick initialization                             │ │
+│  │  base, auth                                                             │ │
+│  └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │                        apps/dashboard                                    │ │
+│  │  React admin dashboard for self-hosted management                      │ │
+│  │  Projects, metrics, storage, webhooks, functions, settings             │ │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -450,7 +431,7 @@ export default defineConfig({
 
 ## CLI Reference
 
-The Betterbase CLI (`bb`) provides 17 commands for development and deployment:
+The Betterbase CLI (`bb`) provides 21 commands for development and deployment:
 
 ### Core Commands
 
@@ -489,23 +470,20 @@ bb dev --config production.config.ts
 Run database migrations.
 
 ```bash
-# Generate migration from schema changes
-bb migrate generate my-migration
+# Generate and apply migrations
+bb migrate
 
-# Apply pending migrations
-bb migrate up
-
-# Rollback last migration
-bb migrate down
-
-# Reset database (warning: destructive)
-bb migrate reset
-
-# Preview migration changes
+# Preview migration diff without applying
 bb migrate preview
 
-# Run in production mode
+# Apply migrations to production
 bb migrate production
+
+# Rollback the last migration
+bb migrate rollback
+
+# Show migration history
+bb migrate history
 ```
 
 ### Authentication
@@ -1091,6 +1069,46 @@ docker-compose -f docker-compose.self-hosted.yml down
 ```
 
 See [SELF_HOSTED.md](SELF_HOSTED.md) for detailed documentation.
+
+### Self-Hosted Architecture
+
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                         SELF-HOSTED DEPLOYMENT                                 │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │                      External Clients                                     │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │ │
+│  │  │  Web App    │  │  CLI (bb)   │  │   Mobile    │  │ Dashboard   │   │ │
+│  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘   │ │
+│  └─────────┼────────────────┼────────────────┼────────────────┼──────────┘ │
+│            │                │                │                │               │
+│            ▼                ▼                ▼                ▼               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │                        NGINX Reverse Proxy                              │ │
+│  │                   (docker/nginx/nginx.conf)                            │ │
+│  └────────────────────────────────┬────────────────────────────────────────┘ │
+│                                   │                                            │
+│           ┌───────────────────────┼───────────────────────┐                   │
+│           │                       │                       │                   │
+│           ▼                       ▼                       ▼                   │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐           │
+│  │   Dashboard     │    │     Server      │    │     Server      │           │
+│  │  (React App)    │    │  (@betterbase   │    │  (Project API)  │           │
+│  │  Port: 3001     │    │   /server)      │    │   Port: 3000    │           │
+│  │                 │    │  Port: 3000     │    │                 │           │
+│  └─────────────────┘    └────────┬────────┘    └────────┬────────┘           │
+│                                   │                       │                    │
+│                                   └───────────┬───────────┘                    │
+│                                               │                                │
+│                                               ▼                                │
+│                                    ┌─────────────────────┐                    │
+│                                    │    PostgreSQL       │                    │
+│                                    │    (Database)       │                    │
+│                                    └─────────────────────┘                    │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ### Cloud Providers
 

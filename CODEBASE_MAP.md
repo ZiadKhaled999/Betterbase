@@ -1,6 +1,6 @@
 # BetterBase — Complete Codebase Map
 
-> Last updated: 2026-03-21
+> Last updated: 2026-03-26
 
 ## Project Identity
 
@@ -49,13 +49,15 @@ graph TB
     end
     
     subgraph packages
-        CLI[packages/cli<br/>14 commands<br/>8 utils]
-        Client[packages/client<br/>7 modules]
+        CLI[packages/cli<br/>21 commands<br/>8 utils]
+        Client[packages/client<br/>9 modules]
         Core[packages/core<br/>14 modules]
         Shared[packages/shared<br/>5 modules]
+        Server[packages/server<br/>Self-hosted API]
     end
     
     subgraph apps
+        Dashboard[apps/dashboard<br/>Admin Dashboard]
         TestProject[apps/test-project<br/>Example project]
     end
     
@@ -66,15 +68,121 @@ graph TB
     
     subgraph external
         CliAuth[cli-auth-page<br/>Auth UI]
+        Docker[docker/<br/>Nginx config]
+    end
+    
+    subgraph infrastructure
+        DB[(Database<br/>PostgreSQL<br/>MySQL<br/>SQLite)]
+        S3[(S3 Storage<br/>R2, B2, MinIO)]
     end
     
     Root --> CLI
     Root --> Client
     Root --> Core
     Root --> Shared
+    Root --> Server
+    Root --> Dashboard
     Root --> TestProject
     Root --> Base
     Root --> Auth
+    
+    CLI -->|commands| Core
+    Core -->|queries| DB
+    Core -->|files| S3
+    Dashboard -->|admin| Server
+    Server -->|projects| DB
+```
+
+### Architecture Flow Diagram
+
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT LAYER                                      │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐   │
+│  │   Web SDK   │    │ React Hooks  │    │   Mobile    │    │  GraphQL   │   │
+│  │@betterbase  │    │ @betterbase  │    │    SDK      │    │   Client   │   │
+│  │   /client   │    │   /client    │    │             │    │            │   │
+│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘   │
+└─────────┼──────────────────┼──────────────────┼──────────────────┼──────────┘
+          │                  │                  │                  │
+          ▼                  ▼                  ▼                  ▼
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                          API GATEWAY (Hono)                                    │
+│  ┌──────────┐ ┌──────────┐ ┌────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐   │
+│  │ REST API │ │ GraphQL  │ │  Auth  │ │ Storage │ │ Realtime │ │ Webhooks │   │
+│  │/api/v1/* │ │  /graphql│ │/api/auth│ │/storage │ │/realtime │ │         │   │
+│  └────┬─────┘ └────┬─────┘ └────┬───┘ └────┬────┘ └────┬─────┘ └────┬─────┘   │
+└───────┼────────────┼────────────┼──────────┼────────────┼────────────┼────────┘
+        │            │            │          │            │            │
+        ▼            ▼            ▼          ▼            ▼            ▼
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                         CORE SERVICES LAYER                                     │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │  Query   │ │   Auth   │ │ Realtime │ │ Storage  │ │ Function │ │ Webhook  │  │
+│  │  Engine  │ │ Service  │ │ Service  │ │ Service  │ │ Runtime  │ │ Dispatch │  │
+│  │(Drizzle) │ │(Better   │ │(WebSocket│ │   (S3)   │ │   (Bun)  │ │          │  │
+│  │          │ │  Auth)   │ │)        │ │          │ │          │ │          │  │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘  │
+│       │            │            │            │            │            │        │
+│       └────────────┴────────────┴────────────┴────────────┴────────────┘        │
+│                                     │                                             │
+└─────────────────────────────────────┼────────────────────────────────────────────┘
+                                      ▼
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                            DATA LAYER                                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │  SQLite  │ │PostgreSQL│ │  MySQL   │ │  Neon    │ │  Turso   │ │ Supabase │  │
+│  │  (dev)   │ │          │ │          │ │(serverless│ │ (libSQL)  │ │          │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+│                                                                                 │
+│  ┌──────────────────────────────────────────────────────────────────────────┐    │
+│  │                        STORAGE LAYER                                     │    │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐      │    │
+│  │  │ AWS S3   │ │Cloudflare│ │Backblaze │ │  MinIO   │ │  Local   │      │    │
+│  │  │          │ │    R2    │ │    B2    │ │          │ │  Disk    │      │    │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘      │    │
+│  └──────────────────────────────────────────────────────────────────────────┘    │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Self-Hosted Deployment Architecture
+
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                         SELF-HOSTED DEPLOYMENT                                 │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │                      External Clients                                     │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │ │
+│  │  │  Web App    │  │  CLI (bb)   │  │   Mobile    │  │ Dashboard   │   │ │
+│  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘   │ │
+│  └─────────┼────────────────┼────────────────┼────────────────┼──────────┘ │
+│            │                │                │                │               │
+│            ▼                ▼                ▼                ▼               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │                        NGINX Reverse Proxy                              │ │
+│  │                   (docker/nginx/nginx.conf)                            │ │
+│  └────────────────────────────────┬────────────────────────────────────────┘ │
+│                                   │                                            │
+│           ┌───────────────────────┼───────────────────────┐                   │
+│           │                       │                       │                   │
+│           ▼                       ▼                       ▼                   │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐           │
+│  │   Dashboard     │    │     Server      │    │     Server      │           │
+│  │  (React App)    │    │  (@betterbase   │    │  (Project API)  │           │
+│  │  Port: 3001     │    │   /server)      │    │   Port: 3000    │           │
+│  │                 │    │  Port: 3000     │    │                 │           │
+│  └─────────────────┘    └────────┬────────┘    └────────┬────────┘           │
+│                                   │                       │                    │
+│                                   └───────────┬───────────┘                    │
+│                                               │                                │
+│                                               ▼                                │
+│                                    ┌─────────────────────┐                    │
+│                                    │    PostgreSQL       │                    │
+│                                    │    (Database)       │                    │
+│                                    └─────────────────────┘                    │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ```
@@ -354,8 +462,11 @@ Betterbase includes production-ready Docker configuration for self-hosted deploy
 | `Dockerfile.project` | Project template for deploying user projects |
 | `docker-compose.yml` | Development environment with PostgreSQL |
 | `docker-compose.production.yml` | Production-ready configuration |
+| `docker-compose.self-hosted.yml` | Self-hosted deployment with dashboard |
+| `docker/nginx/nginx.conf` | Nginx reverse proxy configuration |
 | `.dockerignore` | Optimizes Docker builds |
 | `.env.example` | Environment variable template |
+| `.env.self-hosted.example` | Self-hosted environment variables |
 
 ### Quick Start
 
@@ -1697,25 +1808,28 @@ bun test
 
 All notable changes to BetterBase will be documented in this file.
 
-### Recent Updates (2026-03-19)
+### Recent Updates (2026-03-26)
 
 #### New Features
 - **AI Context Generation**: Added intelligent context generation for AI assistants to understand project structure and provide more accurate recommendations
 - **Branch Management**: New `bb branch` command for creating and managing database branches for development, staging, and production
 - **Vector Search**: Integrated vector search capabilities for AI-powered semantic search functionality
 - **Auto-REST**: Automatic REST API generation from Drizzle schema definitions
-- **Enhanced CLI**: Expanded from 11 to 12 commands with the addition of branch management
+- **Enhanced CLI**: Expanded from 12 to 21 commands with improved migration, storage, webhook, and function management
 
-#### Security Improvements
-- Enhanced RLS (Row Level Security) policies
-- Improved webhook signing and verification
-- Better authentication middleware
-- Secure credential handling across providers
+#### Self-Hosted Deployment
+- **Admin Dashboard**: New React-based admin dashboard (`apps/dashboard`) for self-hosted instances
+- **Server Package**: Comprehensive `@betterbase/server` package with admin API, project management, metrics, and device authentication
+- **Nginx Reverse Proxy**: Docker-based nginx configuration for production deployments
 
 #### Package Updates
-- **packages/cli**: 12 commands (init, dev, migrate, auth, generate, function, graphql, login, rls, storage, webhook, branch)
-- **packages/client**: Auth, Query Builder, Realtime, Storage modules
-- **packages/core**: Config, Functions, GraphQL, Middleware, Migration, Providers, RLS, Storage, Vector, Branching, Auto-REST, Webhooks
+- **packages/cli**: 21 commands (init, dev, migrate, migrate preview, migrate production, migrate rollback, migrate history, auth, auth add-provider, generate crud, graphql, graphql playground, storage init, storage list, storage upload, rls, rls create, rls list, rls disable, rls test, webhook, function, branch, login, logout)
+- **packages/client**: Auth, Query Builder, Realtime, Storage, Errors modules
+- **packages/core**: Config, Functions, GraphQL, Middleware, Migration, Providers, RLS, Storage, Vector, Branching, Auto-REST, Webhooks, Logger, Realtime
+- **packages/server**: Self-hosted server with admin routes, device auth, migrations
+- **packages/shared**: Types, Errors, Constants, Utils
+- **apps/dashboard**: React admin dashboard with project management, metrics, storage, webhooks, functions pages
+- **apps/test-project**: Example project demonstrating all features
 
 ---
 
