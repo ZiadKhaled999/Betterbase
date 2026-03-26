@@ -4,6 +4,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { clearToken, getStoredAdmin } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
+	BarChart2,
 	Bell,
 	ChevronDown,
 	ChevronRight,
@@ -31,6 +32,7 @@ const nav = [
 	{ label: "Projects", href: "/projects", icon: FolderOpen },
 	{ label: "Storage", href: "/storage", icon: HardDrive },
 	{ label: "Logs", href: "/logs", icon: ScrollText },
+	{ label: "Observability", href: "/observability", icon: BarChart2 },
 	{ label: "Audit Log", href: "/audit", icon: Shield },
 	{ label: "Team", href: "/team", icon: Users },
 	{

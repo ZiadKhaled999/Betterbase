@@ -41,12 +41,17 @@ export const QK = {
 	projectDeliveries: (id: string, webhookId: string) =>
 		["projects", id, "webhooks", webhookId, "deliveries"] as const,
 	projectFunctions: (id: string) => ["projects", id, "functions"] as const,
+	projectMetricsOverview: (id: string) => ["projects", id, "metrics", "overview"] as const,
+	projectMetricsTimeseries: (id: string, period: string) =>
+		["projects", id, "metrics", "timeseries", period] as const,
+	projectLogs: (id: string) => ["projects", id, "logs"] as const,
 	projectInvocations: (id: string, fnId: string) =>
 		["projects", id, "functions", fnId, "invocations"] as const,
 	projectFnStats: (id: string, fnId: string, period: string) =>
 		["projects", id, "functions", fnId, "stats", period] as const,
 	// Logs
 	logs: (params: Record<string, string>) => ["logs", params] as const,
+	logsStream: () => ["logs", "stream"] as const,
 	audit: (params: Record<string, string>) => ["audit", params] as const,
 	auditActions: () => ["audit", "actions"] as const,
 	// Storage
@@ -54,6 +59,12 @@ export const QK = {
 	storageObjects: (bucket: string) => ["storage", "buckets", bucket, "objects"] as const,
 	// Webhooks (global)
 	webhooks: () => ["webhooks"] as const,
+	webhookDeliveries: (id: string, status: string) =>
+		["webhooks", id, "deliveries", status] as const,
+	webhookStats: (id: string) => ["webhooks", id, "stats"] as const,
 	// Functions (global)
 	functions: () => ["functions"] as const,
+	functionInvocations: (id: string, status: string) =>
+		["functions", id, "invocations", status] as const,
+	functionStats: (id: string) => ["functions", id, "stats"] as const,
 };

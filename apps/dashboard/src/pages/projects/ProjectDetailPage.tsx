@@ -10,6 +10,7 @@ import { QK } from "@/lib/query-keys";
 import { formatDate } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+	Activity,
 	Clock,
 	Database,
 	FolderOpen,
@@ -70,6 +71,12 @@ export default function ProjectDetailPage() {
 
 	const tabs = [
 		{ value: "overview", label: "Overview", icon: FolderOpen },
+		{
+			value: "observability",
+			label: "Observability",
+			icon: Activity,
+			href: `/projects/${projectId}/observability`,
+		},
 		{ value: "users", label: "Users", icon: Users, href: `/projects/${projectId}/users` },
 		{ value: "auth", label: "Auth", icon: Key, href: `/projects/${projectId}/auth` },
 		{
