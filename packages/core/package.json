@@ -15,7 +15,8 @@
 		"./migration": "./src/migration/index.ts",
 		"./vector": "./src/vector/index.ts",
 		"./branching": "./src/branching/index.ts",
-		"./logger": "./src/logger/index.ts"
+		"./logger": "./src/logger/index.ts",
+		"./iac": "./src/iac/index.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

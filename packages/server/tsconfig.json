@@ -3,7 +3,8 @@
 	"compilerOptions": {
 		"outDir": "dist",
 		"rootDir": "src",
-		"types": ["bun-types"]
+		"types": ["bun-types"],
+		"moduleResolution": "Bundler"
 	},
 	"include": ["src/**/*", "migrations/**/*", "src/types.d.ts"]
 }

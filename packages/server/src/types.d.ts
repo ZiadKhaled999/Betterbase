@@ -1,7 +1,7 @@
-import { Context } from "hono";
+import "hono";
 
 declare module "hono" {
-	interface ContextVariables {
+	interface ContextVariableMap {
 		adminUser: {
 			id: string;
 			email: string;
